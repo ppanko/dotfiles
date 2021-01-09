@@ -1,0 +1,926 @@
+* Startup
+
+Start up in fullscreen.
+
+#+BEGIN_SRC emacs-lisp
+  (add-to-list 'default-frame-alist '(fullscreen . maximized))
+#+END_SRC
+
+The rest of the stuff in this section was stolen from [[https://github.com/hrs/dotfiles/blob/master/emacs/.emacs.d/configuration.org][here]],
+thanks Harry Schwartz.
+
+Have use-package install any unavailable packages.
+
+#+BEGIN_SRC emacs-lisp
+  (require 'use-package-ensure)
+  (setq use-package-always-ensure t)
+#+END_SRC
+
+Automatically update packages
+
+#+BEGIN_SRC emacs-lisp
+ (use-package auto-package-update
+	:custom
+	(auto-package-update-delete-old-versions t)
+	(auto-package-update-hide-results t)
+	:config
+	(auto-package-update-maybe))
+#+END_SRC
+
+Always compile, and use the newest version available.
+
+#+BEGIN_SRC emacs-lisp
+  (use-package auto-compile
+    :demand t
+    :config
+    (progn
+      (auto-compile-on-load-mode)
+      (auto-compile-on-save-mode)))
+  (setq load-prefer-newer t)
+#+END_SRC
+
+Load secrets if they exist
+
+#+BEGIN_SRC emacs-lisp
+  (setq secrets-file "~/.emacs.d/secrets.el")
+  (when (file-exists-p secrets-file)
+    (load-file secrets-file))
+#+END_SRC
+* General
+
+Set font and size
+
+#+BEGIN_SRC emacs-lisp
+  (if (eq system-type 'windows-nt)
+      (set-face-attribute 'default nil :family "Consolas" :height 125))
+  (if (eq system-type 'gnu/linux)
+      (set-face-attribute 'default nil :family "Inconsolata" :height 140))
+#+END_SRC
+
+Delete seleted text when typing over it.
+
+#+BEGIN_SRC emacs-lisp
+  (delete-selection-mode t)
+#+END_SRC
+
+Clean up white-space before each save
+
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'before-save-hook 'whitespace-cleanup)
+#+END_SRC
+
+Use CUA mode where C-Enter is rectangle select,
+and our old Windows favorites C-x, C-v, C-c, C-z
+work like as expected.
+
+#+BEGIN_SRC emacs-lisp
+  (cua-mode t)
+#+END_SRC
+
+But don't tabify after rectangle commands!
+
+#+BEGIN_SRC emacs-lisp
+  (setq cua-auto-tabify-rectangles nil)
+#+END_SRC
+
+Answer yes-or-no prompts with y/n or RET as shown [[https://emacs.stackexchange.com/questions/17269/how-configure-the-confirmation-minibuffer-to-use-enter-instead-y][here]].
+
+#+BEGIN_SRC emacs-lisp
+  (fset 'yes-or-no-p 'y-or-n-p)
+  (defun y-or-n-p-with-return (orig-func &rest args)
+    (let ((query-replace-map (copy-keymap query-replace-map)))
+      (define-key query-replace-map (kbd "<return>") 'act)
+      (apply orig-func args)))
+  (advice-add 'y-or-n-p :around #'y-or-n-p-with-return)
+#+END_SRC
+
+Make sure process buffer reacts to input/output.
+
+#+BEGIN_SRC emacs-lisp
+  (setq comint-scroll-to-bottom-on-input t)
+  (setq comint-scroll-to-bottom-on-output t)
+#+END_SRC
+
+Scrolling quality of life stuff
+
+#+BEGIN_SRC emacs-lisp
+  (setq scroll-conservatively 1)
+  (setq mouse-wheel-scroll-amount '(5))
+  (setq mouse-wheel-progressive-speed nil)
+#+END_SRC
+
+Move to trash when deleting files
+
+#+BEGIN_SRC emacs-lisp
+  (setq delete-by-moving-to-trash t)
+#+END_SRC
+* Global settings
+
+Turn on syntax highlighting.
+
+#+BEGIN_SRC emacs-lisp
+  (global-font-lock-mode t)
+#+END_SRC
+
+Re-read updated buffers automatically.
+
+#+BEGIN_SRC emacs-lisp
+  (global-auto-revert-mode t)
+#+END_SRC
+
+Set compile shortcut.
+
+#+BEGIN_SRC emacs-lisp
+  (global-set-key "\C-xc" 'compile)
+#+END_SRC
+
+Set shell shortcut.
+
+#+BEGIN_SRC emacs-lisp
+  (if (eq system-type 'windows-nt)
+      (setq explicit-shell-file-name "C:/Program Files/Git/bin/bash.exe"
+	    explicit-bash.exe-args '("--login" "-i")))
+
+  (global-set-key (kbd "C-x C-u") 'shell)
+#+END_SRC
+
+Remove "Suspend" key combo
+
+#+BEGIN_SRC emacs-lisp
+  (global-unset-key (kbd "C-x C-z"))
+#+END_SRC
+
+Auto-pair parenthesis.
+
+#+BEGIN_SRC emacs-lisp
+  (add-to-list 'load-path "~/.emacs.d/autopair")
+  (require 'autopair)
+  (autopair-global-mode)
+#+END_SRC
+
+linum-mode in text.
+
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'find-file-hook 'linum-mode)
+#+END_SRC
+
+Resize window with Shift + Control + <direction>.
+
+#+BEGIN_SRC emacs-lisp
+  (global-set-key (kbd "C-s-<left>") 'shrink-window-horizontally)
+  (global-set-key (kbd "C-s-<right>") 'enlarge-window-horizontally)
+  (global-set-key (kbd "C-s-<down>") 'shrink-window)
+  (global-set-key (kbd "C-s-<up>") 'enlarge-window)
+#+end_SRC
+
+Set forward-search and backward-search to be regex-aware
+
+#+BEGIN_SRC emacs-lisp
+  (global-set-key (kbd "C-s") 'isearch-forward-regexp)
+  (global-set-key (kbd "C-r") 'isearch-backward-regexp)
+  (global-set-key (kbd "C-M-s") 'isearch-forward)
+  (global-set-key (kbd "C-M-r") 'isearch-backward)
+#+END_SRC
+
+Increase font size with mouse wheel
+
+#+BEGIN_SRC emacs-lisp
+  (global-set-key (kbd "<C-wheel-down>") 'text-scale-decrease)
+  (global-set-key (kbd "<C-wheel-up>") 'text-scale-increase)
+#+END_SRC
+
+Kill buffer and window instead of just the buffer
+
+#+BEGIN_SRC emacs-lisp
+  (global-set-key (kbd "C-c k") 'kill-buffer-and-window)
+#+END_SRC
+
+
+Align equal signs (nice!) as shown [[https://stackoverflow.com/questions/3633120/emacs-hotkey-to-align-equal-signs][here]], and `	<- ` too (very nice!).
+
+#+BEGIN_SRC emacs-lisp
+  (global-set-key (kbd "C-c a")
+    (lambda () (interactive)
+      (align-regexp (region-beginning) (region-end) "\\(\\s-*\\)\\(<-\\|=\\)" 1 1 nil)))
+#+END_SRC
+
+Put backup files neatly away.
+
+#+BEGIN_SRC emacs-lisp
+(let ((backup-dir "~/.cache/tmp/emacs/backups")
+      (auto-saves-dir "~/.cache/tmp/emacs/auto-saves/"))
+  (dolist (dir (list backup-dir auto-saves-dir))
+    (when (not (file-directory-p dir))
+      (make-directory dir t)))
+  (setq backup-directory-alist `(("." . ,backup-dir))
+	auto-save-file-name-transforms `((".*" ,auto-saves-dir t))
+	tramp-backup-directory-alist `((".*" . ,backup-dir))
+	tramp-auto-save-directory auto-saves-dir))
+
+(setq backup-by-copying t    ; Don't delink hardlinks
+      delete-old-versions t  ; Clean up the backups
+      version-control t      ; Use version numbers on backups,
+      kept-new-versions 5    ; keep some new versions
+      kept-old-versions 2)   ; and some old ones, too
+#+END_SRC
+* Functions
+
+Save and kill all buffers.
+
+#+BEGIN_SRC emacs-lisp
+  (defun save-kill-other-buffers ()
+	"Save and kill all other buffers."
+	(interactive)
+	(save-some-buffers)
+	(mapc 'kill-buffer (buffer-list)))
+  (global-set-key (kbd "C-x C-k") 'save-kill-other-buffers)
+#+END_SRC
+
+Visit config file.
+
+#+BEGIN_SRC emacs-lisp
+   (defun config-visit ()
+	"Config edit."
+	(interactive)
+	(find-file "~/.emacs.d/config.org"))
+  (global-set-key (kbd "C-c e") 'config-visit)
+#+END_SRC
+
+Reload config file.
+
+#+BEGIN_SRC emacs-lisp
+   (defun config-reload ()
+	"Config reload."
+	(interactive)
+	(org-babel-load-file (expand-file-name "~/.emacs.d/config.org")))
+  (global-set-key (kbd "C-c r") 'config-reload)
+#+END_SRC
+
+Sudo edit a file, as shown [[https://emacsredux.com/blog/2013/04/21/edit-files-as-root/][here]]!
+
+#+BEGIN_SRC emacs-lisp
+  (defun sudo-edit (&optional arg)
+	 "Edit currently visited file as root.
+
+  With a prefix ARG prompt for a file to visit.
+  Will also prompt for a file to visit if current
+  buffer is not visiting a file."
+	 (interactive "P")
+	 (if (or arg (not buffer-file-name))
+	     (find-file (concat "/sudo:root@localhost:"
+				(read-file-name "Find file(as root): ")))
+	   (find-alternate-file (concat "/sudo:root@localhost:" buffer-file-name))))
+#+END_SRC
+
+Run a shiny app from emacs
+
+#+BEGIN_SRC emacs-lisp
+  (defun ess-r-shiny-run-app (&optional arg)
+    "Interface for `shiny::runApp()'.
+  With prefix ARG ask for extra args."
+    (interactive)
+    (inferior-ess-r-force)
+    (ess-eval-linewise
+     "shiny::runApp(\".\")\n" "Running app" arg
+     '("" (read-string "Arguments: " "recompile = TRUE"))))
+#+END_SRC
+
+Add suffix to a region (not necessary with multiple cursors)
+
+#+BEGIN_SRC emacs-lisp
+(defun region-suffix (r1 r2)
+  (interactive "r")
+  (perform-replace " *$"
+	      (read-string "Enter suffix:")
+	      nil 'regexp nil nil nil r1 r2 nil  nil))
+(global-set-key (kbd "C-c s") 'region-suffix)
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+  (defun newline-after-comma-or-space ()
+    (interactive)
+    (perform-replace "\\(?1:[^,][[:punct:]]?+\\)\\(,\\|[[:space:]]+\\)" "\\1
+" nil t nil nil nil (region-beginning) (region-end)))
+    (global-set-key (kbd "C-c n") 'newline-after-comma-or-space)
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+  (defun force-quotes ()
+    (interactive)
+    (perform-replace "\\(?1:\\([[:punct:]]\|[[:space:]]\\)\\)+\\(?2:[A-z]?+\_?+\\.?+[0-9]?+[A-z]?+\\)\\(?3:\\([[:punct:]]\|[[:space:]]\\)\\)+" "\\1\"\\2\"\\3" nil t nil nil nil (region-beginning) (region-end)))
+    (global-set-key (kbd "C-c q") 'force-quotes)
+#+END_SRC
+
+#+RESULTS:
+: force-quotes
+
+Pipe operator in R from [[https://emacs.stackexchange.com/questions/8041/how-to-implement-the-piping-operator-in-ess-mode][here.]]
+
+#+BEGIN_SRC emacs-lisp
+  (defun add-pipe-and-step ()
+    "R - %>% operator or 'then' pipe operator"
+    (interactive)
+    (just-one-space 1)
+    (insert "%>%")
+    (reindent-then-newline-and-indent))
+#+END_SRC
+
+Insert r chunk in polymode, as shown here [[https://emacs.stackexchange.com/questions/27405/insert-code-chunk-in-r-markdown-with-yasnippet-and-polymode][here.]]
+
+#+BEGIN_SRC emacs-lisp
+  (defun insert-r-chunk (header)
+    "Insert an r-chunk in markdown mode."
+    (interactive "sHeader: ")
+    (insert (concat "```{r " header "}\n\n```"))
+    (forward-line -1))
+#+END_SRC
+
+Create R project directory structure
+
+#+BEGIN_SRC emacs-lisp
+    (defun create-r-project-dir-structure (name)
+      (interactive "sName: ")
+      (make-directory name)
+      (setq pastDir default-directory)
+      (cd name)
+      (make-directory "R")
+      (make-directory "data")
+      (make-directory "data-raw")
+      (make-directory "reports")
+      (make-directory "reports/graphics")
+      (write-region "
+  Version: 1.0
+
+  RestoreWorkspace: Default
+  SaveWorkspace: Default
+  AlwaysSaveHistory: Default
+
+  EnableCodeIndexing: Yes
+  UseSpacesForTab: Yes
+  NumSpacesForTab: 2
+  Encoding: UTF-8
+
+  RnwWeave: Sweave
+  LaTeX: pdfLaTeX"
+		    nil (concat name ".Rproj"))
+      (cd pastDir))
+#+END_SRC
+
+Create (roxygenated) header for R scripts
+
+#+BEGIN_SRC emacs-lisp
+  (defun insert-roxygenated-header (title)
+    (interactive "sTitle: ")
+    (setq date (shell-command-to-string "echo -n $(date +%m/%d/%Y)"))
+    (insert (format
+"#' ---
+#' title: %s
+#' author: Pavel Panko
+#' date: %s
+#' ---
+
+#' ### 0. Prepare environment
+#+ setup, message = FALSE, results = FALSE
+## Load packages and helper functions
+" title date)))
+#+END_SRC
+
+Byte-compile emacs directory
+
+#+BEGIN_SRC emacs-lisp
+  (defun byte-compile-init-dir ()
+    "Byte-compile all your dotfiles."
+    (interactive)
+    (byte-recompile-directory user-emacs-directory 0))
+
+  (defun remove-elc-on-save ()
+    "If you're saving an Emacs Lisp file, likely the .elc is no longer valid."
+    (add-hook 'after-save-hook
+	      (lambda ()
+		(if (file-exists-p (concat buffer-file-name "c"))
+		    (delete-file (concat buffer-file-name "c")))) nil t))
+  (add-hook 'emacs-lisp-mode-hook 'remove-elc-on-save)
+#+END_SRC
+* Modes
+** Completion-related
+
+ivy completion
+
+#+BEGIN_SRC emacs-lisp
+  (use-package counsel
+    :after ivy
+    :config (counsel-mode))
+
+  (use-package ivy
+    :defer 0.1
+    :diminish
+    :bind (("C-c C-r" . ivy-resume)
+	   ("C-x B" . ivy-switch-buffer-other-window))
+    :custom
+    (ivy-count-format "(%d/%d) ")
+    (ivy-use-virtual-buffers t)
+    :config (ivy-mode))
+
+  (use-package ivy-rich
+      :after (:all ivy counsel)
+      :init (setq ivy-rich-path-style 'abbrev
+		ivy-virtual-abbreviate 'full)
+      :config (ivy-rich-mode))
+
+  (use-package swiper
+    :after ivy
+    :bind (("C-s" . swiper-all)
+	   ("C-r" . swiper)))
+#+END_SRC
+
+smex completion for M-x commands
+
+#+BEGIN_SRC emacs-lisp
+  (use-package smex
+	:custom (smex-prompt-string "Command: ")
+	:init
+	(smex-initialize)
+	(global-set-key (kbd "M-x") 'smex)
+	(global-set-key (kbd "M-X") 'smex-major-mode-commands))
+#+END_SRC
+
+Inline auto-complete mode w/company.
+
+#+BEGIN_SRC emacs-lisp
+  (use-package company
+    :hook (after-init . global-company-mode))
+#+END_SRC
+
+Thesaurus
+
+#+BEGIN_SRC emacs-lisp
+  (use-package synosaurus
+    :diminish synosaurus-mode
+    :init    (synosaurus-mode)
+    :config  (setq synosaurus-choose-method 'popup))
+#+END_SRC
+
+Code snippets
+
+#+BEGIN_SRC emacs-lisp
+  ;; (use-package yasnippet
+  ;;   :defer t
+  ;;   :config
+  ;;   (add-to-list 'yas/extra-mode-hooks
+  ;;	       'ess-mode-hook))
+#+END_SRC
+** C++
+
+Special compile command for C++
+
+#+BEGIN_SRC emacs-lisp
+  (use-package compile
+    :ensure nil
+    :defer t
+    :hook (c++-mode lambda ()
+	(set (make-local-variable 'compile-command)
+	  (format "g++ %s" (file-name-nondirectory buffer-file-name)))))
+#+END_SRC
+** Editing-related
+
+Google things
+
+#+BEGIN_SRC emacs-lisp
+  (use-package google-this)
+#+END_SRC
+
+Interactive regex editing
+
+#+BEGIN_SRC emacs-lisp
+  (use-package wgrep)
+#+END_SRC
+** ESS
+
+#+BEGIN_SRC emacs-lisp
+  (use-package ess-r-mode
+    :ensure ess
+    :bind (:map ess-mode-map
+		;; Re-map ess "run" to S-RET because of CUA mode
+		("C-<return>" . nil)
+		("S-<return>" . ess-eval-region-or-line-visibly-and-step)
+		;; Pipe operator
+		("C->" . add-pipe-and-step))
+    :config
+    ;; Start R in current working directory, don't let R ask user
+    (setq ess-ask-for-ess-directory nil
+	  ;; Set indent at Google-standard 2-spaces.
+	  ess-style 'RStudio
+	  ;; Echo highlighted code in R buffer
+	  ess-eval-visibly t;;'nowait
+	  ;; Remove underscore funny-business
+	  ess-toggle-underscore nil
+	  ;; Turn off ess-flymake
+	  ess-use-flymake nil
+	  ;; Flycheck defaults
+	  flycheck-lintr-linters "with_defaults(object_name_linter(c('snake_case','camelCase')), commented_code_linter = NULL, line_length_linter(90))"
+	  ;; Font lock all ESS keywords
+	  ess-R-font-lock-keywords
+	  (quote
+	   ((ess-R-fl-keyword:modifiers . t)
+	    (ess-R-fl-keyword:fun-defs . t)
+	    (ess-R-fl-keyword:keywords . t)
+	    (ess-R-fl-keyword:assign-ops)
+	    (ess-R-fl-keyword:constants . t)
+	    (ess-fl-keyword:fun-calls . t)
+	    (ess-fl-keyword:numbers . t)
+	    (ess-fl-keyword:operators . t)
+	    (ess-fl-keyword:delimiters . t)
+	    (ess-fl-keyword:= . t)
+	    (ess-R-fl-keyword:F&T . t)
+	    (ess-R-fl-keyword:%op% . t)))
+	  ;; Prepend directory name to R process name
+	  ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:projectile-or-directory))
+#+END_SRC
+
+Windows work-around for not being able to find R
+
+#+BEGIN_SRC emacs-lisp
+  (if (eq system-type 'windows-nt)
+      (setq ess-directory-containing-R "C:/Program Files/"
+	    inferior-ess-r-program-name "C:/Program Files/R/R-3.6.3/bin/x64/Rterm.exe"))
+#+END_SRC
+** Flycheck
+Flycheck mode (but not for org/latex).
+
+#+BEGIN_SRC emacs-lisp
+  (use-package flycheck
+    :hook (after-init . global-flycheck-mode)
+    :config
+    (setq flycheck-global-modes '(not LaTeX-mode latex-mode org-mode)))
+#+END_SRC
+** Flyspell
+
+#+BEGIN_SRC emacs-lisp
+  (use-package ispell
+    :defer nil
+    :ensure nil
+    :init
+    (if (eq system-type 'windows-nt)
+	(progn
+	  (setenv "DICTPATH" "C:/msys64/mingw64/share/hunspell")
+	  (setenv "DICTIONARY" "C:/msys64/mingw64/share/hunspell/en_US")
+	  (setq ispell-program-name "C:/msys64/mingw64/bin/hunspell.exe")))
+    (if (eq system-type 'gnu/linux)
+	(setq ispell-program-name "hunspell"))
+    :config
+    (setq ispell-local-dictionary "en_US"
+	  ispell-dictionary "english"
+	  ispell-local-dictionary-alist
+	  '(("en_US" "[[:alpha:]]" "[^[:alpha:]]" "[']" nil ("-d" "en_US") nil utf-8))))
+#+END_SRC
+** Frames and buffers
+
+Transpose horizontal/vertical split
+
+#+BEGIN_SRC emacs-lisp
+  (use-package transpose-frame
+    :defer t
+    :bind ("C-c t" . transpose-frame))
+#+END_SRC
+
+Set ace-window shortcut
+
+#+BEGIN_SRC emacs-lisp
+  (use-package ace-window
+    :bind ("M-o" . ace-window))
+#+END_SRC
+
+Re-do window configurations
+
+#+BEGIN_SRC emacs-lisp
+  (use-package winner
+    :ensure nil
+    :init
+    (winner-mode 1))
+#+END_SRC
+
+Restart emacs (and emacs-daemon)
+
+#+BEGIN_SRC emacs-lisp
+  (use-package restart-emacs)
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+  (use-package avy
+    :bind (("M-s" . avy-goto-word-1)))
+#+END_SRC
+** LaTeX
+
+Flyspell for LaTeX
+
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'LaTeX-mode-hook 'flyspell-mode)
+#+END_SRC
+
+Auto-fill
+
+#+BEGIN_SRC emacs-lisp
+  (add-hook 'LaTeX-mode-hook 'turn-on-auto-fill)
+#+END_SRC
+** Magit
+
+#+BEGIN_SRC emacs-lisp
+  (use-package magit
+      :defer t)
+#+END_SRC
+** Multiple cursors
+#+BEGIN_SRC emacs-lisp
+  (use-package multiple-cursors
+  :bind (("C-S-c C-S-c" . mc/edit-lines)
+	 ("C-{" . mc/mark-next-like-this)
+	 ("C-}" . mc/mark-previous-like-this)
+	 ("C-|" . mc/mark-all-like-this)))
+#+END_SRC
+** MySQL
+
+Setup default connections, as seen [[https://truongtx.me/2014/08/23/setup-emacs-as-an-sql-database-client][here]].
+
+#+BEGIN_SRC emacs-lisp
+  (use-package sql
+    :ensure nil
+    :config
+    ;; Make sure MySQL know where the plugins directory is
+    (setq sql-mysql-options
+	  '("--plugin-dir=/usr/lib/mysql/plugin" "--binary-mode"))
+    :custom
+    ;; Try to catch the stupid MySQL prompt using a better regex
+    (sql-set-product-feature 'mysql :prompt-regexp "^\\(?:mysql\\|mariadb\\).*> "))
+#+END_SRC
+
+Interactive commands to connect to default connection.
+
+#+BEGIN_SRC emacs-lisp
+  (defun my-sql-ttuSql ()
+    (interactive)
+    (my-sql-connect 'mysql 'ttuSql))
+
+  (defun my-sql-connect (product connection)
+    (setq sql-product mysql)
+    (sql-connect connection))
+#+END_SRC
+** org
+
+#+BEGIN_SRC emacs-lisp
+  (use-package org
+    :defer t
+    :bind (:map org-mode-map
+		("C-c s" lambda() (interactive)
+		 (insert "#+BEGIN_SRC emacs-lisp\n#+END_SRC")))
+    :hook ((org-mode . flyspell-mode)
+	   (org-mode . visual-line-mode))
+    :init
+    ;; Load some languages for org-babel
+    (org-babel-do-load-languages
+     'org-babel-load-languages
+     '((emacs-lisp .t)
+       (R . t)
+       (C . t)
+       (python . t)
+       (latex . t)
+       (shell . t)))
+    :config
+    ;; Evaluate code blocks without confirmation
+    (setq org-confirm-babel-evaluate nil
+	  ;; Native font coloring
+	  org-src-fontify-natively t
+	  org-src-tab-acts-natively t
+	  ;; Change ellipsis to dropdown thing
+	  org-ellipsis " ↴"))
+#+END_SRC
+
+Tree slide for presentations
+
+#+BEGIN_SRC emacs-lisp
+  (use-package org-tree-slide
+     :ensure t
+     :init)
+#+END_SRC
+
+Turn org-mode bullets into utf-8 characters
+
+#+BEGIN_SRC emacs-lisp
+  (use-package org-bullets
+	:defer t
+	:init (add-hook 'org-mode-hook 'org-bullets-mode))
+#+END_SRC
+
+Make sure org-mode calls evince (gnome editor) to [[https://emacs.stackexchange.com/questions/28037/org-mode-file-hyperlinks-always-use-doc-view-cant-force-it-to-use-external-pdf][open up pdf files]]
+
+#+BEGIN_SRC emacs-lisp
+  (add-to-list 'org-file-apps '("pdf" . "evince %s"))
+#+END_SRC
+** Poly-R
+
+Require poly-R
+
+#+BEGIN_SRC emacs-lisp
+  (use-package poly-R
+    :defer t
+    ;; Add Rnw extension as polymode's r-noweb mode
+    :init
+    (add-to-list 'auto-mode-alist '("\\.Rnw" . poly-noweb+r-mode))
+    ;; Set default weaver/exporter options
+    (defun my-poly-noweb+r-options ()
+      (oset pm/polymode :exporter 'pm-exporter/pdflatex)
+      (oset pm/polymode :weaver 'pm-weaver/knitR))
+    :hook (poly-noweb+r-mode . my-poly-noweb+r-options)
+    :config
+      ;; Get rid of annoying appended text after weaving/exporting
+      (setq polymode-exporter-output-file-format "%s"
+	    polymode-weaver-output-file-format "%s"
+	    ;; Do not display output file or process buffer
+	    polymode-display-output-file nil
+	    polymode-display-process-buffers nil))
+#+END_SRC
+** Projectile
+#+BEGIN_SRC emacs-lisp
+  (use-package projectile
+    :bind (:map projectile-mode-map
+		("s-p" . projectile-command-map)
+		("C-c p" . projectile-command-map))
+    :init
+    (projectile-mode +1)
+    :custom
+    (projectile-register-project-type 'r '(".Rproj")
+				      :project-file ".Rproj"))
+#+END_SRC
+** Python
+
+#+BEGIN_SRC emacs-lisp
+  (use-package elpy
+    :defer t
+    ;; Re-map "run" to S-RET because of CUA mode.
+    :bind (:map elpy-mode-map
+		("C-<return>" . nil)
+		("S-<return>" . elpy-shell-send-statement-and-step))
+    ;; Python virtual environment setup
+    :hook (python-mode lambda() (pyvenv-workon "myvenv"))
+    :init
+    ;; Enable elpy after loading a python buffer
+    ;; as shown here: https://github.com/jorgenschaefer/elpy/issues/1566
+    (defun enable-elpy-once ()
+      (with-eval-after-load 'python (elpy-enable))
+      (advice-remove 'python-mode 'enable-elpy-once))
+    (advice-add 'python-mode :before 'enable-elpy-once)
+    :config
+    ;; Do not use flymake with elpy
+    (remove-hook 'elpy-modules 'elpy-module-flymake)
+    ;; Resolve indent issues
+    (setq python-indent-guess-indent-offset t
+	  python-indent-guess-indent-offset-verbose nil
+	  ;; Set python3 as interpreter
+	  python-shell-interpreter "python"
+	  python-shell-interpreter-args "-i"
+	  ;; Remove indentation highlighting
+	  elpy-modules (remq 'elpy-module-highlight-indentation elpy-modules)
+	  elpy-rpc-python-command python-shell-interpreter))
+#+END_SRC
+** TRAMP
+
+Start TRAMP
+
+#+BEGIN_SRC emacs-lisp
+  (setq tramp-default-method "ssh")
+#+END_SRC
+* Themes
+
+Remove toolbar, scrollbar margins & menu bar.
+Remove Emacs "splash screen" and scratch file.
+Don't ring the bell when running up against buffer end
+
+#+BEGIN_SRC emacs-lisp
+  (menu-bar-mode 0)
+  (scroll-bar-mode 0)
+  (tool-bar-mode 0)
+  (tooltip-mode 0)
+  (fringe-mode 0)
+  (blink-cursor-mode 0)
+
+  (setq inhibit-startup-message t)
+  (setq initial-scratch-message nil)
+  (setq ring-bell-function 'ignore)
+#+END_SRC
+
+Set ashes theme
+
+#+BEGIN_SRC emacs-lisp
+  (load-theme 'base16-ashes t)
+#+END_SRC
+
+Telephone line mode-line
+
+#+BEGIN_SRC emacs-lisp
+  (use-package telephone-line
+	 :config (telephone-line-mode))
+#+END_SRC
+
+Set border color
+
+#+BEGIN_SRC emacs-lisp
+  (set-face-background 'vertical-border "#323638")
+#+END_SRC
+
+Show file name in title bar as shown [[http://www.thetechrepo.com/main-articles/549][here]].
+
+#+BEGIN_SRC emacs-lisp
+  (setq frame-title-format "%b")
+#+END_SRC
+
+Light-up matching parens.
+
+#+BEGIN_SRC emacs-lisp
+  (show-paren-mode t)
+  (setq show-paren-when-point-inside-paren t)
+#+END_SRC
+* Encoding
+
+Use utf-8 everywhere all the time
+
+#+BEGIN_SRC emacs-lisp
+  (prefer-coding-system 'utf-8)
+  (setq locale-coding-system 'utf-8)
+  (set-default-coding-systems 'utf-8)
+  (set-buffer-file-coding-system 'utf-8)
+  (set-file-name-coding-system 'utf-8)
+  (set-selection-coding-system 'utf-8)
+#+END_SRC
+* Not in use
+
+Enable ein + a shortcut for deleting cells.
+
+#+BEGIN_SRC emacs-lisp
+  ;; (require 'ein)
+  ;; (require 'ein-notebook)
+  ;;
+  ;; (define-key ein:notebook-mode-map "\C-c\C-d"
+  ;;   'ein:worksheet-delete-cell)
+#+END_SRC
+
+Better (more aggressive) indent?
+
+#+BEGIN_SRC emacs-lisp
+  ;; (add-hook 'ess-mode-hook #'aggressive-indent-mode)
+#+END_SRC
+
+Make sure flymake doesn't include the legacy garbage.
+
+#+BEGIN_SRC emacs-lisp
+;;  (remove-hook 'flymake-diagnostic-functions 'flymake-proc-legacy-flymake)
+#+END_SRC
+
+Powerline theme
+
+#+BEGIN_SRC emacs-lisp
+  ;; (add-to-list 'load-path "~/.emacs.d/vendor/emacs-powerline")
+  ;; (require 'powerline)
+#+END_SRC
+
+Set cursor type as a "bar"
+
+#+BEGIN_SRC emacs-lisp
+;; (setq cursor-type (quote bar))
+#+END_SRC
+
+linum-mode background color
+
+#+BEGIN_SRC emacs-lisp
+  ;; (set-face-background 'linum "#1c2023")
+#+END_SRC
+
+linum-mode font color
+
+#+BEGIN_SRC emacs-lisp
+  ;; (set-face-foreground 'linum "#474f52")
+#+END_SRC
+
+linum-mode spacing format
+
+#+BEGIN_SRC emacs-lisp
+  ;; (setq linum-format " %d ")
+#+END_SRC
+
+(Not in use) Auto-fill mode?
+
+#+BEGIN_SRC emacs-lisp
+  ;; (setq text-mode-hook (quote (turn-on-auto-fill text-mode-hook-identify)))
+#+END_SRC
+
+ido completion
+
+#+BEGIN_SRC emacs-lisp
+  ;; (use-package ido
+  ;;   :bind (("C-x b" . ido-switch-buffer)
+  ;;	 ("C-x C-b" . ibuffer))
+  ;;   :init
+  ;;   (ido-mode 1)
+  ;;   :config
+  ;;   (setq ido-create-new-buffer 'always
+  ;;	ido-enable-flex-maching t
+  ;;	ido-everywhere t
+  ;;	ibuffer-expert t))
+#+END_SRC
