@@ -1,6 +1,6 @@
 *
 
-!snippets/*
+!*/snippets/ess-r-mode/
 !.gitignore
 !config.org
 !init.el
