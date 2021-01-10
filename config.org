@@ -451,6 +451,21 @@ Inline auto-complete mode w/company.
     :hook (after-init . global-company-mode))
 #+END_SRC
 
+auto-complete yas snippets with company
+
+#+BEGIN_SRC emacs-lisp
+  (defvar company-mode/enable-yas t
+    "Enable yasnippet for all backends.")
+
+  (defun company-mode/backend-with-yas (backend)
+    (if (or (not company-mode/enable-yas) (and (listp backend) (member 'company-yasnippet backend)))
+	backend
+      (append (if (consp backend) backend (list backend))
+	      '(:with company-yasnippet))))
+
+  (setq company-backends (mapcar #'company-mode/backend-with-yas company-backends))
+#+END_SRC
+
 Thesaurus
 
 #+BEGIN_SRC emacs-lisp
@@ -463,11 +478,11 @@ Thesaurus
 Code snippets
 
 #+BEGIN_SRC emacs-lisp
-  ;; (use-package yasnippet
-  ;;   :defer t
-  ;;   :config
-  ;;   (add-to-list 'yas/extra-mode-hooks
-  ;;	       'ess-mode-hook))
+  (use-package yasnippet
+    :init
+    (yas-global-mode 1)
+    :config
+    (add-to-list 'yas-snippet-dirs "~/.emacs.d/snippets"))
 #+END_SRC
 ** C++
 
@@ -505,6 +520,8 @@ Interactive regex editing
 		("S-<return>" . ess-eval-region-or-line-visibly-and-step)
 		;; Pipe operator
 		("C->" . add-pipe-and-step))
+    ;; :hook
+    ;; (ess-r-mode . (lambda () (yas-minor-mode)))
     :config
     ;; Start R in current working directory, don't let R ask user
     (setq ess-ask-for-ess-directory nil
@@ -542,7 +559,7 @@ Windows work-around for not being able to find R
 #+BEGIN_SRC emacs-lisp
   (if (eq system-type 'windows-nt)
       (setq ess-directory-containing-R "C:/Program Files/"
-	    inferior-ess-r-program-name "C:/Program Files/R/R-3.6.3/bin/x64/Rterm.exe"))
+	    inferior-ess-r-program "C:/Program Files/R/R-3.6.3/bin/x64/Rterm.exe"))
 #+END_SRC
 ** Flycheck
 Flycheck mode (but not for org/latex).
