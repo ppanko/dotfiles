@@ -648,10 +648,10 @@ Auto-fill
 
 #+BEGIN_SRC emacs-lisp
   (use-package magit
-    :defer t
-    :init
-    (add-hook 'after-save-hook 'magit-after-save-refresh-status t))
+    :defer t)
 
+(with-eval-after-load 'magit-mode
+  (add-hook 'after-save-hook 'magit-after-save-refresh-status t))
 #+END_SRC
 ** Multiple cursors
 #+BEGIN_SRC emacs-lisp
