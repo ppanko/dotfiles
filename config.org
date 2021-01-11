@@ -51,9 +51,9 @@ Load secrets if they exist
 Set font and size
 
 #+BEGIN_SRC emacs-lisp
-  (if (eq system-type 'windows-nt)
+  (when (eq system-type 'windows-nt)
       (set-face-attribute 'default nil :family "Consolas" :height 125))
-  (if (eq system-type 'gnu/linux)
+  (when (eq system-type 'gnu/linux)
       (set-face-attribute 'default nil :family "Inconsolata" :height 140))
 #+END_SRC
 
@@ -157,16 +157,18 @@ linum-mode in text.
 Resize window with Shift + Control + <direction>.
 
 #+BEGIN_SRC emacs-lisp
-  (if (eq system-type 'windows-nt)
+  (when (eq system-type 'windows-nt)
+    (progn
       (global-set-key (kbd "C-M-<left>") 'shrink-window-horizontally)
-    (global-set-key (kbd "C-M-<right>") 'enlarge-window-horizontally)
-    (global-set-key (kbd "C-M-<down>") 'shrink-window)
-    (global-set-key (kbd "C-M-<up>") 'enlarge-window))
-  (if (eq system-type 'gnu/linux)
+      (global-set-key (kbd "C-M-<right>") 'enlarge-window-horizontally)
+      (global-set-key (kbd "C-M-<down>") 'shrink-window)
+      (global-set-key (kbd "C-M-<up>") 'enlarge-window)))
+  (when (eq system-type 'gnu/linux)
+    (progn
       (global-set-key (kbd "C-s-<left>") 'shrink-window-horizontally)
-    (global-set-key (kbd "C-s-<right>") 'enlarge-window-horizontally)
-    (global-set-key (kbd "C-s-<down>") 'shrink-window)
-    (global-set-key (kbd "C-s-<up>") 'enlarge-window))
+      (global-set-key (kbd "C-s-<right>") 'enlarge-window-horizontally)
+      (global-set-key (kbd "C-s-<down>") 'shrink-window)
+      (global-set-key (kbd "C-s-<up>") 'enlarge-window)))
 #+end_SRC
 
 Set forward-search and backward-search to be regex-aware
@@ -552,7 +554,7 @@ Interactive regex editing
 Windows work-around for not being able to find R
 
 #+BEGIN_SRC emacs-lisp
-  (if (eq system-type 'windows-nt)
+  (when (eq system-type 'windows-nt)
       (setq ess-directory-containing-R "C:/Program Files/"
 	    inferior-ess-r-program "C:/Program Files/R/R-3.6.3/bin/x64/Rterm.exe"))
 #+END_SRC
@@ -795,6 +797,26 @@ Require poly-R
 	  elpy-modules (remq 'elpy-module-highlight-indentation elpy-modules)
 	  elpy-rpc-python-command python-shell-interpreter))
 #+END_SRC
+** Shell
+
+Shell-pop in linux; git's bin/bash in windows
+
+#+BEGIN_SRC emacs-lisp
+  (when (eq system-type 'windows-nt)
+      (progn
+	(setq explicit-shell-file-name "C:/Program Files/Git/bin/bash.exe"
+	      explicit-bash.exe-args '("--login" "-i"))
+	(global-set-key (kbd "C-x C-u") 'shell)))
+
+  (when (eq system-type 'gnu/linux)
+    (use-package shell-pop
+      :bind (("C-x C-u" . shell-pop))
+      :config
+      (setq shell-pop-shell-type (quote ("ansi-term" "*ansi-term*" (lambda nil (ansi-term shell-pop-term-shell)))))
+      (setq shell-pop-term-shell "/bin/bash")
+      ;; need to do this manually or not picked up by `shell-pop'
+      (shell-pop--set-shell-type 'shell-pop-shell-type shell-pop-shell-type)))
+#+END_SRC
 ** TRAMP
 
 Start TRAMP
@@ -931,29 +953,4 @@ ido completion
   ;;	ido-enable-flex-maching t
   ;;	ido-everywhere t
   ;;	ibuffer-expert t))
-#+END_SRC
-
-
-#+BEGIN_SRC emacs-lisp
-  (use-package shell-pop
-    :bind (("C-x C-u" . shell-pop))
-    :config
-    (setq shell-pop-shell-type (quote ("ansi-term" "*ansi-term*" (lambda nil (ansi-term shell-pop-term-shell)))))
-    (if (eq system-type 'windows-nt)
-	(setq shell-pop-term-shell "C:/Program Files/Git/bin/bash.exe"
-	      explicit-bash.exe-args '("--login" "-i"))
-    (if (eq system-type 'gnu/linux)
-    (setq shell-pop-term-shell "/bin/bash"))
-    ;; need to do this manually or not picked up by `shell-pop'
-    (shell-pop--set-shell-type 'shell-pop-shell-type shell-pop-shell-type))
-#+END_SRC
-
-Set shell shortcut.
-
-#+BEGIN_SRC emacs-lisp
-  ;; (if (eq system-type 'windows-nt)
-  ;;     (setq explicit-shell-file-name "C:/Program Files/Git/bin/bash.exe"
-  ;;	  explicit-bash.exe-args '("--login" "-i")))
-
-  ;; (global-set-key (kbd "C-x C-u") 'shell)
 #+END_SRC
