@@ -167,10 +167,16 @@ linum-mode in text.
 Resize window with Shift + Control + <direction>.
 
 #+BEGIN_SRC emacs-lisp
-  (global-set-key (kbd "C-s-<left>") 'shrink-window-horizontally)
-  (global-set-key (kbd "C-s-<right>") 'enlarge-window-horizontally)
-  (global-set-key (kbd "C-s-<down>") 'shrink-window)
-  (global-set-key (kbd "C-s-<up>") 'enlarge-window)
+  (if (eq system-type 'windows-nt)
+      (global-set-key (kbd "C-M-<left>") 'shrink-window-horizontally)
+    (global-set-key (kbd "C-M-<right>") 'enlarge-window-horizontally)
+    (global-set-key (kbd "C-M-<down>") 'shrink-window)
+    (global-set-key (kbd "C-M-<up>") 'enlarge-window))
+  (if (eq system-type 'gnu/linux)
+      (global-set-key (kbd "C-s-<left>") 'shrink-window-horizontally)
+    (global-set-key (kbd "C-s-<right>") 'enlarge-window-horizontally)
+    (global-set-key (kbd "C-s-<down>") 'shrink-window)
+    (global-set-key (kbd "C-s-<up>") 'enlarge-window))
 #+end_SRC
 
 Set forward-search and backward-search to be regex-aware
@@ -341,14 +347,14 @@ Create R project directory structure
     (defun create-r-project-dir-structure (name)
       (interactive "sName: ")
       (make-directory name)
-      (setq pastDir default-directory)
-      (cd name)
-      (make-directory "R")
-      (make-directory "data")
-      (make-directory "data-raw")
-      (make-directory "reports")
-      (make-directory "reports/graphics")
-      (write-region "
+      (let (pastDir default-directory)
+	(cd name)
+	(make-directory "R")
+	(make-directory "data")
+	(make-directory "data-raw")
+	(make-directory "reports")
+	(make-directory "reports/graphics")
+	(write-region "
   Version: 1.0
 
   RestoreWorkspace: Default
@@ -362,8 +368,8 @@ Create R project directory structure
 
   RnwWeave: Sweave
   LaTeX: pdfLaTeX"
-		    nil (concat name ".Rproj"))
-      (cd pastDir))
+		      nil (concat name ".Rproj"))
+	(cd pastDir)))
 #+END_SRC
 
 Create (roxygenated) header for R scripts
@@ -371,7 +377,7 @@ Create (roxygenated) header for R scripts
 #+BEGIN_SRC emacs-lisp
   (defun insert-roxygenated-header (title)
     (interactive "sTitle: ")
-    (setq date (shell-command-to-string "echo -n $(date +%m/%d/%Y)"))
+    (let (date (shell-command-to-string "echo -n $(date +%m/%d/%Y)"))
     (insert (format
 "#' ---
 #' title: %s
@@ -382,7 +388,7 @@ Create (roxygenated) header for R scripts
 #' ### 0. Prepare environment
 #+ setup, message = FALSE, results = FALSE
 ## Load packages and helper functions
-" title date)))
+" title date))))
 #+END_SRC
 
 Byte-compile emacs directory
@@ -429,8 +435,8 @@ ivy completion
 
   (use-package swiper
     :after ivy
-    :bind (("C-s" . swiper-all)
-	   ("C-r" . swiper)))
+    :bind (("C-r" . swiper-all)
+	   ("C-s" . swiper)))
 #+END_SRC
 
 smex completion for M-x commands
@@ -448,22 +454,21 @@ Inline auto-complete mode w/company.
 
 #+BEGIN_SRC emacs-lisp
   (use-package company
-    :hook (after-init . global-company-mode))
+    :hook (after-init . global-company-mode)
+    :config
+    (setq company-backends (mapcar #'company-mode/backend-with-yas company-backends)))
 #+END_SRC
 
 auto-complete yas snippets with company
 
 #+BEGIN_SRC emacs-lisp
-  (defvar company-mode/enable-yas t
-    "Enable yasnippet for all backends.")
-
-  (defun company-mode/backend-with-yas (backend)
-    (if (or (not company-mode/enable-yas) (and (listp backend) (member 'company-yasnippet backend)))
-	backend
-      (append (if (consp backend) backend (list backend))
-	      '(:with company-yasnippet))))
-
-  (setq company-backends (mapcar #'company-mode/backend-with-yas company-backends))
+     (defvar company-mode/enable-yas t
+       "Enable yasnippet for all backends.")
+     (defun company-mode/backend-with-yas (backend)
+       (if (or (not company-mode/enable-yas) (and (listp backend) (member 'company-yasnippet backend)))
+	   backend
+	 (append (if (consp backend) backend (list backend))
+		 '(:with company-yasnippet))))
 #+END_SRC
 
 Thesaurus
@@ -643,7 +648,10 @@ Auto-fill
 
 #+BEGIN_SRC emacs-lisp
   (use-package magit
-      :defer t)
+    :defer t
+    :init
+    (add-hook 'after-save-hook 'magit-after-save-refresh-status t))
+
 #+END_SRC
 ** Multiple cursors
 #+BEGIN_SRC emacs-lisp
