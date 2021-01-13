@@ -114,6 +114,16 @@ Move to trash when deleting files
 #+BEGIN_SRC emacs-lisp
   (setq delete-by-moving-to-trash t)
 #+END_SRC
+
+Utilize asynchronous processing for dired and package installation
+
+#+BEGIN_SRC emacs-lisp
+  (use-package async
+	  :ensure t
+	  :init
+	  (dired-async-mode 1)
+	  (async-bytecomp-package-mode 1))
+#+END_SRC
 * Global settings
 
 Turn on syntax highlighting.
@@ -505,6 +515,18 @@ Interactive regex editing
 
 #+BEGIN_SRC emacs-lisp
   (use-package wgrep)
+#+END_SRC
+
+Undo tree-style
+
+#+BEGIN_SRC emacs-lisp
+(use-package undo-tree
+  :diminish undo-tree-mode
+  :config
+  (progn
+    (global-undo-tree-mode)
+    (setq undo-tree-visualizer-timestamps t)
+    (setq undo-tree-visualizer-diff t)))
 #+END_SRC
 ** ESS
 
