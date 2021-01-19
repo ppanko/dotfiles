@@ -304,6 +304,8 @@ Add suffix to a region (not necessary with multiple cursors)
 (global-set-key (kbd "C-c s") 'region-suffix)
 #+END_SRC
 
+Put each word on a newline on either a space or comma
+
 #+BEGIN_SRC emacs-lisp
   (defun newline-after-comma-or-space ()
     (interactive)
@@ -311,6 +313,8 @@ Add suffix to a region (not necessary with multiple cursors)
 " nil t nil nil nil (region-beginning) (region-end)))
     (global-set-key (kbd "C-c n") 'newline-after-comma-or-space)
 #+END_SRC
+
+Put quotes around each word (work-in-progress)
 
 #+BEGIN_SRC emacs-lisp
   (defun force-quotes ()
@@ -349,13 +353,10 @@ Create R project directory structure
     (defun create-r-project-dir-structure (name)
       (interactive "sName: ")
       (make-directory name)
-      (let (pastDir default-directory)
+      (let ((pastDir default-directory))
 	(cd name)
-	(make-directory "R")
-	(make-directory "data")
-	(make-directory "data-raw")
-	(make-directory "reports")
-	(make-directory "reports/graphics")
+	(dolist (dirname '("R" "data" "data-raw" "reports" "reports/graphics"))
+	  (make-directory dirname))
 	(write-region "
   Version: 1.0
 
@@ -371,6 +372,8 @@ Create R project directory structure
   RnwWeave: Sweave
   LaTeX: pdfLaTeX"
 		      nil (concat name ".Rproj"))
+	(with-temp-file "DESCRIPTION"
+	  (insert ""))
 	(cd pastDir)))
 #+END_SRC
 
