@@ -46,6 +46,15 @@ Load secrets if they exist
   (when (file-exists-p secrets-file)
     (load-file secrets-file))
 #+END_SRC
+
+Start server on Windows
+
+#+BEGIN_SRC emacs-lisp
+  ;; (when (eq system-type 'windows-nt)
+  ;;   (progn
+  ;;     (require 'server)
+  ;;     (server-start)))
+#+END_SRC
 * General
 
 Set font and size
@@ -233,7 +242,7 @@ Put backup files neatly away.
 #+END_SRC
 * Functions
 
-Save and kill all buffers.
+Save and kill all buffers (emacs daemon).
 
 #+BEGIN_SRC emacs-lisp
   (defun save-kill-other-buffers ()
@@ -372,7 +381,7 @@ Create R project directory structure
   RnwWeave: Sweave
   LaTeX: pdfLaTeX"
 		      nil (concat name ".Rproj"))
-	(with-temp-file "DESCRIPTION"
+	(with-temp-file ".projectile"
 	  (insert ""))
 	(cd pastDir)))
 #+END_SRC
@@ -382,17 +391,25 @@ Create (roxygenated) header for R scripts
 #+BEGIN_SRC emacs-lisp
   (defun insert-roxygenated-header (title)
     (interactive "sTitle: ")
-    (let (date (shell-command-to-string "echo -n $(date +%m/%d/%Y)"))
+    (let ((date (format-time-string "%m/%d/%Y")))
     (insert (format
 "#' ---
-#' title: %s
-#' author: Pavel Panko
-#' date: %s
+#' title:  '%s'
+#' author: 'Pavel Panko'
+#' date:   '%s'
 #' ---
 
 #' ### 0. Prepare environment
+
 #+ setup, message = FALSE, results = FALSE
 ## Load packages and helper functions
+pkgs <- c(\"here\")
+## install.packages(pkgs)
+lapply(pkgs, library, character.only = TRUE)
+
+source(here(\"R/99_helperFunctions.R\"))
+
+#' ### 1. Read in data
 " title date))))
 #+END_SRC
 
@@ -590,7 +607,8 @@ Flycheck mode (but not for org/latex).
   (use-package flycheck
     :hook (after-init . global-flycheck-mode)
     :config
-    (setq flycheck-global-modes '(not LaTeX-mode latex-mode org-mode)))
+    (setq flycheck-global-modes '(not LaTeX-mode latex-mode org-mode))
+    (setq flycheck-python-flake8-executable "flake8"))
 #+END_SRC
 ** Flyspell
 
@@ -801,8 +819,12 @@ Require poly-R
 		("C-<return>" . nil)
 		("S-<return>" . elpy-shell-send-statement-and-step))
     ;; Python virtual environment setup
-    :hook (python-mode lambda() (pyvenv-workon "myvenv"))
+    ;; :hook (python-mode lambda() (pyvenv-workon "myvenv"))
     :init
+    (if (eq system-type 'windows-nt)
+	(add-hook 'python-mode-hook (lambda() (pyvenv-workon "../../../Miniconda3"))))
+    (if (eq system-type 'gnu/linux)
+	(add-hook 'python-mode-hook (lambda() (pyvenv-workon "myvenv"))))
     ;; Enable elpy after loading a python buffer
     ;; as shown here: https://github.com/jorgenschaefer/elpy/issues/1566
     (defun enable-elpy-once ()
@@ -821,6 +843,7 @@ Require poly-R
 	  ;; Remove indentation highlighting
 	  elpy-modules (remq 'elpy-module-highlight-indentation elpy-modules)
 	  elpy-rpc-python-command python-shell-interpreter))
+
 #+END_SRC
 ** Shell
 
