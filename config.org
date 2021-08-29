@@ -128,7 +128,6 @@ Utilize asynchronous processing for dired and package installation
 
 #+BEGIN_SRC emacs-lisp
   (use-package async
-	  :ensure t
 	  :init
 	  (dired-async-mode 1)
 	  (async-bytecomp-package-mode 1))
@@ -162,9 +161,12 @@ Remove "Suspend" key combo
 Auto-pair parenthesis.
 
 #+BEGIN_SRC emacs-lisp
-  (add-to-list 'load-path "~/.emacs.d/autopair")
-  (require 'autopair)
-  (autopair-global-mode)
+  ;; (add-to-list 'load-path "~/.emacs.d/autopair")
+  ;; (require 'autopair)
+  ;; (autopair-global-mode)
+(use-package smartparens
+ :config
+  (smartparens-global-mode t))
 #+END_SRC
 
 linum-mode in text.
@@ -242,7 +244,7 @@ Put backup files neatly away.
 #+END_SRC
 * Functions
 
-Save and kill all buffers (emacs daemon).
+Save and kill all buffers (for emacs daemon).
 
 #+BEGIN_SRC emacs-lisp
   (defun save-kill-other-buffers ()
@@ -332,9 +334,6 @@ Put quotes around each word (work-in-progress)
     (global-set-key (kbd "C-c q") 'force-quotes)
 #+END_SRC
 
-#+RESULTS:
-: force-quotes
-
 Pipe operator in R from [[https://emacs.stackexchange.com/questions/8041/how-to-implement-the-piping-operator-in-ess-mode][here.]]
 
 #+BEGIN_SRC emacs-lisp
@@ -364,53 +363,76 @@ Create R project directory structure
       (make-directory name)
       (let ((pastDir default-directory))
 	(cd name)
-	(dolist (dirname '("R" "data" "data-raw" "reports" "reports/graphics"))
+	(dolist (dirname '("R" "data" "data-raw" "output" "reports" "bin" "reports/graphics"))
 	  (make-directory dirname))
 	(write-region "
-  Version: 1.0
+    Version: 1.0
 
-  RestoreWorkspace: Default
-  SaveWorkspace: Default
-  AlwaysSaveHistory: Default
+    RestoreWorkspace: Default
+    SaveWorkspace: Default
+    AlwaysSaveHistory: Default
 
-  EnableCodeIndexing: Yes
-  UseSpacesForTab: Yes
-  NumSpacesForTab: 2
-  Encoding: UTF-8
+    EnableCodeIndexing: Yes
+    UseSpacesForTab: Yes
+    NumSpacesForTab: 2
+    Encoding: UTF-8
 
-  RnwWeave: Sweave
-  LaTeX: pdfLaTeX"
+    RnwWeave: Sweave
+    LaTeX: pdfLaTeX"
 		      nil (concat name ".Rproj"))
 	(with-temp-file ".projectile"
 	  (insert ""))
+	(with-temp-file ".gitignore"
+	  (insert "Archive/
+		  .Rhistory
+		  *~
+		  .Rproj.user/
+		  notes.org"))
 	(cd pastDir)))
+#+END_SRC
+
+.gitignore template
+
+#+BEGIN_SRC emacs-lisp
+  (defun gitignore-template (dir)
+      (interactive (list (let (dir (insert-default-directory t))
+	(read-file-name "Select directory: "))))
+    (write-region "Archive/
+		   .Rhistory
+		   *~
+		   .Rproj.user/
+		   notes.org"
+		  nil (concat dir "/.gitignore")))
 #+END_SRC
 
 Create (roxygenated) header for R scripts
 
 #+BEGIN_SRC emacs-lisp
-  (defun insert-roxygenated-header (title)
-    (interactive "sTitle: ")
-    (let ((date (format-time-string "%m/%d/%Y")))
-    (insert (format
-"#' ---
-#' title:  '%s'
-#' author: 'Pavel Panko'
-#' date:   '%s'
-#' ---
+    (defun insert-roxygenated-header (title)
+      "Set up a knitable header for R docs"
+      (interactive "sTitle: ")
+      (let ((date (format-time-string "%m/%d/%Y")))
+	(insert (format "
+  #' ---
+    #' title:  '%s'
+    #' author: 'Pavel Panko'
+    #' date:   '%s'
+    #' ---
 
-#' ### 0. Prepare environment
+    #' ### 0. Prepare environment
 
-#+ setup, message = FALSE, results = FALSE
-## Load packages and helper functions
-pkgs <- c(\"here\")
-## install.packages(pkgs)
-lapply(pkgs, library, character.only = TRUE)
+   #+ setup, message = FALSE, results = FALSE
+    ## Load packages and helper functions
+    pkgs <- c(\"here\")
+    ## install.packages(pkgs)
+    lapply(pkgs, library, character.only = TRUE)
 
-source(here(\"R/99_helperFunctions.R\"))
+    source(here(\"R/99_helperFunctions.R\"))
 
-#' ### 1. Read in data
-" title date))))
+    #' ### 1. Read in data
+
+    #+ read
+    " title date))))
 #+END_SRC
 
 Byte-compile emacs directory
@@ -574,6 +596,9 @@ Undo tree-style
 	  ess-use-flymake nil
 	  ;; Flycheck defaults
 	  flycheck-lintr-linters "with_defaults(object_name_linter(c('snake_case','camelCase')), commented_code_linter = NULL, line_length_linter(90))"
+	  ;; Attempt to prevent process timeout hang
+	  ess--command-default-timeout 1
+	  ;; ess-can-eval-in-background nil
 	  ;; Font lock all ESS keywords
 	  ess-R-font-lock-keywords
 	  (quote
@@ -590,16 +615,30 @@ Undo tree-style
 	    (ess-R-fl-keyword:F&T . t)
 	    (ess-R-fl-keyword:%op% . t)))
 	  ;; Prepend directory name to R process name
-	  ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:projectile-or-directory))
+	  ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:project-or-simple))
 #+END_SRC
 
 Windows work-around for not being able to find R
 
 #+BEGIN_SRC emacs-lisp
-  (when (eq system-type 'windows-nt)
-      (setq ess-directory-containing-R "C:/Program Files/"
-	    inferior-ess-r-program "C:/Program Files/R/R-3.6.3/bin/x64/Rterm.exe"))
+  ;; (when (eq system-type 'windows-nt)
+  ;;     (setq ess-directory-containing-R "C:/Program Files/"
+  ;;	  inferior-ess-r-program "C:/Program Files/R/R-3.6.3/bin/x64/Rterm.exe"))
 #+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+  (when (eq system-type 'windows-nt)
+      (setq-default inferior-R-program-name "C:\\Program Files\\R\\R-4.1.0\\bin\\x64\\Rterm.exe"))
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+(add-hook 'ess-mode-hook
+	  (lambda ()
+	    (set (make-local-variable 'compile-command)
+		 (concat "R -e rmarkdown::render('" buffer-file-name "')"))))
+#+END_SRC
+
+#+RESULTS:
 ** Flycheck
 Flycheck mode (but not for org/latex).
 
@@ -620,7 +659,7 @@ Flycheck mode (but not for org/latex).
     (if (eq system-type 'windows-nt)
 	(progn
 	  (setenv "DICTPATH" "C:/msys64/mingw64/share/hunspell")
-	  (setenv "DICTIONARY" "C:/msys64/mingw64/share/hunspell/en_US")
+	  (setenv "DICTIONARY" "en_US")		;C:/msys64/mingw64/share/hunspell/
 	  (setq ispell-program-name "C:/msys64/mingw64/bin/hunspell.exe")))
     (if (eq system-type 'gnu/linux)
 	(setq ispell-program-name "hunspell"))
@@ -845,6 +884,12 @@ Require poly-R
 	  elpy-rpc-python-command python-shell-interpreter))
 
 #+END_SRC
+** Rainbow
+#+BEGIN_SRC emacs-lisp
+  (use-package rainbow-mode
+    :config
+    (add-hook 'prog-mode-hook #'rainbow-mode))
+#+END_SRC
 ** Shell
 
 Shell-pop in linux; git's bin/bash in windows
@@ -871,6 +916,15 @@ Start TRAMP
 
 #+BEGIN_SRC emacs-lisp
   (setq tramp-default-method "ssh")
+#+END_SRC
+** workgroups
+
+#+BEGIN_SRC emacs-lisp
+  (use-package workgroups2
+    :init
+    (setq wg-prefix-key "C-c z"
+	  wg-session-load-on-start nil)
+    (workgroups-mode 1))
 #+END_SRC
 * Themes
 

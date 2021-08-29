@@ -1,7 +1,4 @@
-/*
-
-
-!/snippets
-!.gitignore
+*
 !config.org
 !init.el
+!snippets/
