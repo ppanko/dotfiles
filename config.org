@@ -435,6 +435,50 @@ Create (roxygenated) header for R scripts
     " title date))))
 #+END_SRC
 
+Create roxygenated R script outputting to word via officer
+
+#+BEGIN_SRC emacs-lisp
+      (defun insert-word-roxygenated-header ()
+	"Set up a knitable header for R docs"
+	(interactive)
+	  (insert "
+  #' ---
+  #' author: ''
+  #' date: ''
+  #' always_allow_html: yes
+  #' output_dir: 'reports'
+  #' output:
+  #'   officedown::rdocx_document:
+  #'     reference_docx: modified_styled-template.docx
+  #'     df_print: kable
+  #'     keep_md: FALSE
+  #'   html_document:
+  #'     df_print: kable
+  #' params:
+  #'   ic: NULL
+  #'   title: ''
+  #' title: ''
+  #' ---
+
+  #+ setup, message = FALSE, results = FALSE, include = FALSE
+  ## Load packages and helper functions
+  ## stpiR::library_or_install(here)
+
+  ##source(here('R/99_helperFunctions.R'))
+
+  ## Set up formatting
+  target_format <- knitr::opts_knit$get('rmarkdown.pandoc.to')
+  if (!is.null(target_format)) {
+    if (target_format %in% c('docx', 'latex')) {
+      knitr::opts_chunk$set(echo = FALSE)
+    }
+  }
+
+  options(knitr.kable.NA = '')
+
+  #+ tables, echo = FALSE, message = FALSE"))
+#+END_SRC
+
 Byte-compile emacs directory
 
 #+BEGIN_SRC emacs-lisp
@@ -595,7 +639,7 @@ Undo tree-style
 	  ;; Turn off ess-flymake
 	  ess-use-flymake nil
 	  ;; Flycheck defaults
-	  flycheck-lintr-linters "with_defaults(object_name_linter(c('snake_case','camelCase')), commented_code_linter = NULL, line_length_linter(90))"
+	  flycheck-lintr-linters "with_defaults(object_name_linter(c('snake_case','camelCase')), commented_code_linter = NULL, line_length_linter(90), single_quotes_linter=NULL)"
 	  ;; Attempt to prevent process timeout hang
 	  ess--command-default-timeout 1
 	  ;; ess-can-eval-in-background nil
