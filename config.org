@@ -414,24 +414,24 @@ Create (roxygenated) header for R scripts
       (let ((date (format-time-string "%m/%d/%Y")))
 	(insert (format "
   #' ---
-    #' title:  '%s'
-    #' author: 'Pavel Panko'
-    #' date:   '%s'
-    #' ---
+  #' title:  '%s'
+  #' author: 'Pavel Panko'
+  #' date:   '%s'
+  #' ---
 
-    #' ### 0. Prepare environment
+  #' ### 0. Prepare environment
 
-   #+ setup, message = FALSE, results = FALSE
-    ## Load packages and helper functions
-    pkgs <- c(\"here\")
-    ## install.packages(pkgs)
-    lapply(pkgs, library, character.only = TRUE)
+  #+ setup, message = FALSE, results = FALSE
+  ## Load packages and helper functions
+  pkgs <- c(\"here\")
+  ## install.packages(pkgs)
+  lapply(pkgs, library, character.only = TRUE)
 
-    source(here(\"R/99_helperFunctions.R\"))
+  source(here(\"R/99_helperFunctions.R\"))
 
-    #' ### 1. Read in data
+  #' ### 1. Read in data
 
-    #+ read
+  #+ read
     " title date))))
 #+END_SRC
 
@@ -857,6 +857,24 @@ Make sure org-mode calls evince (gnome editor) to [[https://emacs.stackexchange.
 #+BEGIN_SRC emacs-lisp
   (add-to-list 'org-file-apps '("pdf" . "evince %s"))
 #+END_SRC
+
+Set region to checkboxes
+
+#+BEGIN_SRC emacs-lisp
+(defun org-set-line-checkbox (arg)
+  (interactive "P")
+  (let ((n (or arg 1)))
+    (when (region-active-p)
+      (setq n (count-lines (region-beginning)
+			   (region-end)))
+      (goto-char (region-beginning)))
+    (dotimes (i n)
+      (beginning-of-line)
+      (insert "- [ ] ")
+      (forward-line))
+    (beginning-of-line)))
+#+END_SRC
+
 ** Poly-R
 
 Require poly-R
