@@ -1,6 +1,6 @@
 * Startup
 
-Start up in fullscreen.
+Start up in fullscreen
 
 #+BEGIN_SRC emacs-lisp
   (add-to-list 'default-frame-alist '(fullscreen . maximized))
