@@ -223,7 +223,7 @@ Kill buffer and window instead of just the buffer
 #+END_SRC
 
 
-Align equal signs (nice!) as shown [[https://stackoverflow.com/questions/3633120/emacs-hotkey-to-align-equal-signs][here]], and `	<- ` too (very nice!).
+Align equal signs (nice!) as shown [[https://stackoverflow.com/questions/3633120/emacs-hotkey-to-align-equal-signs][here]], and `<-` too (very nice!).
 
 #+BEGIN_SRC emacs-lisp
   (global-set-key (kbd "C-c a")
@@ -259,7 +259,8 @@ dired settings
     :after all-the-icons-dired
     :hook (dired-mode . all-the-icons-dired-mode)
     :custom
-    (dired-auto-revert-buffer t))
+    (dired-auto-revert-buffer t)
+    (dired-kill-when-opening-new-dired-buffer t))
 #+END_SRC
 
 Graphical icons?
@@ -420,11 +421,12 @@ Create R project directory structure
         (with-temp-file ".projectile"
           (insert ""))
         (with-temp-file ".gitignore"
-          (insert "Archive/
-                  .Rhistory
-                  *~
-                  .Rproj.user/
-                  notes.org"))
+          (insert "
+  Archive/
+  .Rhistory
+  ,*~
+  .Rproj.user/
+  notes.org"))
         (cd pastDir)))
 #+END_SRC
 
@@ -478,8 +480,7 @@ Create roxygenated R script outputting to word via officer
       (defun p3/insert-word-roxygenated-header ()
         "Set up a knitable header for R docs"
         (interactive)
-          (insert "
-  #' ---
+          (insert "#' ---
   #' author: ''
   #' date: ''
   #' always_allow_html: yes
@@ -532,6 +533,40 @@ Byte-compile emacs directory
                     (delete-file (concat buffer-file-name "c")))) nil t))
   (add-hook 'emacs-lisp-mode-hook 'p3/remove-elc-on-save)
 #+END_SRC
+
+Open Windows shell when using Windows
+
+#+BEGIN_SRC emacs-lisp
+  (when (eq system-type 'windows-nt)
+    (progn
+    (defun p3/windows-shell ()
+      (interactive)
+      (let ((proc (start-process "cmd" nil "cmd.exe" "/C" "start" "cmd.exe")))
+        (set-process-query-on-exit-flag proc nil)))
+    (global-set-key (kbd "C-x C-i") #'windows-shell)))
+#+END_SRC
+
+Highlight library/source region and run
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/ess-library-and-source()
+    (interactive)
+    (save-excursion
+      (let ( (right-paren (save-excursion ; using save-excursion because
+                                        ; we don't want to move the
+                                        ; point.
+                          (re-search-backward "#' ### 1." nil t))) ; bound nil
+                                                          ; no-error t
+           (left-paren (save-excursion (re-search-backward "#' ### 0." nil t))))
+    (when (and right-paren left-paren)
+      ;; this is actually a way to activate a mark
+      ;; you have to move your point to one side
+      (push-mark right-paren)
+      (goto-char left-paren)
+      (activate-mark)
+      (ess-eval-region-or-function-or-paragraph)))))
+#+END_SRC
+
 * Modes
 ** Completion-related
 
@@ -682,7 +717,9 @@ auto-save changed files
                 ("C-<return>" . nil)
                 ("S-<return>" . ess-eval-region-or-line-visibly-and-step)
                 ;; Pipe operator
-                ("C->" . add-pipe-and-step))
+                ("C->" . add-pipe-and-step)
+                ;; Run library/source commands at the top of the script
+                ("C-c i" . p3/ess-library-and-source))
     ;; :hook
     ;; (ess-r-mode . (lambda () (yas-minor-mode)))
     :config
@@ -826,10 +863,10 @@ Use magit to manage git
 
 #+BEGIN_SRC emacs-lisp
   (use-package magit
-    :defer t)
-
-(with-eval-after-load 'magit-mode
-  (add-hook 'after-save-hook 'magit-after-save-refresh-status t))
+    :defer t
+    :config
+    (with-eval-after-load 'magit-mode
+      (add-hook 'after-save-hook 'magit-after-save-refresh-status t)))
 #+END_SRC
 
 Git changes in the fringe
@@ -1101,7 +1138,6 @@ Shell-pop in linux; git's bin/bash in windows
         (setq explicit-shell-file-name "C:/Program Files/Git/bin/bash.exe"
               explicit-bash.exe-args '("--login" "-i"))
         (global-set-key (kbd "C-x C-u") 'shell)))
-
   (when (eq system-type 'gnu/linux)
     (use-package shell-pop
       :bind (("C-x C-u" . shell-pop))
@@ -1113,10 +1149,14 @@ Shell-pop in linux; git's bin/bash in windows
 #+END_SRC
 ** TRAMP
 
-Start TRAMP
+TRAMP default settings
 
 #+BEGIN_SRC emacs-lisp
-  (setq tramp-default-method "ssh")
+  (require 'tramp)
+    (when (eq system-type 'windows-nt)
+      (setq tramp-default-method "plink"))
+    (when (eq system-type 'gnu/linux)
+      (setq tramp-default-method "ssh"))
 #+END_SRC
 ** workgroups
 
