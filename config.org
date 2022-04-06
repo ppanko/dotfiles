@@ -20,11 +20,11 @@ Automatically update packages
 
 #+BEGIN_SRC emacs-lisp
  (use-package auto-package-update
-        :custom
-        (auto-package-update-delete-old-versions t)
-        (auto-package-update-hide-results t)
-        :config
-        (auto-package-update-maybe))
+	:custom
+	(auto-package-update-delete-old-versions t)
+	(auto-package-update-hide-results t)
+	:config
+	(auto-package-update-maybe))
 #+END_SRC
 
 Always compile, and use the newest version available.
@@ -128,9 +128,9 @@ Utilize asynchronous processing for dired and package installation
 
 #+BEGIN_SRC emacs-lisp
   (use-package async
-          :init
-          (dired-async-mode 1)
-          (async-bytecomp-package-mode 1))
+	  :init
+	  (dired-async-mode 1)
+	  (async-bytecomp-package-mode 1))
 #+END_SRC
 * Global settings
 
@@ -173,12 +173,12 @@ Line numbers for several modes
       (column-number-mode)
       ;; Enable line numbers for some modes
       (dolist (mode '(text-mode-hook
-                      prog-mode-hook
-                      conf-mode-hook))
-        (add-hook mode (lambda ()
-                       (progn
-                         (display-line-numbers-mode 1)
-                         (set-face-foreground 'line-number-current-line "#FFD700"))))))
+		      prog-mode-hook
+		      conf-mode-hook))
+	(add-hook mode (lambda ()
+		       (progn
+			 (display-line-numbers-mode 1)
+			 (set-face-foreground 'line-number-current-line "#FFD700"))))))
 
     (p3/set-line-numbers)
 #+END_SRC
@@ -240,9 +240,9 @@ Put backup files neatly away.
     (when (not (file-directory-p dir))
       (make-directory dir t)))
   (setq backup-directory-alist `(("." . ,backup-dir))
-        auto-save-file-name-transforms `((".*" ,auto-saves-dir t))
-        tramp-backup-directory-alist `((".*" . ,backup-dir))
-        tramp-auto-save-directory auto-saves-dir))
+	auto-save-file-name-transforms `((".*" ,auto-saves-dir t))
+	tramp-backup-directory-alist `((".*" . ,backup-dir))
+	tramp-auto-save-directory auto-saves-dir))
 
 (setq backup-by-copying t    ; Don't delink hardlinks
       delete-old-versions t  ; Clean up the backups
@@ -286,10 +286,10 @@ Save and kill all buffers (for emacs daemon).
 
 #+BEGIN_SRC emacs-lisp
   (defun p3/save-kill-other-buffers ()
-        "Save and kill all other buffers."
-        (interactive)
-        (save-some-buffers)
-        (mapc 'kill-buffer (buffer-list)))
+	"Save and kill all other buffers."
+	(interactive)
+	(save-some-buffers)
+	(mapc 'kill-buffer (buffer-list)))
   (global-set-key (kbd "C-x C-k") 'p3/save-kill-other-buffers)
 #+END_SRC
 
@@ -297,9 +297,9 @@ Visit config file.
 
 #+BEGIN_SRC emacs-lisp
    (defun p3/config-visit ()
-        "Config edit."
-        (interactive)
-        (find-file "~/.emacs.d/config.org"))
+	"Config edit."
+	(interactive)
+	(find-file "~/.emacs.d/config.org"))
   (global-set-key (kbd "C-c e") 'p3/config-visit)
 #+END_SRC
 
@@ -307,9 +307,9 @@ Reload config file.
 
 #+BEGIN_SRC emacs-lisp
    (defun p3/config-reload ()
-        "Config reload."
-        (interactive)
-        (org-babel-load-file (expand-file-name "~/.emacs.d/config.org")))
+	"Config reload."
+	(interactive)
+	(org-babel-load-file (expand-file-name "~/.emacs.d/config.org")))
   (global-set-key (kbd "C-c r") 'p3/config-reload)
 #+END_SRC
 
@@ -317,16 +317,16 @@ Sudo edit a file, as shown [[https://emacsredux.com/blog/2013/04/21/edit-files-a
 
 #+BEGIN_SRC emacs-lisp
   (defun p3/sudo-edit (&optional arg)
-         "Edit currently visited file as root.
+	 "Edit currently visited file as root.
 
   With a prefix ARG prompt for a file to visit.
   Will also prompt for a file to visit if current
   buffer is not visiting a file."
-         (interactive "P")
-         (if (or arg (not buffer-file-name))
-             (find-file (concat "/sudo:root@localhost:"
-                                (read-file-name "Find file(as root): ")))
-           (find-alternate-file (concat "/sudo:root@localhost:" buffer-file-name))))
+	 (interactive "P")
+	 (if (or arg (not buffer-file-name))
+	     (find-file (concat "/sudo:root@localhost:"
+				(read-file-name "Find file(as root): ")))
+	   (find-alternate-file (concat "/sudo:root@localhost:" buffer-file-name))))
 #+END_SRC
 
 Run a shiny app from emacs
@@ -348,8 +348,8 @@ Add suffix to a region (not necessary with multiple cursors)
 (defun p3/region-suffix (r1 r2)
   (interactive "r")
   (perform-replace " *$"
-              (read-string "Enter suffix:")
-              nil 'regexp nil nil nil r1 r2 nil  nil))
+	      (read-string "Enter suffix:")
+	      nil 'regexp nil nil nil r1 r2 nil  nil))
 (global-set-key (kbd "C-c s") 'p3/region-suffix)
 #+END_SRC
 
@@ -400,10 +400,10 @@ Create R project directory structure
       (interactive "sName: ")
       (make-directory name)
       (let ((pastDir default-directory))
-        (cd name)
-        (dolist (dirname '("R" "data" "data-raw" "output" "reports" "bin" "reports/graphics"))
-          (make-directory dirname))
-        (write-region "Version: 1.0
+	(cd name)
+	(dolist (dirname '("R" "data" "data-raw" "output" "reports" "bin" "reports/graphics"))
+	  (make-directory dirname))
+	(write-region "Version: 1.0
 
     RestoreWorkspace: Default
     SaveWorkspace: Default
@@ -416,17 +416,17 @@ Create R project directory structure
 
     RnwWeave: Sweave
     LaTeX: pdfLaTeX"
-                      nil (concat name ".Rproj"))
-        (with-temp-file ".projectile"
-          (insert ""))
-        (with-temp-file ".gitignore"
-          (insert "
+		      nil (concat name ".Rproj"))
+	(with-temp-file ".projectile"
+	  (insert ""))
+	(with-temp-file ".gitignore"
+	  (insert "
   Archive/
   .Rhistory
   ,*~
   .Rproj.user/
   notes.org"))
-        (cd pastDir)))
+	(cd pastDir)))
 #+END_SRC
 
 .gitignore template
@@ -434,13 +434,13 @@ Create R project directory structure
 #+BEGIN_SRC emacs-lisp
   (defun p3/gitignore-template (dir)
       (interactive (list (let (dir (insert-default-directory t))
-        (read-file-name "Select directory: "))))
+	(read-file-name "Select directory: "))))
     (write-region "Archive/
-                   .Rhistory
-                   *~
-                   .Rproj.user/
-                   notes.org"
-                  nil (concat dir "/.gitignore")))
+		   .Rhistory
+		   *~
+		   .Rproj.user/
+		   notes.org"
+		  nil (concat dir "/.gitignore")))
 #+END_SRC
 
 Create (roxygenated) header for R scripts
@@ -450,7 +450,7 @@ Create (roxygenated) header for R scripts
       "Set up a knitable header for R docs"
       (interactive "sTitle: ")
       (let ((date (format-time-string "%m/%d/%Y")))
-        (insert (format "#' ---
+	(insert (format "#' ---
   #' title:  '%s'
   #' author: 'Pavel Panko'
   #' date:   '%s'
@@ -476,9 +476,9 @@ Create roxygenated R script outputting to word via officer
 
 #+BEGIN_SRC emacs-lisp
       (defun p3/insert-word-roxygenated-header ()
-        "Set up a knitable header for R docs"
-        (interactive)
-          (insert "#' ---
+	"Set up a knitable header for R docs"
+	(interactive)
+	  (insert "#' ---
   #' author: ''
   #' date: ''
   #' always_allow_html: yes
@@ -526,9 +526,9 @@ Byte-compile emacs directory
   (defun p3/remove-elc-on-save ()
     "If you're saving an Emacs Lisp file, likely the .elc is no longer valid."
     (add-hook 'after-save-hook
-              (lambda ()
-                (if (file-exists-p (concat buffer-file-name "c"))
-                    (delete-file (concat buffer-file-name "c")))) nil t))
+	      (lambda ()
+		(if (file-exists-p (concat buffer-file-name "c"))
+		    (delete-file (concat buffer-file-name "c")))) nil t))
   (add-hook 'emacs-lisp-mode-hook 'p3/remove-elc-on-save)
 #+END_SRC
 
@@ -540,7 +540,7 @@ Open Windows shell when using Windows
     (defun p3/windows-shell ()
       (interactive)
       (let ((proc (start-process "cmd" nil "cmd.exe" "/C" "start" "cmd.exe")))
-        (set-process-query-on-exit-flag proc nil)))
+	(set-process-query-on-exit-flag proc nil)))
     (global-set-key (kbd "C-x C-i") #'windows-shell)))
 #+END_SRC
 
@@ -551,11 +551,11 @@ Highlight library/source region and run
     (interactive)
     (save-excursion
       (let ( (right-paren (save-excursion ; using save-excursion because
-                                        ; we don't want to move the
-                                        ; point.
-                          (re-search-backward "#' ### 1." nil t))) ; bound nil
-                                                          ; no-error t
-           (left-paren (save-excursion (re-search-backward "#' ### 0." nil t))))
+					; we don't want to move the
+					; point.
+			  (re-search-backward "#' ### 1." nil t))) ; bound nil
+							  ; no-error t
+	   (left-paren (save-excursion (re-search-backward "#' ### 0." nil t))))
     (when (and right-paren left-paren)
       ;; this is actually a way to activate a mark
       ;; you have to move your point to one side
@@ -579,7 +579,7 @@ ivy completion
     :defer 0.1
     :diminish
     :bind (("C-c C-r" . ivy-resume)
-           ("C-x B" . ivy-switch-buffer-other-window))
+	   ("C-x B" . ivy-switch-buffer-other-window))
     :custom
     (ivy-count-format "(%d/%d) ")
     (ivy-use-virtual-buffers t)
@@ -588,24 +588,24 @@ ivy completion
   (use-package ivy-rich
       :after (:all ivy counsel)
       :init (setq ivy-rich-path-style 'abbrev
-                ivy-virtual-abbreviate 'full)
+		ivy-virtual-abbreviate 'full)
       :config (ivy-rich-mode))
 
   (use-package swiper
     :after ivy
     :bind (("C-r" . swiper-all)
-           ("C-s" . swiper)))
+	   ("C-s" . swiper)))
 #+END_SRC
 
 smex completion for M-x commands
 
 #+BEGIN_SRC emacs-lisp
   (use-package smex
-        :custom (smex-prompt-string "Command: ")
-        :init
-        (smex-initialize)
-        (global-set-key (kbd "M-x") 'smex)
-        (global-set-key (kbd "M-X") 'smex-major-mode-commands))
+	:custom (smex-prompt-string "Command: ")
+	:init
+	(smex-initialize)
+	(global-set-key (kbd "M-x") 'smex)
+	(global-set-key (kbd "M-X") 'smex-major-mode-commands))
 #+END_SRC
 auto-complete yas snippets with company
 
@@ -614,9 +614,9 @@ auto-complete yas snippets with company
     "Enable yasnippet for all backends.")
   (defun company-mode/backend-with-yas (backend)
     (if (or (not company-mode/enable-yas) (and (listp backend) (member 'company-yasnippet backend)))
-        backend
+	backend
       (append (if (consp backend) backend (list backend))
-              '(:with company-yasnippet))))
+	      '(:with company-yasnippet))))
 #+END_SRC
 
 Inline auto-complete mode w/company.
@@ -664,8 +664,8 @@ Special compile command for C++
     :ensure nil
     :defer t
     :hook (c++-mode lambda ()
-        (set (make-local-variable 'compile-command)
-          (format "g++ %s" (file-name-nondirectory buffer-file-name)))))
+	(set (make-local-variable 'compile-command)
+	  (format "g++ %s" (file-name-nondirectory buffer-file-name)))))
 #+END_SRC
 ** Editing-related
 
@@ -710,48 +710,48 @@ auto-save changed files
   (use-package ess-r-mode
     :ensure ess
     :bind (:map ess-mode-map
-                ;; Re-map ess "run" to S-RET because of CUA mode
-                ("C-<return>" . nil)
-                ("S-<return>" . ess-eval-region-or-line-visibly-and-step)
-                ;; Pipe operator
-                ("C->" . add-pipe-and-step)
-                ;; Run library/source commands at the top of the script
-                ("C-c i" . p3/ess-library-and-source))
+		;; Re-map ess "run" to S-RET because of CUA mode
+		("C-<return>" . nil)
+		("S-<return>" . ess-eval-region-or-line-visibly-and-step)
+		;; Pipe operator
+		("C->" . add-pipe-and-step)
+		;; Run library/source commands at the top of the script
+		("C-c i" . p3/ess-library-and-source))
     ;; :hook
     ;; (ess-r-mode . (lambda () (yas-minor-mode)))
     :config
     ;; Start R in current working directory, don't let R ask user
     (setq ess-ask-for-ess-directory nil
-          ;; Set indent at Google-standard 2-spaces.
-          ess-style 'RStudio
-          ;; Echo highlighted code in R buffer
-          ess-eval-visibly t;;'nowait
-          ;; Remove underscore funny-business
-          ess-toggle-underscore nil
-          ;; Turn off ess-flymake
-          ess-use-flymake nil
-          ;; Flycheck defaults
-          flycheck-lintr-linters "with_defaults(object_name_linter(c('snake_case','camelCase')), commented_code_linter = NULL, line_length_linter(90), single_quotes_linter=NULL)"
-          ;; Attempt to prevent process timeout hang
-          ess--command-default-timeout 1
-          ;; ess-can-eval-in-background nil
-          ;; Font lock all ESS keywords
-          ess-R-font-lock-keywords
-          (quote
-           ((ess-R-fl-keyword:modifiers . t)
-            (ess-R-fl-keyword:fun-defs . t)
-            (ess-R-fl-keyword:keywords . t)
-            (ess-R-fl-keyword:assign-ops)
-            (ess-R-fl-keyword:constants . t)
-            (ess-fl-keyword:fun-calls . t)
-            (ess-fl-keyword:numbers . t)
-            (ess-fl-keyword:operators . t)
-            (ess-fl-keyword:delimiters . t)
-            (ess-fl-keyword:= . t)
-            (ess-R-fl-keyword:F&T . t)
-            (ess-R-fl-keyword:%op% . t)))
-          ;; Prepend directory name to R process name
-          ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:project-or-simple))
+	  ;; Set indent at Google-standard 2-spaces.
+	  ess-style 'RStudio
+	  ;; Echo highlighted code in R buffer
+	  ess-eval-visibly t;;'nowait
+	  ;; Remove underscore funny-business
+	  ess-toggle-underscore nil
+	  ;; Turn off ess-flymake
+	  ess-use-flymake nil
+	  ;; Flycheck defaults
+	  flycheck-lintr-linters "with_defaults(object_name_linter(c('snake_case','camelCase')), commented_code_linter = NULL, line_length_linter(90), single_quotes_linter=NULL)"
+	  ;; Attempt to prevent process timeout hang
+	  ess--command-default-timeout 1
+	  ;; ess-can-eval-in-background nil
+	  ;; Font lock all ESS keywords
+	  ess-R-font-lock-keywords
+	  (quote
+	   ((ess-R-fl-keyword:modifiers . t)
+	    (ess-R-fl-keyword:fun-defs . t)
+	    (ess-R-fl-keyword:keywords . t)
+	    (ess-R-fl-keyword:assign-ops)
+	    (ess-R-fl-keyword:constants . t)
+	    (ess-fl-keyword:fun-calls . t)
+	    (ess-fl-keyword:numbers . t)
+	    (ess-fl-keyword:operators . t)
+	    (ess-fl-keyword:delimiters . t)
+	    (ess-fl-keyword:= . t)
+	    (ess-R-fl-keyword:F&T . t)
+	    (ess-R-fl-keyword:%op% . t)))
+	  ;; Prepend directory name to R process name
+	  ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:project-or-simple))
 #+END_SRC
 
 Windows work-around for not being able to find R
@@ -769,9 +769,9 @@ Windows work-around for not being able to find R
 
 #+BEGIN_SRC emacs-lisp
 (add-hook 'ess-mode-hook
-          (lambda ()
-            (set (make-local-variable 'compile-command)
-                 (concat "R -e rmarkdown::render('" buffer-file-name "')"))))
+	  (lambda ()
+	    (set (make-local-variable 'compile-command)
+		 (concat "R -e rmarkdown::render('" buffer-file-name "')"))))
 #+END_SRC
 
 #+RESULTS:
@@ -793,17 +793,17 @@ Flycheck mode (but not for org/latex).
     :ensure nil
     :init
     (if (eq system-type 'windows-nt)
-        (progn
-          (setenv "DICTPATH" "C:/msys64/mingw64/share/hunspell")
-          (setenv "DICTIONARY" "en_US")		;C:/msys64/mingw64/share/hunspell/
-          (setq ispell-program-name "C:/msys64/mingw64/bin/hunspell.exe")))
+	(progn
+	  (setenv "DICTPATH" "C:/msys64/mingw64/share/hunspell")
+	  (setenv "DICTIONARY" "en_US")		;C:/msys64/mingw64/share/hunspell/
+	  (setq ispell-program-name "C:/msys64/mingw64/bin/hunspell.exe")))
     (if (eq system-type 'gnu/linux)
-        (setq ispell-program-name "hunspell"))
+	(setq ispell-program-name "hunspell"))
     :config
     (setq ispell-local-dictionary "en_US"
-          ispell-dictionary "english"
-          ispell-local-dictionary-alist
-          '(("en_US" "[[:alpha:]]" "[^[:alpha:]]" "[']" nil ("-d" "en_US") nil utf-8))))
+	  ispell-dictionary "english"
+	  ispell-local-dictionary-alist
+	  '(("en_US" "[[:alpha:]]" "[^[:alpha:]]" "[']" nil ("-d" "en_US") nil utf-8))))
 #+END_SRC
 ** Frames and buffers
 
@@ -881,9 +881,9 @@ Git changes in the fringe
 #+BEGIN_SRC emacs-lisp
   (use-package multiple-cursors
   :bind (("C-S-c C-S-c" . mc/edit-lines)
-         ("C-{" . mc/mark-next-like-this)
-         ("C-}" . mc/mark-previous-like-this)
-         ("C-|" . mc/mark-all-like-this)))
+	 ("C-{" . mc/mark-next-like-this)
+	 ("C-}" . mc/mark-previous-like-this)
+	 ("C-|" . mc/mark-all-like-this)))
 #+END_SRC
 ** MySQL
 
@@ -895,7 +895,7 @@ Setup default connections, as seen [[https://truongtx.me/2014/08/23/setup-emacs-
     :config
     ;; Make sure MySQL know where the plugins directory is
     (setq sql-mysql-options
-          '("--plugin-dir=/usr/lib/mysql/plugin" "--binary-mode"))
+	  '("--plugin-dir=/usr/lib/mysql/plugin" "--binary-mode"))
     :custom
     ;; Try to catch the stupid MySQL prompt using a better regex
     (sql-set-product-feature 'mysql :prompt-regexp "^\\(?:mysql\\|mariadb\\).*> "))
@@ -918,11 +918,11 @@ Interactive commands to connect to default connection.
   (use-package org
     :defer t
     :bind (:map org-mode-map
-                ("C-c s" lambda() (interactive)
-                 (insert "#+BEGIN_SRC emacs-lisp\n#+END_SRC")))
+		("C-c s" lambda() (interactive)
+		 (insert "#+BEGIN_SRC emacs-lisp\n#+END_SRC")))
     :hook ((org-mode . flyspell-mode)
-           (org-mode . visual-line-mode)
-           (org-mode . org-indent-mode))
+	   (org-mode . visual-line-mode)
+	   (org-mode . org-indent-mode))
     :init
     ;; Load some languages for org-babel
     (org-babel-do-load-languages
@@ -936,12 +936,12 @@ Interactive commands to connect to default connection.
     :config
     ;; Evaluate code blocks without confirmation
     (setq org-confirm-babel-evaluate nil
-          ;; Native font coloring
-          org-src-fontify-natively t
-          org-src-tab-acts-natively t
-          org-hide-emphasis-markers t
-          ;; Change ellipsis to dropdown thing
-          org-ellipsis " ↴"))
+	  ;; Native font coloring
+	  org-src-fontify-natively t
+	  org-src-tab-acts-natively t
+	  org-hide-emphasis-markers t
+	  ;; Change ellipsis to dropdown thing
+	  org-ellipsis " ↴"))
 #+END_SRC
 
 Turn org-mode bullets into utf-8 characters
@@ -966,13 +966,13 @@ Set region to checkboxes
     (interactive "P")
     (let ((n (or arg 1)))
       (when (region-active-p)
-        (setq n (count-lines (region-beginning)
-                             (region-end)))
-        (goto-char (region-beginning)))
+	(setq n (count-lines (region-beginning)
+			     (region-end)))
+	(goto-char (region-beginning)))
       (dotimes (i n)
-        (beginning-of-line)
-        (insert "- [ ] ")
-        (forward-line))
+	(beginning-of-line)
+	(insert "- [ ] ")
+	(forward-line))
       (beginning-of-line)))
 #+END_SRC
 ** Poly-R
@@ -993,10 +993,10 @@ Require poly-R
     :config
       ;; Get rid of annoying appended text after weaving/exporting
       (setq polymode-exporter-output-file-format "%s"
-            polymode-weaver-output-file-format "%s"
-            ;; Do not display output file or process buffer
-            polymode-display-output-file nil
-            polymode-display-process-buffers nil))
+	    polymode-weaver-output-file-format "%s"
+	    ;; Do not display output file or process buffer
+	    polymode-display-output-file nil
+	    polymode-display-process-buffers nil))
 #+END_SRC
 ** Presentation
 
@@ -1015,73 +1015,73 @@ Do presentations with org-present
     ;;   (org-superstar-remove-leading-stars t))
 
       (defun p3/org-mode-visual-fill ()
-        (interactive)
-        (setq visual-fill-column-width 50
-              visual-fill-column-center-text t)
-        (visual-fill-column-mode 1))
+	(interactive)
+	(setq visual-fill-column-width 50
+	      visual-fill-column-center-text t)
+	(visual-fill-column-mode 1))
 
       (defun p3/org-present-prepare-slide ()
-        (org-overview)
-        (org-show-entry)
-        (org-show-children))
+	(org-overview)
+	(org-show-entry)
+	(org-show-children))
 
       (defun p3/org-present-hook ()
-        (setq header-line-format " ")
-        (display-line-numbers-mode -1)
-        (org-present-big)
-        (org-display-inline-images)
-        (p3/org-present-prepare-slide)
-        (p3/org-mode-visual-fill)
-        (set-face-attribute 'header-line nil :background (face-attribute 'default :background) :height 700)
-        (hide-mode-line-mode +1)
-        (custom-set-faces
-         '(org-level-1 ((t (:inherit outline-1 :height 1.5))))
-         '(org-level-2 ((t (:inherit outline-2 :height 1.2))))
-         '(org-level-3 ((t (:inherit outline-3 :height 1.1))))))
+	(setq header-line-format " ")
+	(display-line-numbers-mode -1)
+	(org-present-big)
+	(org-display-inline-images)
+	(p3/org-present-prepare-slide)
+	(p3/org-mode-visual-fill)
+	(set-face-attribute 'header-line nil :background (face-attribute 'default :background) :height 700)
+	(hide-mode-line-mode +1)
+	(custom-set-faces
+	 '(org-level-1 ((t (:inherit outline-1 :height 1.5))))
+	 '(org-level-2 ((t (:inherit outline-2 :height 1.2))))
+	 '(org-level-3 ((t (:inherit outline-3 :height 1.1))))))
 
       (defun p3/org-present-quit-hook ()
-        (setq header-line-format nil)
-        (display-line-numbers-mode +1)
-        (org-present-small)
-        (org-remove-inline-images)
-        (visual-fill-column-mode -1)
-        (hide-mode-line-mode -1)
-        (custom-set-faces
-         '(org-level-1 ((t (:inherit outline-1 :height 1.0))))
-         '(org-level-2 ((t (:inherit outline-2 :height 1.0))))
-         '(org-level-3 ((t (:inherit outline-3 :height 1.0))))))
+	(setq header-line-format nil)
+	(display-line-numbers-mode +1)
+	(org-present-small)
+	(org-remove-inline-images)
+	(visual-fill-column-mode -1)
+	(hide-mode-line-mode -1)
+	(custom-set-faces
+	 '(org-level-1 ((t (:inherit outline-1 :height 1.0))))
+	 '(org-level-2 ((t (:inherit outline-2 :height 1.0))))
+	 '(org-level-3 ((t (:inherit outline-3 :height 1.0))))))
 
       (defun p3/org-present-prev ()
-        (interactive)
-        (org-present-prev)
-        (p3/org-present-prepare-slide))
+	(interactive)
+	(org-present-prev)
+	(p3/org-present-prepare-slide))
 
       (defun p3/org-present-next ()
-        (interactive)
-        (org-present-next)
-        (p3/org-present-prepare-slide))
+	(interactive)
+	(org-present-next)
+	(p3/org-present-prepare-slide))
 
       (use-package org-present
-        :bind (:map org-present-mode-keymap
-                    ("C-c C-j" . p3/org-present-next)
-                    ("C-c C-k" . p3/org-present-prev))
-        :hook ((org-present-mode . p3/org-present-hook)
-               (org-present-mode-quit . p3/org-present-quit-hook))
-        :config
-        (setq org-present-text-scale 4))
+	:bind (:map org-present-mode-keymap
+		    ("C-c C-j" . p3/org-present-next)
+		    ("C-c C-k" . p3/org-present-prev))
+	:hook ((org-present-mode . p3/org-present-hook)
+	       (org-present-mode-quit . p3/org-present-quit-hook))
+	:config
+	(setq org-present-text-scale 4))
 #+END_SRC
 
 ** Projectile
 #+BEGIN_SRC emacs-lisp
   (use-package projectile
     :bind (:map projectile-mode-map
-                ("s-p" . projectile-command-map)
-                ("C-c p" . projectile-command-map))
+		("s-p" . projectile-command-map)
+		("C-c p" . projectile-command-map))
     :init
     (projectile-mode +1)
     :custom
     (projectile-register-project-type 'r '(".Rproj")
-                                      :project-file ".Rproj"))
+				      :project-file ".Rproj"))
 #+END_SRC
 ** Python
 
@@ -1090,15 +1090,15 @@ Do presentations with org-present
     :defer t
     ;; Re-map "run" to S-RET because of CUA mode.
     :bind (:map elpy-mode-map
-                ("C-<return>" . nil)
-                ("S-<return>" . elpy-shell-send-statement-and-step))
+		("C-<return>" . nil)
+		("S-<return>" . elpy-shell-send-statement-and-step))
     ;; Python virtual environment setup
     ;; :hook (python-mode lambda() (pyvenv-workon "myvenv"))
     :init
     (if (eq system-type 'windows-nt)
-        (add-hook 'python-mode-hook (lambda() (pyvenv-workon "../../../Miniconda3"))))
+	(add-hook 'python-mode-hook (lambda() (pyvenv-workon "../../../Miniconda3"))))
     (if (eq system-type 'gnu/linux)
-        (add-hook 'python-mode-hook (lambda() (pyvenv-workon "myvenv"))))
+	(add-hook 'python-mode-hook (lambda() (pyvenv-workon "myvenv"))))
     ;; Enable elpy after loading a python buffer
     ;; as shown here: https://github.com/jorgenschaefer/elpy/issues/1566
     (defun enable-elpy-once ()
@@ -1110,13 +1110,13 @@ Do presentations with org-present
     (remove-hook 'elpy-modules 'elpy-module-flymake)
     ;; Resolve indent issues
     (setq python-indent-guess-indent-offset t
-          python-indent-guess-indent-offset-verbose nil
-          ;; Set python3 as interpreter
-          python-shell-interpreter "python"
-          python-shell-interpreter-args "-i"
-          ;; Remove indentation highlighting
-          elpy-modules (remq 'elpy-module-highlight-indentation elpy-modules)
-          elpy-rpc-python-command python-shell-interpreter))
+	  python-indent-guess-indent-offset-verbose nil
+	  ;; Set python3 as interpreter
+	  python-shell-interpreter "python"
+	  python-shell-interpreter-args "-i"
+	  ;; Remove indentation highlighting
+	  elpy-modules (remq 'elpy-module-highlight-indentation elpy-modules)
+	  elpy-rpc-python-command python-shell-interpreter))
 
 #+END_SRC
 ** Rainbow
@@ -1132,14 +1132,14 @@ Shell-pop in linux; git's bin/bash in windows
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
       (progn
-        (setq explicit-shell-file-name "C:/Program Files/Git/bin/bash.exe"
-              explicit-bash.exe-args '("--login" "-i"))
-        (global-set-key (kbd "C-x C-u") 'shell)))
+	(setq explicit-shell-file-name "C:/Program Files/Git/bin/bash.exe"
+	      explicit-bash.exe-args '("--login" "-i"))
+	(global-set-key (kbd "C-x C-u") 'shell)))
   (when (eq system-type 'gnu/linux)
     (use-package shell-pop
       :bind (("C-x C-u" . shell-pop))
       :config
-      (setq shell-pop-shell-type (quote ("ansi-term" "*ansi-term*" (lambda nil (ansi-term shell-pop-term-shell)))))
+      (setq shell-pop-shell-type (quote ("eshell" "*eshell*" (lambda nil (ansi-term shell-pop-term-shell)))))
       (setq shell-pop-term-shell "/bin/bash")
       ;; need to do this manually or not picked up by `shell-pop'
       (shell-pop--set-shell-type 'shell-pop-shell-type shell-pop-shell-type)))
@@ -1161,7 +1161,7 @@ TRAMP default settings
   (use-package workgroups2
     :init
     (setq wg-prefix-key "C-c z"
-          wg-session-load-on-start nil)
+	  wg-session-load-on-start nil)
     (workgroups-mode 1))
 #+END_SRC
 * Themes
