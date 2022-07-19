@@ -768,7 +768,7 @@ Windows work-around for not being able to find R
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
-      (setq-default inferior-R-program-name "C:\\Program Files\\R\\R-4.1.0\\bin\\x64\\Rterm.exe"))
+      (setq-default inferior-R-program-name "C:\\Program Files\\R\\R-4.1.3\\bin\\x64\\Rterm.exe"))
 #+END_SRC
 
 #+BEGIN_SRC emacs-lisp
@@ -1090,39 +1090,74 @@ Do presentations with org-present
 ** Python
 
 #+BEGIN_SRC emacs-lisp
-  (use-package elpy
-    :defer t
-    ;; Re-map "run" to S-RET because of CUA mode.
-    :bind (:map elpy-mode-map
-                ("C-<return>" . nil)
-                ("S-<return>" . elpy-shell-send-statement-and-step))
-    ;; Python virtual environment setup
-    ;; :hook (python-mode lambda() (pyvenv-workon "myvenv"))
-    :init
-    (if (eq system-type 'windows-nt)
-        (add-hook 'python-mode-hook (lambda() (pyvenv-workon "../../../Miniconda3"))))
-    (if (eq system-type 'gnu/linux)
-        (add-hook 'python-mode-hook (lambda() (pyvenv-workon "myvenv"))))
-    ;; Enable elpy after loading a python buffer
-    ;; as shown here: https://github.com/jorgenschaefer/elpy/issues/1566
-    (defun enable-elpy-once ()
-      (with-eval-after-load 'python (elpy-enable))
-      (advice-remove 'python-mode 'enable-elpy-once))
-    (advice-add 'python-mode :before 'enable-elpy-once)
-    :config
-    ;; Do not use flymake with elpy
-    (remove-hook 'elpy-modules 'elpy-module-flymake)
-    ;; Resolve indent issues
-    (setq python-indent-guess-indent-offset t
-          python-indent-guess-indent-offset-verbose nil
-          ;; Set python3 as interpreter
-          python-shell-interpreter "python"
-          python-shell-interpreter-args "-i"
-          ;; Remove indentation highlighting
-          elpy-modules (remq 'elpy-module-highlight-indentation elpy-modules)
-          elpy-rpc-python-command python-shell-interpreter))
+  (defun python-para-send-and-step ()
+    "Sends the current paragraph to the python REPL and goes to the next one"
+    (interactive)
+    (mark-paragraph)
+    (elpy-shell-get-or-create-process)
+    (python-shell-send-region (region-beginning) (region-end))
+    (elpy-shell-display-buffer)
+    (deactivate-mark)
+    (forward-paragraph)
+    (python-nav-forward-statement)
+    )
+
+  (defun elpy-send-region-or-para-and-step ()
+    (interactive)
+    (if (use-region-p)
+        (progn
+          (elpy-shell-get-or-create-process)
+          (python-shell-send-region (region-beginning) (region-end) t)
+          (elpy-shell-display-buffer)
+          (goto-char (region-end))
+          (deactivate-mark)
+          (python-nav-forward-statement)
+          )
+      (python-para-send-and-step)))
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+    (use-package elpy
+      :defer t
+      ;; Re-map "run" to S-RET because of CUA mode.
+      :bind (:map elpy-mode-map
+                  ("C-<return>" . nil)
+                  ("S-<return>" . elpy-shell-send-statement-and-step)
+                  ("C-c C-c" . 'elpy-send-region-or-para-and-step)
+                  ("C-<up>" . backward-paragraph)
+                  ("C-<down>" . forward-paragraph)
+                  ("C-c C-z"  . elpy-shell-display-buffer))
+      ;; Python virtual environment setup
+      ;; :hook (python-mode lambda() (pyvenv-workon "myvenv"))
+      :init
+      (if (eq system-type 'windows-nt)
+          (add-hook 'python-mode-hook (lambda() (pyvenv-workon "~/Miniconda3/envs/kt"))))
+      (if (eq system-type 'gnu/linux)
+          (add-hook 'python-mode-hook (lambda() (pyvenv-workon "myvenv"))))
+      ;; Enable elpy after loading a python buffer
+      ;; as shown here: https://github.com/jorgenschaefer/elpy/issues/1566
+      (defun enable-elpy-once ()
+        (with-eval-after-load 'python (elpy-enable))
+        (advice-remove 'python-mode 'enable-elpy-once))
+      (advice-add 'python-mode :before 'enable-elpy-once)
+      :config
+      ;; Do not use flymake with elpy
+      (remove-hook 'elpy-modules 'elpy-module-flymake)
+      ;; Resolve indent issues
+      (if (eq system-type 'windows-nt)
+          (setq python-shell-interpreter "~/Miniconda3/python.exe"))
+        (if (eq system-type 'gnu/linux)
+          (setq python-shell-interpreter "python"))
+      (setq python-indent-guess-indent-offset t
+            python-indent-guess-indent-offset-verbose nil
+            ;; Set python3 as interpreter
+            python-shell-interpreter-args "-i"
+            ;; Remove indentation highlighting
+            elpy-modules (remq 'elpy-module-highlight-indentation elpy-modules)
+            elpy-rpc-python-command python-shell-interpreter))
 
 #+END_SRC
+
 ** Rainbow
 #+BEGIN_SRC emacs-lisp
   (use-package rainbow-mode
