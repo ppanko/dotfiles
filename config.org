@@ -58,6 +58,12 @@ Start server on Windows
 #+END_SRC
 * General
 
+Default web browser
+
+#+BEGIN_SRC emacs-lisp
+  (setq browse-url-browser-function 'eww-browse-url)
+#+END_SRC
+
 Set font and size
 
 #+BEGIN_SRC emacs-lisp
@@ -342,6 +348,38 @@ Run a shiny app from emacs
      "shiny::runApp(\".\")\n" "Running app" arg
      '("" (read-string "Arguments: " "recompile = TRUE"))))
 #+END_SRC
+
+View df using DT (assuming running R session)
+
+#+BEGIN_SRC emacs-lisp
+    (defun r-view-df-at-point ()
+    (interactive)
+    (let ((sym (ess-symbol-at-point)))
+      (if sym
+          (ess-send-string (ess-get-process ess-local-process-name)
+                           (concat "DT::datatable(" (symbol-name sym) ")\n") t)
+        (message "No valid R symbol at point"))))
+
+  (define-key ess-r-mode-map (kbd "C-c v") 'r-view-df-at-point)
+#+END_SRC
+
+View df using DT (assuming running R session and exwm)
+
+#+BEGIN_SRC emacs-lisp
+  ;; (defun r-view-df-at-point ()
+  ;;   (interactive)
+  ;;   (let ((sym (ess-symbol-at-point)))
+  ;;     (when sym
+  ;;       (let* ((buff (generate-new-buffer "*r-output*"))
+  ;;             (proc (ess-get-process ess-local-process-name))
+  ;;             (command (concat "DT::datatable(" (symbol-name sym) ")\n")))
+  ;;       (ess-command command buff 'sleep nil nil proc)
+  ;;       (with-current-buffer buff
+  ;;         (pop-to-buffer buff))))))
+
+  ;; (define-key ess-r-mode-map (kbd "C-c v") 'r-view-df-at-point)
+#+END_SRC
+
 
 Add suffix to a region (not necessary with multiple cursors)
 
@@ -709,53 +747,61 @@ auto-save changed files
 ** ESS
 
 #+BEGIN_SRC emacs-lisp
-    (use-package ess-r-mode
-      :ensure ess
-      :bind (:map ess-mode-map
-                  ;; Re-map ess "run" to S-RET because of CUA mode
-                  ("C-<return>" . nil)
-                  ("S-<return>" . ess-eval-region-or-line-visibly-and-step)
-                  ;; Pipe operator
-                  ("C->" . add-pipe-and-step)
-                  ;; Run library/source commands at the top of the script
-                  ("C-c i" . p3/ess-library-and-source))
-      ;; :hook
-      ;; (ess-r-mode . (lambda () (yas-minor-mode)))
-      :config
-      ;; Start R in current working directory, don't let R ask user
-      (setq ess-ask-for-ess-directory nil
-            ;; Set indent at Google-standard 2-spaces.
-            ess-style 'RStudio
-            ;; Echo highlighted code in R buffer
-            ess-eval-visibly t;;'nowait
-            ;; Remove underscore funny-business
-            ess-toggle-underscore nil
-            ;; Turn off ess-flymake
-            ess-use-flymake nil
-            ;; Flycheck defaults
-            flycheck-lintr-linters "with_defaults(object_name_linter(c('snake_case','camelCase')), commented_code_linter = NULL, line_length_linter(90), single_quotes_linter=NULL)"
-            ;; Attempt to prevent process timeout hang
-            ess--command-default-timeout 1
-            ;; ess-can-eval-in-background nil
-            ;; Font lock all ESS keywords
-            ess-R-font-lock-keywords
-            (quote
-             ((ess-R-fl-keyword:modifiers . t)
-              (ess-R-fl-keyword:fun-defs . t)
-              (ess-R-fl-keyword:keywords . t)
-              (ess-R-fl-keyword:assign-ops)
-              (ess-R-fl-keyword:constants . t)
-              (ess-fl-keyword:fun-calls . t)
-              (ess-fl-keyword:numbers . t)
-              (ess-fl-keyword:operators . t)
-              (ess-fl-keyword:delimiters . t)
-              (ess-fl-keyword:= . t)
-              (ess-R-fl-keyword:F&T . t)
-              (ess-R-fl-keyword:%op% . t)))
-            ;; Prepend directory name to R process name
-            ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:project-or-simple)
-      :custom
-      (defvar ess--command-default-timeout most-positive-fixnum))
+  (defun my-inferior-ess-init ()
+      (setq-local ansi-color-for-comint-mode 'filter)
+      (smartparens-mode 1))
+    (add-hook 'inferior-ess-mode-hook 'my-inferior-ess-init)
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+  (use-package ess-r-mode
+    :ensure ess
+    :hook (inferior-ess-mode . my-inferior-ess-init)
+    :bind (:map ess-mode-map
+                ;; Re-map ess "run" to S-RET because of CUA mode
+                ("C-<return>" . nil)
+                ("S-<return>" . ess-eval-region-or-line-visibly-and-step)
+                ;; Pipe operator
+                ("C->" . add-pipe-and-step)
+                ;; Run library/source commands at the top of the script
+                ("C-c i" . p3/ess-library-and-source))
+    ;; :hook
+    ;; (ess-r-mode . (lambda () (yas-minor-mode)))
+    :config
+    ;; Start R in current working directory, don't let R ask user
+    (setq ess-ask-for-ess-directory nil
+          ;; Set indent at Google-standard 2-spaces.
+          ess-style 'RStudio
+          ;; Echo highlighted code in R buffer
+          ess-eval-visibly t;;'nowait
+          ;; Remove underscore funny-business
+          ess-toggle-underscore nil
+          ;; Turn off ess-flymake
+          ess-use-flymake nil
+          ;; Flycheck defaults
+          flycheck-lintr-linters "with_defaults(object_name_linter(c('snake_case','camelCase')), commented_code_linter = NULL, line_length_linter(90), single_quotes_linter=NULL)"
+          ;; Attempt to prevent process timeout hang
+          ess--command-default-timeout 1
+          ;; ess-can-eval-in-background nil
+          ;; Font lock all ESS keywords
+          ess-R-font-lock-keywords
+          (quote
+           ((ess-R-fl-keyword:modifiers . t)
+            (ess-R-fl-keyword:fun-defs . t)
+            (ess-R-fl-keyword:keywords . t)
+            (ess-R-fl-keyword:assign-ops)
+            (ess-R-fl-keyword:constants . t)
+            (ess-fl-keyword:fun-calls . t)
+            (ess-fl-keyword:numbers . t)
+            (ess-fl-keyword:operators . t)
+            (ess-fl-keyword:delimiters . t)
+            (ess-fl-keyword:= . t)
+            (ess-R-fl-keyword:F&T . t)
+            (ess-R-fl-keyword:%op% . t)))
+          ;; Prepend directory name to R process name
+          ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:project-or-simple)
+    :custom
+    (defvar ess--command-default-timeout most-positive-fixnum))
 #+END_SRC
 
 Windows work-around for not being able to find R
