@@ -287,7 +287,7 @@ Graphical icons?
   (use-package all-the-icons-dired
     :after all-the-icons)
 #+END_SRC
-* Functions
+* DONE Functions
 
 Save and kill all buffers (for emacs daemon).
 
@@ -367,7 +367,7 @@ Put each word on a newline on either a space or comma
     (interactive)
     (perform-replace "\\(?1:[^,][[:punct:]]?+\\)\\(,\\|[[:space:]]+\\)" "\\1
 " nil t nil nil nil (region-beginning) (region-end)))
-    (global-set-key (kbd "C-c n") 'p3/newline-after-comma-or-space)
+    (global-set-key (kbd "C-c C-SPC") 'p3/newline-after-comma-or-space)
 #+END_SRC
 
 Put quotes around each word (work-in-progress)
@@ -1040,77 +1040,75 @@ Set region to checkboxes
 Config from [[https://config.daviwil.com/emacs][System crafters]] with changes based on the basic config from the [[https://github.com/org-roam/org-roam][Github page]]
 
 #+BEGIN_SRC emacs-lisp
-      (use-package org-roam
-        :hook
-        (after-init . org-roam-mode)
-        :custom
-        (org-roam-directory "~/notes/roam/")
-        (org-roam-completion-everywhere t)
-        (org-roam-completion-system 'default)
-        ;; (org-roam-capture-templates
-        ;;   '(("d" "default" plain
-        ;;      #'org-roam-capture--get-point
-        ;;      "%?"
-        ;;      :file-name "%<%Y%m%d%H%M%S>-${slug}"
-        ;;      :head "#+title: ${title}\n"
-        ;;      :unnarrowed t)
-        ;;     ("ll" "link note" plain
-        ;;      #'org-roam-capture--get-point
-        ;;      "* %^{Link}"
-        ;;      :file-name "Inbox"
-        ;;      :olp ("Links")
-        ;;      :unnarrowed t
-        ;;      :immediate-finish)
-        ;;     ("lt" "link task" entry
-        ;;      #'org-roam-capture--get-point
-        ;;      "* TODO %^{Link}"
-        ;;      :file-name "Inbox"
-        ;;      :olp ("Tasks")
-        ;;      :unnarrowed t
-        ;;      :immediate-finish)))
-        (org-roam-dailies-directory "journal/")
-        ;; (org-roam-dailies-capture-templates
-        ;;   '(("d" "default" entry
-        ;;      #'org-roam-capture--get-point
-        ;;      "* %?"
-        ;;      :file-name "Journal/%<%Y-%m-%d>"
-        ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")
-        ;;     ("t" "Task" entry
-        ;;      #'org-roam-capture--get-point
-        ;;      "* TODO %?\n  %U\n  %a\n  %i"
-        ;;      :file-name "Journal/%<%Y-%m-%d>"
-        ;;      :olp ("Tasks")
-        ;;      :empty-lines 1
-        ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")
-        ;;     ("j" "journal" entry
-        ;;      #'org-roam-capture--get-point
-        ;;      "* %<%I:%M %p> - Journal  :journal:\n\n%?\n\n"
-        ;;      :file-name "Journal/%<%Y-%m-%d>"
-        ;;      :olp ("Log")
-        ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")
-        ;;     ("l" "log entry" entry
-        ;;      #'org-roam-capture--get-point
-        ;;      "* %<%I:%M %p> - %?"
-        ;;      :file-name "Journal/%<%Y-%m-%d>"
-        ;;      :olp ("Log")
-        ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")
-        ;;     ("m" "meeting" entry
-        ;;      #'org-roam-capture--get-point
-        ;;      "* %<%I:%M %p> - %^{Meeting Title}  :meetings:\n\n%?\n\n"
-        ;;      :file-name "Journal/%<%Y-%m-%d>"
-        ;;      :olp ("Log")
-        ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")))
-        :bind (("C-c n l" . org-roam-buffer-toggle)
-             ("C-c n f" . org-roam-node-find)
-             ("C-c n g" . org-roam-graph)
-             ("C-c n i" . org-roam-node-insert)
-             ("C-c n c" . org-roam-capture)
-             ;; Dailies
-             ("C-c n j" . org-roam-dailies-capture-today))
-        :config
-        ;; If you're using a vertical completion framework, you might want a more informative completion interface
-        (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
-        (org-roam-db-autosync-mode))
+  (use-package org-roam
+    :hook
+    (after-init . org-roam-mode)
+    :custom
+    (org-roam-directory "~/notes/roam/")
+    (org-roam-completion-everywhere t)
+    (org-roam-completion-system 'default)
+    ;; (org-roam-capture-templates
+    ;;   '(("d" "default" plain
+    ;;      #'org-roam-capture--get-point
+    ;;      "%?"
+    ;;      :file-name "%<%Y%m%d%H%M%S>-${slug}"
+    ;;      :head "#+title: ${title}\n"
+    ;;      :unnarrowed t)
+    ;;     ("ll" "link note" plain
+    ;;      #'org-roam-capture--get-point
+    ;;      "* %^{Link}"
+    ;;      :file-name "Inbox"
+    ;;      :olp ("Links")
+    ;;      :unnarrowed t
+    ;;      :immediate-finish)
+    ;;     ("lt" "link task" entry
+    ;;      #'org-roam-capture--get-point
+    ;;      "* TODO %^{Link}"
+    ;;      :file-name "Inbox"
+    ;;      :olp ("Tasks")
+    ;;      :unnarrowed t
+    ;;      :immediate-finish)))
+    (org-roam-dailies-directory "journal/")
+    (org-roam-dailies-capture-templates
+      '(("d" "default" entry "* %<%I:%M %p>: %?"
+         :target (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d %a>\n"))))
+    ;;     ("t" "Task" entry
+    ;;      #'org-roam-capture--get-point
+    ;;      "* TODO %?\n  %U\n  %a\n  %i"
+    ;;      :file-name "Journal/%<%Y-%m-%d>"
+    ;;      :olp ("Tasks")
+    ;;      :empty-lines 1
+    ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")
+    ;;     ("j" "journal" entry
+    ;;      #'org-roam-capture--get-point
+    ;;      "* %<%I:%M %p> - Journal  :journal:\n\n%?\n\n"
+    ;;      :file-name "Journal/%<%Y-%m-%d>"
+    ;;      :olp ("Log")
+    ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")
+    ;;     ("l" "log entry" entry
+    ;;      #'org-roam-capture--get-point
+    ;;      "* %<%I:%M %p> - %?"
+    ;;      :file-name "Journal/%<%Y-%m-%d>"
+    ;;      :olp ("Log")
+    ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")
+    ;;     ("m" "meeting" entry
+    ;;      #'org-roam-capture--get-point
+    ;;      "* %<%I:%M %p> - %^{Meeting Title}  :meetings:\n\n%?\n\n"
+    ;;      :file-name "Journal/%<%Y-%m-%d>"
+    ;;      :olp ("Log")
+    ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")))
+    :bind (("C-c n l" . org-roam-buffer-toggle)
+           ("C-c n f" . org-roam-node-find)
+           ("C-c n g" . org-roam-graph)
+           ("C-c n i" . org-roam-node-insert)
+           ("C-c n c" . org-roam-capture)
+         ;; Dailies
+           ("C-c n d" . org-roam-dailies-goto-today)
+           ("C-c n t" . org-roam-dailies-capture-today))
+    :config
+    ;; If you're using a vertical completion framework, you might want a more informative completion interface
+    (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
+    (org-roam-db-autosync-mode))
 #+END_SRC
 
 ** Poly-R
