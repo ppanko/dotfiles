@@ -349,38 +349,6 @@ Run a shiny app from emacs
      '("" (read-string "Arguments: " "recompile = TRUE"))))
 #+END_SRC
 
-View df using DT (assuming running R session)
-
-#+BEGIN_SRC emacs-lisp
-    (defun r-view-df-at-point ()
-    (interactive)
-    (let ((sym (ess-symbol-at-point)))
-      (if sym
-          (ess-send-string (ess-get-process ess-local-process-name)
-                           (concat "DT::datatable(" (symbol-name sym) ")\n") t)
-        (message "No valid R symbol at point"))))
-
-;;  (define-key ess-r-mode-map (kbd "C-c v") 'r-view-df-at-point)
-#+END_SRC
-
-View df using DT (assuming running R session and exwm)
-
-#+BEGIN_SRC emacs-lisp
-  ;; (defun r-view-df-at-point ()
-  ;;   (interactive)
-  ;;   (let ((sym (ess-symbol-at-point)))
-  ;;     (when sym
-  ;;       (let* ((buff (generate-new-buffer "*r-output*"))
-  ;;             (proc (ess-get-process ess-local-process-name))
-  ;;             (command (concat "DT::datatable(" (symbol-name sym) ")\n")))
-  ;;       (ess-command command buff 'sleep nil nil proc)
-  ;;       (with-current-buffer buff
-  ;;         (pop-to-buffer buff))))))
-
-  ;; (define-key ess-r-mode-map (kbd "C-c v") 'r-view-df-at-point)
-#+END_SRC
-
-
 Add suffix to a region (not necessary with multiple cursors)
 
 #+BEGIN_SRC emacs-lisp
@@ -747,7 +715,7 @@ auto-save changed files
 ** ESS
 
 #+BEGIN_SRC emacs-lisp
-  (defun my-inferior-ess-init ()
+  (defun p3/my-inferior-ess-init ()
       (setq-local ansi-color-for-comint-mode 'filter)
       (smartparens-mode 1))
     (add-hook 'inferior-ess-mode-hook 'my-inferior-ess-init)
@@ -756,7 +724,7 @@ auto-save changed files
 Set working directory to Rproj root at R startup
 
 #+BEGIN_SRC emacs-lisp
-  (defun set-projectile-wd-on-startup ()
+  (defun p3/set-projectile-wd-on-startup ()
     (setq ess-startup-directory 'projectile-project-root))
   ;; (add-hook 'ess-r-post-run-hook 'set-projectile-wd-on-startup)
 
@@ -764,10 +732,38 @@ Set working directory to Rproj root at R startup
   ;;                                   :project-file ".Rproj")
 #+END_SRC
 
+View df using DT (assuming running R session)
+
+#+BEGIN_SRC emacs-lisp
+    (defun p3/r-view-df-at-point ()
+    (interactive)
+    (let ((sym (ess-symbol-at-point)))
+      (if sym
+          (ess-send-string (ess-get-process ess-local-process-name)
+                           (concat "DT::datatable(" (symbol-name sym) ")\n") t)
+        (message "No valid R symbol at point"))))
+#+END_SRC
+
+View df using DT (assuming running R session and exwm)
+
+#+BEGIN_SRC emacs-lisp
+  ;; (defun r-view-df-at-point ()
+  ;;   (interactive)
+  ;;   (let ((sym (ess-symbol-at-point)))
+  ;;     (when sym
+  ;;       (let* ((buff (generate-new-buffer "*r-output*"))
+  ;;             (proc (ess-get-process ess-local-process-name))
+  ;;             (command (concat "DT::datatable(" (symbol-name sym) ")\n")))
+  ;;       (ess-command command buff 'sleep nil nil proc)
+  ;;       (with-current-buffer buff
+  ;;         (pop-to-buffer buff))))))
+#+END_SRC
+
+
 #+BEGIN_SRC emacs-lisp
   (use-package ess-r-mode
     :ensure ess
-    :hook ((inferior-ess-mode . my-inferior-ess-init)
+    :hook ((inferior-ess-mode . p3/my-inferior-ess-init)
            (ess-r-post-run-hook . set-projectile-wd-on-startup))
     :bind (:map ess-mode-map
                 ;; Re-map ess "run" to S-RET because of CUA mode
@@ -777,7 +773,8 @@ Set working directory to Rproj root at R startup
                 ("C->" . add-pipe-and-step)
                 ;; Run library/source commands at the top of the script
                 ("C-c i" . p3/ess-library-and-source)
-                ("C-c v" . r-view-df-at-point))
+                ;; View data.frame in DT::datatable at a point
+                ("C-c v" . p3/r-view-df-at-point))
     ;; :hook
     ;; (ess-r-mode . (lambda () (yas-minor-mode)))
     :config
@@ -827,7 +824,7 @@ Windows work-around for not being able to find R
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
-      (setq-default inferior-R-program-name "C:\\Program Files\\R\\R-4.2.2\\bin\\x64\\Rterm.exe"))
+    (setq-default inferior-R-program-name "C:\\Program Files\\R\\R-4.2.2\\bin\\x64\\Rterm.exe"))
 #+END_SRC
 
 #+BEGIN_SRC emacs-lisp
@@ -1038,6 +1035,84 @@ Set region to checkboxes
         (forward-line))
       (beginning-of-line)))
 #+END_SRC
+** org-roam
+
+Config from [[https://config.daviwil.com/emacs][System crafters]] with changes based on the basic config from the [[https://github.com/org-roam/org-roam][Github page]]
+
+#+BEGIN_SRC emacs-lisp
+      (use-package org-roam
+        :hook
+        (after-init . org-roam-mode)
+        :custom
+        (org-roam-directory "~/notes/roam/")
+        (org-roam-completion-everywhere t)
+        (org-roam-completion-system 'default)
+        ;; (org-roam-capture-templates
+        ;;   '(("d" "default" plain
+        ;;      #'org-roam-capture--get-point
+        ;;      "%?"
+        ;;      :file-name "%<%Y%m%d%H%M%S>-${slug}"
+        ;;      :head "#+title: ${title}\n"
+        ;;      :unnarrowed t)
+        ;;     ("ll" "link note" plain
+        ;;      #'org-roam-capture--get-point
+        ;;      "* %^{Link}"
+        ;;      :file-name "Inbox"
+        ;;      :olp ("Links")
+        ;;      :unnarrowed t
+        ;;      :immediate-finish)
+        ;;     ("lt" "link task" entry
+        ;;      #'org-roam-capture--get-point
+        ;;      "* TODO %^{Link}"
+        ;;      :file-name "Inbox"
+        ;;      :olp ("Tasks")
+        ;;      :unnarrowed t
+        ;;      :immediate-finish)))
+        (org-roam-dailies-directory "journal/")
+        ;; (org-roam-dailies-capture-templates
+        ;;   '(("d" "default" entry
+        ;;      #'org-roam-capture--get-point
+        ;;      "* %?"
+        ;;      :file-name "Journal/%<%Y-%m-%d>"
+        ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")
+        ;;     ("t" "Task" entry
+        ;;      #'org-roam-capture--get-point
+        ;;      "* TODO %?\n  %U\n  %a\n  %i"
+        ;;      :file-name "Journal/%<%Y-%m-%d>"
+        ;;      :olp ("Tasks")
+        ;;      :empty-lines 1
+        ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")
+        ;;     ("j" "journal" entry
+        ;;      #'org-roam-capture--get-point
+        ;;      "* %<%I:%M %p> - Journal  :journal:\n\n%?\n\n"
+        ;;      :file-name "Journal/%<%Y-%m-%d>"
+        ;;      :olp ("Log")
+        ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")
+        ;;     ("l" "log entry" entry
+        ;;      #'org-roam-capture--get-point
+        ;;      "* %<%I:%M %p> - %?"
+        ;;      :file-name "Journal/%<%Y-%m-%d>"
+        ;;      :olp ("Log")
+        ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")
+        ;;     ("m" "meeting" entry
+        ;;      #'org-roam-capture--get-point
+        ;;      "* %<%I:%M %p> - %^{Meeting Title}  :meetings:\n\n%?\n\n"
+        ;;      :file-name "Journal/%<%Y-%m-%d>"
+        ;;      :olp ("Log")
+        ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")))
+        :bind (("C-c n l" . org-roam-buffer-toggle)
+             ("C-c n f" . org-roam-node-find)
+             ("C-c n g" . org-roam-graph)
+             ("C-c n i" . org-roam-node-insert)
+             ("C-c n c" . org-roam-capture)
+             ;; Dailies
+             ("C-c n j" . org-roam-dailies-capture-today))
+        :config
+        ;; If you're using a vertical completion framework, you might want a more informative completion interface
+        (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
+        (org-roam-db-autosync-mode))
+#+END_SRC
+
 ** Poly-R
 
 Require poly-R
@@ -1136,22 +1211,22 @@ Do presentations with org-present
 
 ** Projectile
 #+BEGIN_SRC emacs-lisp
-  (defun projectile-r-project-file-p ()
+  (defun p3/projectile-r-project-file-p ()
     (or (projectile-verify-file-wildcard "?*.r")
-           (projectile-verify-file-wildcard "?*.R")))
+        (projectile-verify-file-wildcard "?*.R")))
 
-  (defun projectile-r-project-p ()
+  (defun p3/projectile-r-project-p ()
     (projectile-verify-file-wildcard "?*.Rproj"))
 
   (use-package projectile
-      :bind (:map projectile-mode-map
-                  ("s-p" . projectile-command-map)
-                  ("C-c p" . projectile-command-map))
-      :init
-      (projectile-mode +1)
-      :custom
-      (projectile-register-project-type 'r #'projectile-r-project-file-p
-                                      :project-file #'projectile-r-project-p))
+    :bind (:map projectile-mode-map
+                ("s-p" . projectile-command-map)
+                ("C-c p" . projectile-command-map))
+    :init
+    (projectile-mode +1)
+    :custom
+    (projectile-register-project-type 'r #'p3/projectile-r-project-file-p
+                                      :project-file #'p3/projectile-r-project-p))
 #+END_SRC
 ** Python
 
