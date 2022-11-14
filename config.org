@@ -287,7 +287,7 @@ Graphical icons?
   (use-package all-the-icons-dired
     :after all-the-icons)
 #+END_SRC
-* DONE Functions
+* Functions
 
 Save and kill all buffers (for emacs daemon).
 
@@ -974,34 +974,45 @@ Interactive commands to connect to default connection.
 #+END_SRC
 ** org
 
+Update last modified as shown [[https://org-roam.discourse.group/t/update-a-field-last-modified-at-save/321][here]]
+
 #+BEGIN_SRC emacs-lisp
-  (use-package org
-    :defer t
-    :bind (:map org-mode-map
-                ("C-c s" lambda() (interactive)
-                 (insert "#+BEGIN_SRC emacs-lisp\n#+END_SRC")))
-    :hook ((org-mode . flyspell-mode)
-           (org-mode . visual-line-mode)
-           (org-mode . org-indent-mode))
-    :init
-    ;; Load some languages for org-babel
-    (org-babel-do-load-languages
-     'org-babel-load-languages
-     '((emacs-lisp .t)
-       (R . t)
-       (C . t)
-       (python . t)
-       (latex . t)
-       (shell . t)))
-    :config
-    ;; Evaluate code blocks without confirmation
-    (setq org-confirm-babel-evaluate nil
-          ;; Native font coloring
-          org-src-fontify-natively t
-          org-src-tab-acts-natively t
-          org-hide-emphasis-markers t
-          ;; Change ellipsis to dropdown thing
-          org-ellipsis " ↴"))
+  (add-hook 'org-mode-hook (lambda ()
+                             (setq-local time-stamp-active t
+                                         time-stamp-start "#\\+last_modified:[ \t]*"
+                                         time-stamp-end "$"
+                                         time-stamp-format "\[%Y-%m-%d %3a %02H:%02M\]")
+                             (add-hook 'before-save-hook 'time-stamp nil 'local)))
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+    (use-package org
+      :defer t
+      :bind (:map org-mode-map
+                  ("C-c s" lambda() (interactive)
+                   (insert "#+BEGIN_SRC emacs-lisp\n#+END_SRC")))
+      :hook ((org-mode . flyspell-mode)
+             (org-mode . visual-line-mode)
+             (org-mode . org-indent-mode))
+      :init
+      ;; Load some languages for org-babel
+      (org-babel-do-load-languages
+       'org-babel-load-languages
+       '((emacs-lisp .t)
+         (R . t)
+         (C . t)
+         (python . t)
+         (latex . t)
+         (shell . t)))
+      :config
+      ;; Evaluate code blocks without confirmation
+      (setq org-confirm-babel-evaluate nil
+            ;; Native font coloring
+            org-src-fontify-natively t
+            org-src-tab-acts-natively t
+            org-hide-emphasis-markers t
+            ;; Change ellipsis to dropdown thing
+            org-ellipsis " ↴"))
 #+END_SRC
 
 Turn org-mode bullets into utf-8 characters
@@ -1035,80 +1046,109 @@ Set region to checkboxes
         (forward-line))
       (beginning-of-line)))
 #+END_SRC
+
+** org-agenda
+
+org-agenda defaults, as shown [[https://orgmode.org/worg/org-tutorials/org-custom-agenda-commands.html][here]]
+
+#+BEGIN_SRC emacs-lisp
+  (use-package org-agenda
+    :ensure nil
+    :bind ("C-c a" . org-agenda)
+    :config
+    (setq org-agenda-sorting-strategy '(priority-down))) ;;effort-down
+#+END_SRC
+
 ** org-roam
+
+[[https://systemcrafters.net/build-a-second-brain-in-emacs/5-org-roam-hacks/#fast-note-insertion-for-a-smoother-writing-flow][From SC]], edited by p3 to include optional tags
+
+#+BEGIN_SRC emacs-lisp
+  (defun org-roam-generate-tagged-header ()
+    (let ((tag (read-string "Enter tag: ")))
+      (if (string-empty-p tag)
+          (concat "#+title: ${title}\n#+category:${title}\n#+created: %U\n#+last_modified: %U\n")
+        (concat "#+title: ${title}\n#+category:${title}\n#+filetags: " tag "\n#+created: %U\n#+last_modified: %U\n#"))))
+
+  (defun org-roam-node-insert-immediate-with-tag (arg &rest args)
+        (interactive "P")
+        (let ((args (cons arg args))
+              (org-roam-capture-templates (list (append (car
+                                                         '(("t" "tagged" plain "%?"
+                :if-new (file+head "%<%Y%m%d%H%M%S>-${slug}.org" org-roam-generate-tagged-header)
+                :unnarrowed t)))
+                                                        '(:immediate-finish t)))))
+          (apply #'org-roam-node-insert args)))
+#+END_SRC
+
+[[https://www.reddit.com/r/orgmode/comments/vvx54j/comment/ifn434u/?utm_source=share&utm_medium=web2x&context=3][Search roam for...]] anything
+
+#+BEGIN_SRC emacs-lisp
+  (defun org-roam-rg-search ()
+    "Search org-roam directory using consult-ripgrep. With live-preview."
+    (interactive)
+    (counsel-rg nil org-roam-directory nil nil))
+#+END_SRC
+
+[[https://systemcrafters.net/build-a-second-brain-in-emacs/5-org-roam-hacks/#build-your-org-agenda-from-org-roam-notes][org-roam with org-agenda]]
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/org-roam-filter-by-tag (tag-name)
+    (lambda (node)
+      (member tag-name (org-roam-node-tags node))))
+
+  (defun p3/org-roam-list-notes ()
+    (mapcar #'org-roam-node-file
+             (org-roam-node-list)))
+
+  (defun p3/org-roam-list-notes-by-tag (tag-name)
+    (mapcar #'org-roam-node-file
+            (seq-filter
+             (p3/org-roam-filter-by-tag tag-name)
+             (org-roam-node-list))))
+
+  (defun p3/org-roam-get-agenda ()
+    (interactive)
+    (let ((tag (read-string "Enter tag: ")))
+      (if (string-empty-p tag)
+          (setq org-agenda-files (p3/org-roam-list-notes))
+        (setq org-agenda-files (p3/org-roam-list-notes-by-tag tag))))
+    (org-agenda))
+#+END_SRC
 
 Config from [[https://config.daviwil.com/emacs][System crafters]] with changes based on the basic config from the [[https://github.com/org-roam/org-roam][Github page]]
 
 #+BEGIN_SRC emacs-lisp
-  (use-package org-roam
-    :hook
-    (after-init . org-roam-mode)
-    :custom
-    (org-roam-directory "~/notes/roam/")
-    (org-roam-completion-everywhere t)
-    (org-roam-completion-system 'default)
-    ;; (org-roam-capture-templates
-    ;;   '(("d" "default" plain
-    ;;      #'org-roam-capture--get-point
-    ;;      "%?"
-    ;;      :file-name "%<%Y%m%d%H%M%S>-${slug}"
-    ;;      :head "#+title: ${title}\n"
-    ;;      :unnarrowed t)
-    ;;     ("ll" "link note" plain
-    ;;      #'org-roam-capture--get-point
-    ;;      "* %^{Link}"
-    ;;      :file-name "Inbox"
-    ;;      :olp ("Links")
-    ;;      :unnarrowed t
-    ;;      :immediate-finish)
-    ;;     ("lt" "link task" entry
-    ;;      #'org-roam-capture--get-point
-    ;;      "* TODO %^{Link}"
-    ;;      :file-name "Inbox"
-    ;;      :olp ("Tasks")
-    ;;      :unnarrowed t
-    ;;      :immediate-finish)))
-    (org-roam-dailies-directory "journal/")
-    (org-roam-dailies-capture-templates
-      '(("d" "default" entry "* %<%I:%M %p>: %?"
-         :target (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d %a>\n"))))
-    ;;     ("t" "Task" entry
-    ;;      #'org-roam-capture--get-point
-    ;;      "* TODO %?\n  %U\n  %a\n  %i"
-    ;;      :file-name "Journal/%<%Y-%m-%d>"
-    ;;      :olp ("Tasks")
-    ;;      :empty-lines 1
-    ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")
-    ;;     ("j" "journal" entry
-    ;;      #'org-roam-capture--get-point
-    ;;      "* %<%I:%M %p> - Journal  :journal:\n\n%?\n\n"
-    ;;      :file-name "Journal/%<%Y-%m-%d>"
-    ;;      :olp ("Log")
-    ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")
-    ;;     ("l" "log entry" entry
-    ;;      #'org-roam-capture--get-point
-    ;;      "* %<%I:%M %p> - %?"
-    ;;      :file-name "Journal/%<%Y-%m-%d>"
-    ;;      :olp ("Log")
-    ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")
-    ;;     ("m" "meeting" entry
-    ;;      #'org-roam-capture--get-point
-    ;;      "* %<%I:%M %p> - %^{Meeting Title}  :meetings:\n\n%?\n\n"
-    ;;      :file-name "Journal/%<%Y-%m-%d>"
-    ;;      :olp ("Log")
-    ;;      :head "#+title: %<%Y-%m-%d %a>\n\n[[roam:%<%Y-%B>]]\n\n")))
-    :bind (("C-c n l" . org-roam-buffer-toggle)
-           ("C-c n f" . org-roam-node-find)
-           ("C-c n g" . org-roam-graph)
-           ("C-c n i" . org-roam-node-insert)
-           ("C-c n c" . org-roam-capture)
-         ;; Dailies
-           ("C-c n d" . org-roam-dailies-goto-today)
-           ("C-c n t" . org-roam-dailies-capture-today))
-    :config
-    ;; If you're using a vertical completion framework, you might want a more informative completion interface
-    (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
-    (org-roam-db-autosync-mode))
+      (use-package org-roam
+        :hook
+        (after-init . org-roam-mode)
+        :custom
+        (org-roam-directory "~/org/notes/roam/")
+        (org-roam-completion-everywhere t)
+        (org-roam-completion-system 'default)
+        (org-roam-capture-templates
+         '(("d" "default" plain "%?"
+            :if-new (file+head "%<%Y%m%d%H%M%S>-${slug}.org" "#+title: ${title}\n#+category:${title}\n#+created: %U\n#+last_modified: %U\n")
+            :unnarrowed t)))
+        (org-roam-dailies-directory "journal/")
+        (org-roam-dailies-capture-templates
+          '(("d" "default" entry "* %<%I:%M %p>: %?"
+             :target (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d %a>\n#+created: %U\n#+last_modified: %U\n"))))
+
+        :bind (("C-c n l" . org-roam-buffer-toggle)
+               ("C-c n f" . org-roam-node-find)
+               ("C-c n g" . org-roam-graph)
+               ("C-c n i" . org-roam-node-insert)
+               ("C-c n c" . org-roam-capture)
+               ("C-c n n" . org-roam-node-insert-immediate-with-tag)
+               ("C-c n s" . org-roam-rg-search)
+             ;; Dailies
+               ("C-c n d" . org-roam-dailies-goto-today)
+               ("C-c n t" . org-roam-dailies-capture-today)
+               ("C-c n a" . p3/org-roam-get-agenda))
+        :config
+        (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
+        (org-roam-db-autosync-mode))
 #+END_SRC
 
 ** Poly-R
