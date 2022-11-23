@@ -718,7 +718,7 @@ auto-save changed files
   (defun p3/my-inferior-ess-init ()
       (setq-local ansi-color-for-comint-mode 'filter)
       (smartparens-mode 1))
-    (add-hook 'inferior-ess-mode-hook 'my-inferior-ess-init)
+    ;; (add-hook 'inferior-ess-mode-hook 'p3/my-inferior-ess-init)
 #+END_SRC
 
 Set working directory to Rproj root at R startup
@@ -1117,38 +1117,40 @@ org-agenda defaults, as shown [[https://orgmode.org/worg/org-tutorials/org-custo
 #+END_SRC
 
 Config from [[https://config.daviwil.com/emacs][System crafters]] with changes based on the basic config from the [[https://github.com/org-roam/org-roam][Github page]]
+See [[https://earvingad.github.io/posts/org_roam_windows/][the following]] for a installation walkthrough for windows
 
 #+BEGIN_SRC emacs-lisp
-      (use-package org-roam
-        :hook
-        (after-init . org-roam-mode)
-        :custom
-        (org-roam-directory "~/org/notes/roam/")
-        (org-roam-completion-everywhere t)
-        (org-roam-completion-system 'default)
-        (org-roam-capture-templates
-         '(("d" "default" plain "%?"
-            :if-new (file+head "%<%Y%m%d%H%M%S>-${slug}.org" "#+title: ${title}\n#+category:${title}\n#+created: %U\n#+last_modified: %U\n")
-            :unnarrowed t)))
-        (org-roam-dailies-directory "journal/")
-        (org-roam-dailies-capture-templates
-          '(("d" "default" entry "* %<%I:%M %p>: %?"
-             :target (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d %a>\n#+created: %U\n#+last_modified: %U\n"))))
+  (use-package org-roam
+    :hook
+    (after-init . org-roam-mode)
+    :custom
+    (org-roam-directory "~/org/notes/roam/")
+    (org-roam-completion-everywhere t)
+    (org-roam-completion-system 'default)
+    (org-roam-capture-templates
+     '(("d" "default" plain "%?"
+        :if-new (file+head "%<%Y%m%d%H%M%S>-${slug}.org" "#+title: ${title}\n#+category:${title}\n#+created: %U\n#+last_modified: %U\n")
+        :unnarrowed t)))
+    (org-roam-dailies-directory "journal/")
+    (org-roam-dailies-capture-templates
+      '(("d" "default" entry "* %<%I:%M %p>: %?"
+         :target (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d %a>\n#+created: %U\n#+last_modified: %U\n"))))
 
-        :bind (("C-c n l" . org-roam-buffer-toggle)
-               ("C-c n f" . org-roam-node-find)
-               ("C-c n g" . org-roam-graph)
-               ("C-c n i" . org-roam-node-insert)
-               ("C-c n c" . org-roam-capture)
-               ("C-c n n" . org-roam-node-insert-immediate-with-tag)
-               ("C-c n s" . org-roam-rg-search)
-             ;; Dailies
-               ("C-c n d" . org-roam-dailies-goto-today)
-               ("C-c n t" . org-roam-dailies-capture-today)
-               ("C-c n a" . p3/org-roam-get-agenda))
-        :config
-        (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
-        (org-roam-db-autosync-mode))
+    :bind (("C-c n l" . org-roam-buffer-toggle)
+           ("C-c n f" . org-roam-node-find)
+           ("C-c n g" . org-roam-graph)
+           ("C-c n i" . org-roam-node-insert)
+           ("C-c n c" . org-roam-capture)
+           ("C-c n n" . org-roam-node-insert-immediate-with-tag)
+           ("C-c n s" . org-roam-rg-search)
+         ;; Dailies
+           ("C-c n d" . org-roam-dailies-goto-today)
+           ("C-c n t" . org-roam-dailies-capture-today)
+           ("C-c n C-t" . org-roam-tag-add)
+           ("C-c n a" . p3/org-roam-get-agenda))
+    :config
+    (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
+    (org-roam-db-autosync-mode))
 #+END_SRC
 
 ** Poly-R
@@ -1350,7 +1352,7 @@ Shell-pop in linux; git's bin/bash in windows
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
       (progn
-        (setq explicit-shell-file-name "C:/Program Files/Git/bin/bash.exe"
+        (setq explicit-shell-file-name "C:/msys64/usr/bin/bash.exe"
               explicit-bash.exe-args '("--login" "-i"))
         (global-set-key (kbd "C-x C-u") 'shell)))
   (when (eq system-type 'gnu/linux)
