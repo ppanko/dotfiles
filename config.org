@@ -61,10 +61,10 @@ Start server on Windows
 Default web browser
 
 #+BEGIN_SRC emacs-lisp
-  (setq browse-url-browser-function 'eww-browse-url)
+  ;; (setq browse-url-browser-function 'eww-browse-url)
 #+END_SRC
 
-Set font and size
+Set fxont and size
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
@@ -287,6 +287,13 @@ Graphical icons?
   (use-package all-the-icons-dired
     :after all-the-icons)
 #+END_SRC
+
+Input method configuration.
+
+#+BEGIN_SRC emacs-lisp
+  (setq default-input-method "cyrillic-translit")
+#+END_SRC
+
 * Functions
 
 Save and kill all buffers (for emacs daemon).
@@ -603,6 +610,29 @@ Move lines from [[https://www.emacswiki.org/emacs/MoveLine][emacswiki]]
 #+END_SRC
 
 * Modes
+** Bibtex
+
+Bibtex user configs
+
+#+BEGIN_SRC emacs-lisp
+  (setq bibtex-user-optional-fields
+       '(("keywords" "Keywords to describe the entry" "")
+         ("file" "Link to document file." ":"))
+       bibtex-align-at-equal-sign t)
+
+  (add-hook 'bibtex-mode-hook 'flyspell-mode)
+  (setq bibtex-dialect 'biblatex)
+#+END_SRC
+
+Bibtex library path
+
+#+BEGIN_SRC emacs-lisp
+   (setq bib-files-directory (directory-files
+                             (concat (getenv "HOME") "/org/bib") t
+                             "^[A-Z|a-z].+.bib$")
+        pdf-files-directory (concat (getenv "HOME") "/org/lib/"))
+#+END_SRC
+
 ** Completion-related
 
 ivy completion
@@ -692,6 +722,19 @@ Save minibuffer history
   (setq history-length 25)
   (savehist-mode 1))
 #+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+    (use-package ivy-bibtex
+    :config
+    (setq bibtex-completion-bibliography bib-files-directory
+          bibtex-completion-library-path pdf-files-directory
+          bibtex-completion-pdf-field "File"
+          bibtex-completion-notes-path org-directory
+          bibtex-completion-additional-search-fields '(keywords))
+    :bind
+    (("C-c n B" . ivy-bibtex)))
+#+END_SRC
+
 ** C++
 
 Special compile command for C++
@@ -1181,6 +1224,17 @@ See [[https://earvingad.github.io/posts/org_roam_windows/][the following]] for a
     :config
     (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
     (org-roam-db-autosync-mode))
+#+END_SRC
+
+Scholarly add-in for org-roam [[https://lucidmanager.org/productivity/emacs-bibtex-mode/][(see here]])
+
+#+BEGIN_SRC emacs-lisp
+   (use-package org-roam-bibtex
+    :after (org-roam ivy-bibtex)
+    :bind (:map org-mode-map ("C-c n b" . orb-note-actions))
+    :config
+    (require 'org-ref))
+    (org-roam-bibtex-mode)
 #+END_SRC
 
 ** Poly-R
