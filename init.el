@@ -18,8 +18,9 @@
  ;; If you edit it by hand, you could mess it up, so be careful.
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
+ '(default-input-method "cyrillic-translit")
  '(package-selected-packages
-   '(magit hide-mode-line doom-modeline shrink-path f workgroups2 wgrep visual-fill-column use-package undo-tree transpose-frame telephone-line synosaurus super-save smex smartparens shell-pop restart-emacs rainbow-mode projectile poly-R org-tree-slide org-present org-bullets multiple-cursors ivy-rich google-this git-gutter-fringe+ flycheck ess elpy ein doom-themes counsel base16-theme auto-package-update auto-compile async all-the-icons-ivy all-the-icons-dired ace-window)))
+   '(org-roam-bibtex ivy-bibtex magit hide-mode-line doom-modeline shrink-path f workgroups2 wgrep visual-fill-column use-package undo-tree transpose-frame telephone-line synosaurus super-save smex smartparens shell-pop restart-emacs rainbow-mode projectile poly-R org-tree-slide org-present org-bullets multiple-cursors ivy-rich google-this git-gutter-fringe+ flycheck ess elpy ein doom-themes counsel base16-theme auto-package-update auto-compile async all-the-icons-ivy all-the-icons-dired ace-window)))
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.

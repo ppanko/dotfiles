@@ -1437,6 +1437,7 @@ Shell-pop in linux; git's bin/bash in windows
   (when (eq system-type 'windows-nt)
       (progn
         (setq explicit-shell-file-name "C:/msys64/usr/bin/bash.exe"
+              shell-file-name "C:/msys64/usr/bin/bash.exe"
               explicit-bash.exe-args '("--login" "-i"))
         (global-set-key (kbd "C-x C-u") 'shell)))
   (when (eq system-type 'gnu/linux)
