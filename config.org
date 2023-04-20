@@ -901,10 +901,11 @@ Windows work-around for not being able to find R
 #+END_SRC
 
 #+BEGIN_SRC emacs-lisp
-(add-hook 'ess-mode-hook
-          (lambda ()
-            (set (make-local-variable 'compile-command)
-                 (concat "R -e rmarkdown::render('" buffer-file-name "')"))))
+  (defun compile-rmd ()
+    (set (make-local-variable 'compile-command)
+         (concat "R -e \"rmarkdown::render('" buffer-file-name "')\"")))
+  (add-hook 'ess-mode-hook 'compile-rmd)
+  (add-hook 'markdown-mode-hook 'compile-rmd)
 #+END_SRC
 
 #+RESULTS:
