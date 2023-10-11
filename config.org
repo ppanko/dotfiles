@@ -1,4 +1,4 @@
-* Startup
+w* Startup
 
 Start up in fullscreen
 
@@ -474,13 +474,12 @@ Create (roxygenated) header for R scripts
 
   #+ setup, message = FALSE, results = FALSE
   ## Names of required packages
-  pkgs <- c("here", "readr")
+  pkgs <- c(\"here\", \"readr\")
   ## Install packages, if they're missing
-  missingPkgs <- pkgs[!pkgs %in% installed.packages()]
+  missingPkgs <- pkgs[!pkgs %%in%% installed.packages()]
   install.packages(missingPkgs)
   ## Load all required packages
   lapply(pkgs, library, character.only = TRUE)
-
 
   source(here(\"R/99_helperFunctions.R\"))
 
@@ -685,7 +684,13 @@ ivy completion
   (use-package swiper
     :after ivy
     :bind (("C-r" . swiper-all)
-           ("C-s" . swiper)))
+           ("C-s" . swiper)
+           ("C-c h" . swiper-r-doc-chapter-search)))
+
+  (defun swiper-r-doc-chapter-search ()
+    (interactive)
+    (swiper-isearch "#' ### [0-9]+\."))
+
 #+END_SRC
 
 smex completion for M-x commands
@@ -698,6 +703,7 @@ smex completion for M-x commands
         (global-set-key (kbd "M-x") 'smex)
         (global-set-key (kbd "M-X") 'smex-major-mode-commands))
 #+END_SRC
+
 auto-complete yas snippets with company
 
 #+BEGIN_SRC emacs-lisp
@@ -871,6 +877,8 @@ View df using DT (assuming running R session and exwm)
                 ;; Run library/source commands at the top of the script
                 ("C-c i" . p3/ess-library-and-source)
                 ;; View data.frame in DT::datatable at a point
+                ("C-c v" . p3/r-view-df-at-point))
+    :bind (:map inferior-ess-r-mode-map
                 ("C-c v" . p3/r-view-df-at-point))
     ;; :hook
     ;; (ess-r-mode . (lambda () (yas-minor-mode)))
