@@ -613,7 +613,7 @@ Move lines from [[https://www.emacswiki.org/emacs/MoveLine][emacswiki]]
 #+END_SRC
 
 * Modes
-** Bibtex & Reftex
+** Bibtex & citation-related
 
 Bibtex user configs
 
@@ -654,6 +654,41 @@ Set reftex format as shown [[https://stackoverflow.com/questions/13607156/autoco
   (eval-after-load 'reftex-vars
   '(progn
      (setq reftex-cite-format "@%l")))
+  ;; (setq bib-files-directory (directory-files
+  ;;                           (concat (getenv "HOME") "/org/bib") t
+  ;;                           "^[A-Z|a-z].+.bib$")
+  ;;      pdf-files-directory (concat (getenv "HOME") "/org/lib/"))
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+  (defconst p3/bib-library (list (concat (getenv "HOME") "/org/bib/main.bib")))
+  (defconst p3/pdf-library (list (concat (getenv "HOME") "/org/lib/")))
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+  (use-package citar
+    :no-require
+    :custom
+    (org-cite-global-bibliography p3/bib/library)
+    (org-cite-insert-processor 'citar)
+    (org-cite-follow-processor 'citar)
+    (org-cite-activate-processor 'citar)
+    (citar-bibliography org-cite-global-bibliography)
+    :config
+    (setq citar-bibliography p3/bib-library
+        citar-library-paths p3/pdf-library
+        citar-file-extensions '("pdf" "org" "md")
+        citar-file-open-function #'find-file)
+    ;; optional: org-cite-insert is also bound to C-c C-x C-@
+    :bind
+    (:map org-mode-map :package org ("C-c b" . #'org-cite-insert)))
+
+  (use-package citar-org-roam
+    :after (citar org-roam)
+    :config
+    (setq citar-org-roam-note-title-template "${author} - ${title}")
+    (setq citar-org-roam-capture-template-key "n")
+    (citar-org-roam-mode))
 #+END_SRC
 
 ** Completion-related
@@ -690,7 +725,6 @@ ivy completion
   (defun swiper-r-doc-chapter-search ()
     (interactive)
     (swiper-isearch "#' ### [0-9]+\."))
-
 #+END_SRC
 
 smex completion for M-x commands
@@ -751,18 +785,6 @@ Save minibuffer history
   :config
   (setq history-length 25)
   (savehist-mode 1))
-#+END_SRC
-
-#+BEGIN_SRC emacs-lisp
-    (use-package ivy-bibtex
-    :config
-    (setq bibtex-completion-bibliography bib-files-directory
-          bibtex-completion-library-path pdf-files-directory
-          bibtex-completion-pdf-field "File"
-          bibtex-completion-notes-path org-directory
-          bibtex-completion-additional-search-fields '(keywords))
-    :bind
-    (("C-c n B" . ivy-bibtex)))
 #+END_SRC
 
 ** C++
@@ -864,59 +886,59 @@ View df using DT (assuming running R session and exwm)
 
 
 #+BEGIN_SRC emacs-lisp
-  (use-package ess-r-mode
-    :ensure ess
-    :hook ((inferior-ess-mode . p3/my-inferior-ess-init)
-           (ess-r-post-run-hook . set-projectile-wd-on-startup))
-    :bind (:map ess-mode-map
-                ;; Re-map ess "run" to S-RET because of CUA mode
-                ("C-<return>" . nil)
-                ("S-<return>" . ess-eval-region-or-line-visibly-and-step)
-                ;; Pipe operator
-                ("C->" . add-pipe-and-step)
-                ;; Run library/source commands at the top of the script
-                ("C-c i" . p3/ess-library-and-source)
-                ;; View data.frame in DT::datatable at a point
-                ("C-c v" . p3/r-view-df-at-point))
-    :bind (:map inferior-ess-r-mode-map
-                ("C-c v" . p3/r-view-df-at-point))
-    ;; :hook
-    ;; (ess-r-mode . (lambda () (yas-minor-mode)))
-    :config
-    ;; Start R in current working directory, don't let R ask user
-    (setq ess-ask-for-ess-directory nil
-          ;; Set indent at Google-standard 2-spaces.
-          ess-style 'RStudio
-          ;; Echo highlighted code in R buffer
-          ess-eval-visibly t;;'nowait
-          ;; Remove underscore funny-business
-          ess-toggle-underscore nil
-          ;; Turn off ess-flymake
-          ess-use-flymake nil
-          ;; Flycheck defaults
-          flycheck-lintr-linters "with_defaults(object_name_linter(c('snake_case','camelCase')), commented_code_linter = NULL, line_length_linter(90), single_quotes_linter=NULL)"
-          ;; Attempt to prevent process timeout hang
-          ess--command-default-timeout 1
-          ;; ess-can-eval-in-background nil
-          ;; Font lock all ESS keywords
-          ess-R-font-lock-keywords
-          (quote
-           ((ess-R-fl-keyword:modifiers . t)
-            (ess-R-fl-keyword:fun-defs . t)
-            (ess-R-fl-keyword:keywords . t)
-            (ess-R-fl-keyword:assign-ops)
-            (ess-R-fl-keyword:constants . t)
-            (ess-fl-keyword:fun-calls . t)
-            (ess-fl-keyword:numbers . t)
-            (ess-fl-keyword:operators . t)
-            (ess-fl-keyword:delimiters . t)
-            (ess-fl-keyword:= . t)
-            (ess-R-fl-keyword:F&T . t)
-            (ess-R-fl-keyword:%op% . t)))
-          ;; Prepend directory name to R process name
-          ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:project-or-simple)
-    :custom
-    (defvar ess--command-default-timeout most-positive-fixnum))
+    (use-package ess-r-mode
+      :ensure ess
+      :hook ((inferior-ess-mode . p3/my-inferior-ess-init)
+             (ess-r-post-run-hook . set-projectile-wd-on-startup))
+      :bind (:map ess-mode-map
+                  ;; Re-map ess "run" to S-RET because of CUA mode
+                  ("C-<return>" . nil)
+                  ("S-<return>" . ess-eval-region-or-line-visibly-and-step)
+                  ;; Pipe operator
+                  ("C->" . add-pipe-and-step)
+                  ;; Run library/source commands at the top of the script
+                  ("C-c i" . p3/ess-library-and-source)
+                  ;; View data.frame in DT::datatable at a point
+                  ("C-c v" . p3/r-view-df-at-point))
+      :bind (:map inferior-ess-r-mode-map
+                  ("C-c v" . p3/r-view-df-at-point))
+      ;; :hook
+      ;; (ess-r-mode . (lambda () (yas-minor-mode)))
+      :config
+      ;; Start R in current working directory, don't let R ask user
+      (setq ess-ask-for-ess-directory nil
+            ;; Set indent at Google-standard 2-spaces.
+            ess-style 'RStudio
+            ;; Echo highlighted code in R buffer
+            ess-eval-visibly t;;'nowait
+            ;; Remove underscore funny-business
+            ess-toggle-underscore nil
+            ;; Turn off ess-flymake
+            ess-use-flymake nil
+            ;; Flycheck defaults
+            flycheck-lintr-linters "with_defaults(object_name_linter(c('snake_case','camelCase')), commented_code_linter = NULL, line_length_linter(90), single_quotes_linter=NULL)"
+            ;; Attempt to prevent process timeout hang
+            ess--command-default-timeout 1
+            ;; ess-can-eval-in-background nil
+            ;; Font lock all ESS keywords
+            ess-R-font-lock-keywords
+            (quote
+             ((ess-R-fl-keyword:modifiers . t)
+              (ess-R-fl-keyword:fun-defs . t)
+              (ess-R-fl-keyword:keywords . t)
+              (ess-R-fl-keyword:assign-ops)
+              (ess-R-fl-keyword:constants . t)
+              (ess-fl-keyword:fun-calls . t)
+              (ess-fl-keyword:numbers . t)
+              (ess-fl-keyword:operators . t)
+              (ess-fl-keyword:delimiters . t)
+              (ess-fl-keyword:= . t)
+              (ess-R-fl-keyword:F&T . t)
+              (ess-R-fl-keyword:%op% . t)))
+            ;; Prepend directory name to R process name
+            ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:project-or-simple)
+      :custom
+      (defvar ess--command-default-timeout most-positive-fixnum))
 #+END_SRC
 
 Windows work-around for not being able to find R
@@ -1080,6 +1102,12 @@ Interactive commands to connect to default connection.
 #+END_SRC
 ** org
 
+Set org default startup display for bullets globally
+
+#+BEGIN_SRC emacs-lisp
+  (setq org-startup-folded 'content)
+#+END_SRC
+
 Update last modified as shown [[https://org-roam.discourse.group/t/update-a-field-last-modified-at-save/321][here]]
 
 #+BEGIN_SRC emacs-lisp
@@ -1129,7 +1157,7 @@ Turn org-mode bullets into utf-8 characters
   ;;       :init (add-hook 'org-mode-hook 'org-bullets-mode))
 #+END_SRC
 
-Make sure org-mode calls evince (gnome editor) to [[https://emacs.stackexchange.com/questions/28037/org-mode-file-hyperlinks-always-use-doc-view-cant-force-it-to-use-external-pdf][open up pdf files]]
+Make sure org-mode calls evince (gnome pdf viewer) to [[https://emacs.stackexchange.com/questions/28037/org-mode-file-hyperlinks-always-use-doc-view-cant-force-it-to-use-external-pdf][open up pdf files]]
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'gnu/linux)
@@ -1236,6 +1264,10 @@ See [[https://earvingad.github.io/posts/org_roam_windows/][the following]] for a
     (org-roam-capture-templates
      '(("d" "default" plain "%?"
         :if-new (file+head "%<%Y%m%d%H%M%S>-${slug}.org" "#+title: ${title}\n#+category:${title}\n#+created: %U\n#+last_modified: %U\n")
+        :unnarrowed t)
+       ("n" "literature note" plain "* Heading\n %?"
+        :target (file+head "%(expand-file-name (or citar-org-roam-subdir \"\") org-roam-directory)/${citar-citekey}.org"
+                           "#+title: ${citar-citekey} (${citar-date}). ${note-title}.\n#+created: %U\n#+last_modified: %U\n\n")
         :unnarrowed t)))
     (org-roam-dailies-directory "journal/")
     (org-roam-dailies-capture-templates
@@ -1257,17 +1289,6 @@ See [[https://earvingad.github.io/posts/org_roam_windows/][the following]] for a
     :config
     (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
     (org-roam-db-autosync-mode))
-#+END_SRC
-
-Scholarly add-in for org-roam [[https://lucidmanager.org/productivity/emacs-bibtex-mode/][(see here]])
-
-#+BEGIN_SRC emacs-lisp
-   (use-package org-roam-bibtex
-    :after (org-roam ivy-bibtex)
-    :bind (:map org-mode-map ("C-c n b" . orb-note-actions))
-    :config
-    (require 'org-ref))
-    (org-roam-bibtex-mode)
 #+END_SRC
 
 ** Poly-R
@@ -1470,9 +1491,9 @@ Shell-pop in linux; git's bin/bash in windows
   (when (eq system-type 'windows-nt)
       (progn
         (setq explicit-shell-file-name "C:/msys64/usr/bin/bash.exe"
-              ;; shell-file-name explicit-shell-file-name
+              shell-file-name explicit-shell-file-name
               explicit-bash.exe-args '("--login" "-i"))
-;;        (add-to-list 'exec-path "C:/msys64/usr/bin")
+        (add-to-list 'exec-path "C:/msys64/usr/bin")
         (global-set-key (kbd "C-x C-u") 'shell)))
   (when (eq system-type 'gnu/linux)
     (use-package shell-pop
@@ -1606,6 +1627,12 @@ Install unicode fonts
     (unicode-fonts-setup))
 #+END_SRC
 
+Set Rmd to CRLF
+
+#+BEGIN_SRC emacs-lisp
+    (add-to-list 'file-coding-system-alist '("\\.Rmd\\'" . utf-8-dos))
+#+END_SRC
+
 * Not in use
 
 Enable ein + a shortcut for deleting cells.
@@ -1698,4 +1725,34 @@ Record screen?
   ;;     command))
 
   ;; (global-set-key (kbd "s-z") 'record-screen)
+#+END_SRC
+
+Scholarly add-in for org-roam [[https://lucidmanager.org/productivity/emacs-bibtex-mode/][(see here]])
+
+#+BEGIN_SRC emacs-lisp
+  ;; (use-package org-roam-bibtex
+  ;;  :after (org-roam ivy-bibtex)
+  ;;  :bind (:map org-mode-map ("C-c n b" . orb-note-actions))
+  ;;  :config
+  ;;  (require 'org-ref))
+  ;;  (org-roam-bibtex-mode)
+  ;; (setq orb-preformat-keywords
+  ;;       '("citekey" "title" "url" "author-or-editor" "keywords" "file" "date")
+  ;;       orb-process-file-keyword t
+  ;;       orb-insert-interface 'helm-bibtex
+  ;;       orb-file-field-extensions '("pdf")))
+#+END_SRC
+
+ivy bibtex plugin
+
+#+BEGIN_SRC emacs-lisp
+  ;; (use-package ivy-bibtex
+  ;; :config
+  ;; (setq bibtex-completion-bibliography bib-files-directory
+  ;;       bibtex-completion-library-path pdf-files-directory
+  ;;       bibtex-completion-pdf-field "File"
+  ;;       bibtex-completion-notes-path org-directory
+  ;;       bibtex-completion-additional-search-fields '(keywords))
+  ;; :bind
+  ;; (("C-c n B" . ivy-bibtex)))
 #+END_SRC
