@@ -1,4 +1,4 @@
-w* Startup
+* Startup
 
 Start up in fullscreen
 
@@ -929,7 +929,7 @@ Windows work-around for not being able to find R
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
-    (setq-default inferior-R-program-name "C:\\Program Files\\R\\R-4.3.1\\bin\\x64\\Rterm.exe"))
+    (setq-default inferior-R-program-name "C:\\Program Files\\R\\R-4.3.2\\bin\\x64\\Rterm.exe"))
 #+END_SRC
 
 #+BEGIN_SRC emacs-lisp
@@ -1584,7 +1584,7 @@ Light-up matching parens.
   (show-paren-mode t)
   (setq show-paren-when-point-inside-paren t)
 #+END_SRC
-* Encoding
+* Encoding & fonts
 
 Use utf-8 everywhere all the time
 
@@ -1596,6 +1596,16 @@ Use utf-8 everywhere all the time
   (set-file-name-coding-system 'utf-8)
   (set-selection-coding-system 'utf-8)
 #+END_SRC
+
+Install unicode fonts
+
+#+BEGIN_SRC emacs-lisp
+  (use-package unicode-fonts
+    :after doom-themes
+    :init
+    (unicode-fonts-setup))
+#+END_SRC
+
 * Not in use
 
 Enable ein + a shortcut for deleting cells.
