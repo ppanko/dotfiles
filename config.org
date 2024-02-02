@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 w* Startup
+=======
+* Startup
+>>>>>>> 04fe534 (20240202)
 
 Start up in fullscreen
 
@@ -473,12 +477,18 @@ Create (roxygenated) header for R scripts
   #' ### 0. Prepare environment
 
   #+ setup, message = FALSE, results = FALSE
+<<<<<<< HEAD
   ## Names of required packages
   pkgs <- c(\"here\", \"readr\")
   ## Install packages, if they're missing
   missingPkgs <- pkgs[!pkgs %%in%% installed.packages()]
   install.packages(missingPkgs)
   ## Load all required packages
+=======
+  ## Load packages and helper functions
+  pkgs <- c(\"here\")
+  ## install.packages(pkgs)
+>>>>>>> 04fe534 (20240202)
   lapply(pkgs, library, character.only = TRUE)
 
   source(here(\"R/99_helperFunctions.R\"))
@@ -613,7 +623,11 @@ Move lines from [[https://www.emacswiki.org/emacs/MoveLine][emacswiki]]
 #+END_SRC
 
 * Modes
+<<<<<<< HEAD
 ** Bibtex & Reftex
+=======
+** Bibtex & citation-related
+>>>>>>> 04fe534 (20240202)
 
 Bibtex user configs
 
@@ -630,6 +644,7 @@ Bibtex user configs
 Bibtex library path
 
 #+BEGIN_SRC emacs-lisp
+<<<<<<< HEAD
    (setq bib-files-directory (directory-files
                              (concat (getenv "HOME") "/org/bib") t
                              "^[A-Z|a-z].+.bib$")
@@ -654,6 +669,44 @@ Set reftex format as shown [[https://stackoverflow.com/questions/13607156/autoco
   (eval-after-load 'reftex-vars
   '(progn
      (setq reftex-cite-format "@%l")))
+=======
+  ;; (setq bib-files-directory (directory-files
+  ;;                           (concat (getenv "HOME") "/org/bib") t
+  ;;                           "^[A-Z|a-z].+.bib$")
+  ;;      pdf-files-directory (concat (getenv "HOME") "/org/lib/"))
+#+END_SRC
+
+
+#+BEGIN_SRC emacs-lisp
+  (defconst p3/bib-library (list (concat (getenv "HOME") "/org/bib/main.bib")))
+  (defconst p3/pdf-library (list (concat (getenv "HOME") "/org/lib/")))
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+  (use-package citar
+    :no-require
+    :custom
+    (org-cite-global-bibliography p3/bib/library)
+    (org-cite-insert-processor 'citar)
+    (org-cite-follow-processor 'citar)
+    (org-cite-activate-processor 'citar)
+    (citar-bibliography org-cite-global-bibliography)
+    :config
+    (setq citar-bibliography p3/bib-library
+        citar-library-paths p3/pdf-library
+        citar-file-extensions '("pdf" "org" "md")
+        citar-file-open-function #'find-file)
+    ;; optional: org-cite-insert is also bound to C-c C-x C-@
+    :bind
+    (:map org-mode-map :package org ("C-c b" . #'org-cite-insert)))
+
+  (use-package citar-org-roam
+    :after (citar org-roam)
+    :config
+    (setq citar-org-roam-note-title-template "${author} - ${title}")
+    (setq citar-org-roam-capture-template-key "n")
+    (citar-org-roam-mode))
+>>>>>>> 04fe534 (20240202)
 #+END_SRC
 
 ** Completion-related
@@ -684,6 +737,7 @@ ivy completion
   (use-package swiper
     :after ivy
     :bind (("C-r" . swiper-all)
+<<<<<<< HEAD
            ("C-s" . swiper)
            ("C-c h" . swiper-r-doc-chapter-search)))
 
@@ -691,6 +745,9 @@ ivy completion
     (interactive)
     (swiper-isearch "#' ### [0-9]+\."))
 
+=======
+           ("C-s" . swiper)))
+>>>>>>> 04fe534 (20240202)
 #+END_SRC
 
 smex completion for M-x commands
@@ -703,7 +760,10 @@ smex completion for M-x commands
         (global-set-key (kbd "M-x") 'smex)
         (global-set-key (kbd "M-X") 'smex-major-mode-commands))
 #+END_SRC
+<<<<<<< HEAD
 
+=======
+>>>>>>> 04fe534 (20240202)
 auto-complete yas snippets with company
 
 #+BEGIN_SRC emacs-lisp
@@ -753,6 +813,7 @@ Save minibuffer history
   (savehist-mode 1))
 #+END_SRC
 
+<<<<<<< HEAD
 #+BEGIN_SRC emacs-lisp
     (use-package ivy-bibtex
     :config
@@ -765,6 +826,8 @@ Save minibuffer history
     (("C-c n B" . ivy-bibtex)))
 #+END_SRC
 
+=======
+>>>>>>> 04fe534 (20240202)
 ** C++
 
 Special compile command for C++
@@ -878,8 +941,11 @@ View df using DT (assuming running R session and exwm)
                 ("C-c i" . p3/ess-library-and-source)
                 ;; View data.frame in DT::datatable at a point
                 ("C-c v" . p3/r-view-df-at-point))
+<<<<<<< HEAD
     :bind (:map inferior-ess-r-mode-map
                 ("C-c v" . p3/r-view-df-at-point))
+=======
+>>>>>>> 04fe534 (20240202)
     ;; :hook
     ;; (ess-r-mode . (lambda () (yas-minor-mode)))
     :config
@@ -929,7 +995,11 @@ Windows work-around for not being able to find R
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
+<<<<<<< HEAD
     (setq-default inferior-R-program-name "C:\\Program Files\\R\\R-4.3.1\\bin\\x64\\Rterm.exe"))
+=======
+    (setq-default inferior-R-program-name "C:\\Program Files\\R\\R-4.2.2\\bin\\x64\\Rterm.exe"))
+>>>>>>> 04fe534 (20240202)
 #+END_SRC
 
 #+BEGIN_SRC emacs-lisp
@@ -1080,6 +1150,15 @@ Interactive commands to connect to default connection.
 #+END_SRC
 ** org
 
+<<<<<<< HEAD
+=======
+Set org default startup display for bullets globally
+
+#+BEGIN_SRC emacs-lisp
+  (setq org-startup-folded 'content)
+#+END_SRC
+
+>>>>>>> 04fe534 (20240202)
 Update last modified as shown [[https://org-roam.discourse.group/t/update-a-field-last-modified-at-save/321][here]]
 
 #+BEGIN_SRC emacs-lisp
@@ -1129,7 +1208,11 @@ Turn org-mode bullets into utf-8 characters
   ;;       :init (add-hook 'org-mode-hook 'org-bullets-mode))
 #+END_SRC
 
+<<<<<<< HEAD
 Make sure org-mode calls evince (gnome editor) to [[https://emacs.stackexchange.com/questions/28037/org-mode-file-hyperlinks-always-use-doc-view-cant-force-it-to-use-external-pdf][open up pdf files]]
+=======
+Make sure org-mode calls evince (gnome pdf viewer) to [[https://emacs.stackexchange.com/questions/28037/org-mode-file-hyperlinks-always-use-doc-view-cant-force-it-to-use-external-pdf][open up pdf files]]
+>>>>>>> 04fe534 (20240202)
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'gnu/linux)
@@ -1236,6 +1319,13 @@ See [[https://earvingad.github.io/posts/org_roam_windows/][the following]] for a
     (org-roam-capture-templates
      '(("d" "default" plain "%?"
         :if-new (file+head "%<%Y%m%d%H%M%S>-${slug}.org" "#+title: ${title}\n#+category:${title}\n#+created: %U\n#+last_modified: %U\n")
+<<<<<<< HEAD
+=======
+        :unnarrowed t)
+       ("n" "literature note" plain "* Heading\n %?"
+        :target (file+head "%(expand-file-name (or citar-org-roam-subdir \"\") org-roam-directory)/${citar-citekey}.org"
+                           "#+title: ${citar-citekey} (${citar-date}). ${note-title}.\n#+created: %U\n#+last_modified: %U\n\n")
+>>>>>>> 04fe534 (20240202)
         :unnarrowed t)))
     (org-roam-dailies-directory "journal/")
     (org-roam-dailies-capture-templates
@@ -1259,6 +1349,7 @@ See [[https://earvingad.github.io/posts/org_roam_windows/][the following]] for a
     (org-roam-db-autosync-mode))
 #+END_SRC
 
+<<<<<<< HEAD
 Scholarly add-in for org-roam [[https://lucidmanager.org/productivity/emacs-bibtex-mode/][(see here]])
 
 #+BEGIN_SRC emacs-lisp
@@ -1270,6 +1361,8 @@ Scholarly add-in for org-roam [[https://lucidmanager.org/productivity/emacs-bibt
     (org-roam-bibtex-mode)
 #+END_SRC
 
+=======
+>>>>>>> 04fe534 (20240202)
 ** Poly-R
 
 Require poly-R
@@ -1470,9 +1563,15 @@ Shell-pop in linux; git's bin/bash in windows
   (when (eq system-type 'windows-nt)
       (progn
         (setq explicit-shell-file-name "C:/msys64/usr/bin/bash.exe"
+<<<<<<< HEAD
               ;; shell-file-name explicit-shell-file-name
               explicit-bash.exe-args '("--login" "-i"))
 ;;        (add-to-list 'exec-path "C:/msys64/usr/bin")
+=======
+              shell-file-name explicit-shell-file-name
+              explicit-bash.exe-args '("--login" "-i"))
+        (add-to-list 'exec-path "C:/msys64/usr/bin")
+>>>>>>> 04fe534 (20240202)
         (global-set-key (kbd "C-x C-u") 'shell)))
   (when (eq system-type 'gnu/linux)
     (use-package shell-pop
@@ -1596,6 +1695,16 @@ Use utf-8 everywhere all the time
   (set-file-name-coding-system 'utf-8)
   (set-selection-coding-system 'utf-8)
 #+END_SRC
+<<<<<<< HEAD
+=======
+
+Set Rmd to CRLF
+
+#+BEGIN_SRC emacs-lisp
+  (add-to-list 'file-coding-system-alist '("\\.Rmd\\'" . utf-8-dos))
+#+END_SRC
+
+>>>>>>> 04fe534 (20240202)
 * Not in use
 
 Enable ein + a shortcut for deleting cells.
@@ -1689,3 +1798,35 @@ Record screen?
 
   ;; (global-set-key (kbd "s-z") 'record-screen)
 #+END_SRC
+<<<<<<< HEAD
+=======
+
+Scholarly add-in for org-roam [[https://lucidmanager.org/productivity/emacs-bibtex-mode/][(see here]])
+
+#+BEGIN_SRC emacs-lisp
+  ;; (use-package org-roam-bibtex
+  ;;  :after (org-roam ivy-bibtex)
+  ;;  :bind (:map org-mode-map ("C-c n b" . orb-note-actions))
+  ;;  :config
+  ;;  (require 'org-ref))
+  ;;  (org-roam-bibtex-mode)
+  ;; (setq orb-preformat-keywords
+  ;;       '("citekey" "title" "url" "author-or-editor" "keywords" "file" "date")
+  ;;       orb-process-file-keyword t
+  ;;       orb-insert-interface 'helm-bibtex
+  ;;       orb-file-field-extensions '("pdf")))
+#+END_SRC
+
+
+#+BEGIN_SRC emacs-lisp
+  ;; (use-package ivy-bibtex
+  ;; :config
+  ;; (setq bibtex-completion-bibliography bib-files-directory
+  ;;       bibtex-completion-library-path pdf-files-directory
+  ;;       bibtex-completion-pdf-field "File"
+  ;;       bibtex-completion-notes-path org-directory
+  ;;       bibtex-completion-additional-search-fields '(keywords))
+  ;; :bind
+  ;; (("C-c n B" . ivy-bibtex)))
+#+END_SRC
+>>>>>>> 04fe534 (20240202)
