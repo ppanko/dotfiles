@@ -68,9 +68,10 @@ Set fxont and size
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
-      (set-face-attribute 'default nil :family "Consolas" :height 125))
-  (when (eq system-type 'gnu/linux)
       (set-face-attribute 'default nil :family "Inconsolata" :height 140))
+  (when (eq system-type 'gnu/linux)
+    (set-face-attribute 'default nil :family "Inconsolata" :height 140)
+      (setq-default line-spacing 20))
 #+END_SRC
 
 Delete seleted text when typing over it.
@@ -293,7 +294,6 @@ Input method configuration.
 #+BEGIN_SRC emacs-lisp
   (setq default-input-method "cyrillic-translit")
 #+END_SRC
-
 * Functions
 
 Save and kill all buffers (for emacs daemon).
@@ -611,7 +611,6 @@ Move lines from [[https://www.emacswiki.org/emacs/MoveLine][emacswiki]]
 (global-set-key (kbd "M-<up>") 'move-line-up)
 (global-set-key (kbd "M-<down>") 'move-line-down)
 #+END_SRC
-
 * Modes
 ** Bibtex & citation-related
 
@@ -690,7 +689,6 @@ Set reftex format as shown [[https://stackoverflow.com/questions/13607156/autoco
     (setq citar-org-roam-capture-template-key "n")
     (citar-org-roam-mode))
 #+END_SRC
-
 ** Completion-related
 
 ivy completion
@@ -786,7 +784,6 @@ Save minibuffer history
   (setq history-length 25)
   (savehist-mode 1))
 #+END_SRC
-
 ** C++
 
 Special compile command for C++
@@ -836,7 +833,6 @@ auto-save changed files
   (super-save-mode +1)
   (setq super-save-auto-save-when-idle t))
 #+END_SRC
-
 ** ESS
 
 #+BEGIN_SRC emacs-lisp
@@ -1064,7 +1060,6 @@ Git changes in the fringe
 
   (setq-default right-fringe-width 20)
 #+END_SRC
-
 ** Multiple cursors
 #+BEGIN_SRC emacs-lisp
   (use-package multiple-cursors
@@ -1180,7 +1175,6 @@ Set region to checkboxes
         (forward-line))
       (beginning-of-line)))
 #+END_SRC
-
 ** org-agenda
 
 org-agenda defaults, as shown [[https://orgmode.org/worg/org-tutorials/org-custom-agenda-commands.html][here]]
@@ -1192,7 +1186,6 @@ org-agenda defaults, as shown [[https://orgmode.org/worg/org-tutorials/org-custo
     :config
     (setq org-agenda-sorting-strategy '(priority-down))) ;;effort-down
 #+END_SRC
-
 ** org-roam
 
 [[https://systemcrafters.net/build-a-second-brain-in-emacs/5-org-roam-hacks/#fast-note-insertion-for-a-smoother-writing-flow][From SC]], edited by p3 to include optional tags
@@ -1290,7 +1283,6 @@ See [[https://earvingad.github.io/posts/org_roam_windows/][the following]] for a
     (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
     (org-roam-db-autosync-mode))
 #+END_SRC
-
 ** Poly-R
 
 Require poly-R
@@ -1386,7 +1378,6 @@ Do presentations with org-present
         :config
         (setq org-present-text-scale 4))
 #+END_SRC
-
 ** Projectile
 #+BEGIN_SRC emacs-lisp
   (defun p3/projectile-r-project-file-p ()
@@ -1476,7 +1467,6 @@ Do presentations with org-present
             elpy-rpc-python-command python-shell-interpreter))
 
 #+END_SRC
-
 ** Rainbow
 #+BEGIN_SRC emacs-lisp
   (use-package rainbow-mode
@@ -1613,7 +1603,7 @@ Use utf-8 everywhere all the time
   (prefer-coding-system 'utf-8)
   (setq locale-coding-system 'utf-8)
   (set-default-coding-systems 'utf-8)
-  (set-buffer-file-coding-system 'utf-8)
+  (set-default buffer-file-coding-system 'utf-8)
   (set-file-name-coding-system 'utf-8)
   (set-selection-coding-system 'utf-8)
 #+END_SRC
@@ -1632,7 +1622,6 @@ Set Rmd to CRLF
 #+BEGIN_SRC emacs-lisp
     (add-to-list 'file-coding-system-alist '("\\.Rmd\\'" . utf-8-dos))
 #+END_SRC
-
 * Not in use
 
 Enable ein + a shortcut for deleting cells.
