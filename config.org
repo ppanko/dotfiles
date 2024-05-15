@@ -1111,9 +1111,12 @@ If COMMIT-MESSAGE is provided, use it; otherwise, use the current date and time 
      ((not (file-directory-p notes-dir))
       (message "The notes directory %s does not exist." notes-dir))
      (t
-      (shell-command config-commands)
-      (shell-command notes-commands)
-      (message "Committed and pushed changes to config file and notes directory.")))))
+      (let ((config-result (shell-command config-commands))
+            (notes-result (shell-command notes-commands)))
+        (if (and (zerop config-result) (zerop notes-result))
+            (message "Committed and pushed changes to config file and notes directory.")
+          (message "Failed to commit and push changes. Config result: %d, Notes result: %d"
+                   config-result notes-result)))))))
 
 ;; Bind the function to a key for easy access
 (global-set-key (kbd "C-c g") 'p3/git-commit-and-push-emacs-config)
