@@ -1,0 +1,10 @@
+# -*- mode: snippet -*-
+# name: parallel { ... }
+# key: paral
+# contributor: ppanko <pavelppanko@gmail.com>
+# --
+
+cl <- parallel::makeCluster(parallel::detectCores() - ${1})
+parallel::clusterExport(cl, "${}")
+${} <- parallel::par${L}apply(cl, x, function(x) ${})
+parallel::stopCluster(cl)

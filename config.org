@@ -64,13 +64,14 @@ Default web browser
   ;; (setq browse-url-browser-function 'eww-browse-url)
 #+END_SRC
 
-Set fxont and size
+Set font and size
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
-      (set-face-attribute 'default nil :family "Consolas" :height 125))
+    (set-face-attribute 'default nil :family "Inconsolata" :height 125))
   (when (eq system-type 'gnu/linux)
-      (set-face-attribute 'default nil :family "Inconsolata" :height 140))
+    (set-face-attribute 'default nil :family "Inconsolata" :height 140)
+    (setq-default line-spacing 20))
 #+END_SRC
 
 Delete seleted text when typing over it.
@@ -789,9 +790,14 @@ Inline auto-complete mode w/company.
 
 #+BEGIN_SRC emacs-lisp
   (use-package company
-    :hook (after-init . global-company-mode)
-    :config
-    (setq company-backends (mapcar #'company-mode/backend-with-yas company-backends)))
+  :hook (after-init . global-company-mode)
+  :config
+  (setq company-backends (mapcar #'company-mode/backend-with-yas company-backends))
+  :init
+  (defun p3/ess-company-config ()
+    "Configuration for ESS."
+    (setq-local company-backends '(company-R-args company-R-object company-dabbrev)))
+  (add-hook 'ess-r-mode-hook #'p3/ess-config))
 #+END_SRC
 
 Thesaurus
@@ -811,6 +817,15 @@ Code snippets
     (yas-global-mode 1)
     :config
     (add-to-list 'yas-snippet-dirs "~/.emacs.d/snippets"))
+#+END_SRC
+
+Save minibuffer history
+
+#+BEGIN_SRC emacs-lisp
+(use-package savehist
+  :config
+  (setq history-length 25)
+  (savehist-mode 1))
 #+END_SRC
 
 ** C++
@@ -880,8 +895,6 @@ Set working directory to Rproj root at R startup, if it exists
   (defun p3/set-projectile-wd-on-startup ()
     (cond ((f-exists-p ((projectile-project-root)))
            (setq ess-startup-directory 'projectile-project-root))))
-  ;; (add-hook 'ess-r-post-run-hook 'set-projectile-wd-on-startup)
-
   ;; (projectile-register-project-type 'r '(".r" ".R" ".Rproj")
   ;;                                   :project-file ".Rproj")
 #+END_SRC
@@ -889,13 +902,26 @@ Set working directory to Rproj root at R startup, if it exists
 View df using DT (assuming running R session)
 
 #+BEGIN_SRC emacs-lisp
-    (defun p3/r-view-df-at-point ()
-    (interactive)
-    (let ((sym (ess-symbol-at-point)))
-      (if sym
-          (ess-send-string (ess-get-process ess-local-process-name)
-                           (concat "DT::datatable(" (symbol-name sym) ", options                                       = list(autoWidth = TRUE), filter = list(position = 'top', clear = FALSE))\n") t)
-        (message "No valid R symbol at point"))))
+  ;; (defun p3/r-view-df-at-point ()
+  ;; (interactive)
+  ;; (let ((sym (ess-symbol-at-point)))
+  ;;   (if sym
+  ;;       (ess-send-string (ess-get-process ess-local-process-name)
+  ;;                        (concat "DT::datatable(" (symbol-name sym) ", options = list(autoWidth = TRUE), filter = list(position = 'top', clear = FALSE))\n") t)
+  ;;     (message "No valid R symbol at point"))))
+
+(defun p3/r-view-df-at-point ()
+  "Display R data frame objects interactively using the DT package."
+  (interactive)
+  (let* ((object-at-point (thing-at-point 'symbol))
+         (object (if (and object-at-point (stringp object-at-point))
+                     object-at-point
+                   (completing-read "Choose data frame: " (ess-get-object-list ess-current-process-name)))))
+    (ess-send-string (format "DT::datatable(%s, options = list(autoWidth = TRUE), filter = list(position = 'top', clear = FALSE))\n" object))))
+
+;; Bind the function to a key for easy access
+;; (define-key ess-mode-map (kbd "C-c v") 'my/ess-display-dt-data-frame-at-point)
+
 #+END_SRC
 
 View df using DT (assuming running R session and exwm)
@@ -1032,20 +1058,28 @@ Transpose horizontal/vertical split
     :bind ("C-c t" . transpose-frame))
 #+END_SRC
 
-Always make R buffer split right & R code buffer split left, as shown [[https://lambdaland.org/posts/2022-12-27_repl_buffer_on_the_right/][here]] now
+OLD: Always make R buffer split right & R code buffer split left, as shown [[https://lambdaland.org/posts/2022-12-27_repl_buffer_on_the_right/][here]] now
 
 #+BEGIN_SRC emacs-lisp
-(setq display-buffer-alist
-      '(((major-mode . inferior-ess-r-mode)
-         (display-buffer-reuse-mode-window
-          display-buffer-in-direction)
-         (direction . rightmost))
+  (add-to-list 'display-buffer-alist
+             '("\\*R\\*"
+               (display-buffer-reuse-window
+                display-buffer-in-side-window)
+               (side . right)
+               (slot . 1)
+               (window-width . 0.5)
+               (reusable-frames . visible)))
+  ;; (setq display-buffer-alist
+  ;;       '(((major-mode . inferior-ess-r-mode)
+  ;;          (display-buffer-reuse-mode-window
+  ;;           display-buffer-in-direction)
+  ;;          (direction . rightmost))
 
-        ((not (major-mode . inferior-ess-r-mode))
-         (display-buffer-reuse-mode-window
-          display-buffer-same-window
-          display-buffer-in-direction)
-         (direction . leftmost))))
+  ;;         ((not (major-mode . inferior-ess-r-mode))
+  ;;          (display-buffer-reuse-mode-window
+  ;;           display-buffer-same-window
+  ;;           display-buffer-in-direction)
+  ;;          (direction . leftmost))))
 #+END_SRC
 
 Set ace-window shortcut
@@ -1090,36 +1124,56 @@ Auto-fill
 ** Git
 
 #+BEGIN_SRC emacs-lisp
-(defun p3/git-commit-and-push-emacs-config (&optional commit-message)
-  "Automatically add, commit, and push changes in the Emacs config file and org notes directory.
-If COMMIT-MESSAGE is provided, use it; otherwise, use the current date and time as the commit message."
-  (interactive
-   (if (executable-find "git")
-       (list (read-string "Commit message (leave blank for default): "))
-     (error "Git is not installed. Please install Git first.")))
-  (let* ((default-message (format "Update: %s" (format-time-string "%Y-%m-%d %H:%M:%S")))
-         (final-message (if (string= commit-message "") default-message commit-message))
-         (config-file (expand-file-name "~/.emacs.d/config.org"))
-         (notes-dir (expand-file-name "~/org/notes"))
-         (config-commands (format "cd %s && git add %s && git commit -m \"%s\" && git push"
-                                  (file-name-directory config-file) config-file final-message))
-         (notes-commands (format "cd %s && git add -u && git commit -m \"%s\" && git push"
-                                 notes-dir final-message)))
-    (cond
-     ((not (file-exists-p config-file))
-      (message "The config file %s does not exist." config-file))
-     ((not (file-directory-p notes-dir))
-      (message "The notes directory %s does not exist." notes-dir))
-     (t
-      (let ((config-result (shell-command config-commands))
-            (notes-result (shell-command notes-commands)))
-        (if (and (zerop config-result) (zerop notes-result))
-            (message "Committed and pushed changes to config file and notes directory.")
-          (message "Failed to commit and push changes. Config result: %d, Notes result: %d"
-                   config-result notes-result)))))))
+  (defun p3/check-git-installed ()
+    "Check if Git is installed."
+    (unless (executable-find "git")
+      (error "Git is not installed. Please install Git first.")))
 
-;; Bind the function to a key for easy access
-(global-set-key (kbd "C-c g") 'p3/git-commit-and-push-emacs-config)
+  (defun p3/get-commit-message ()
+    "Prompt the user for a commit message. If empty, use the current date and time."
+    (let ((commit-message (read-string "Commit message (leave blank for default): ")))
+      (if (string= commit-message "")
+          (format "Update: %s" (format-time-string "%Y-%m-%d %H:%M:%S"))
+        commit-message)))
+
+  (defun p3/construct-git-commands (config-file final-message notes-dir)
+    "Construct the git commands for the config file and notes directory."
+    (let ((config-commands (format "cd %s && git add %s && git commit -m \"%s\" && git push"
+                                   (file-name-directory config-file) config-file final-message))
+          (notes-commands (format "cd %s && git add -u && git commit -m \"%s\" && git push"
+                                  notes-dir final-message)))
+      (list config-commands notes-commands)))
+
+  (defun p3/execute-git-commands (commands)
+    "Execute the git commands and return the results."
+    (let ((config-result (shell-command (nth 0 commands)))
+          (notes-result (shell-command (nth 1 commands))))
+      (list config-result notes-result)))
+
+  (defun p3/git-commit-and-push-emacs-config (&optional commit-message)
+    "Automatically add, commit, and push changes in the Emacs config file and org notes directory.
+  If COMMIT-MESSAGE is provided, use it; otherwise, use the current date and time as the commit message."
+    (interactive
+     (p3/check-git-installed)
+     (list (p3/get-commit-message)))
+    (let* ((config-file (expand-file-name "~/.emacs.d/config.org"))
+           (notes-dir (expand-file-name "~/org/notes"))
+           (final-message (if (string= commit-message "") (p3/get-commit-message) commit-message))
+           (commands (p3/construct-git-commands config-file final-message notes-dir)))
+      (cond
+       ((not (file-exists-p config-file))
+        (message "The config file %s does not exist." config-file))
+       ((not (file-directory-p notes-dir))
+        (message "The notes directory %s does not exist." notes-dir))
+       (t
+        (let ((results (p3/execute-git-commands commands)))
+          (if (and (zerop (nth 0 results)) (zerop (nth 1 results)))
+              (message "Committed and pushed changes to config file and notes directory.")
+            (message "Failed to commit and push changes. Config result: %d, Notes result: %d"
+                     (nth 0 results) (nth 1 results))))))))
+
+  ;; Bind the function to a key for easy access
+  (global-set-key (kbd "C-c g") 'p3/git-commit-and-push-emacs-config)
 #+END_SRC
 
 Use magit to manage git
@@ -1142,6 +1196,7 @@ Git changes in the fringe
 
   (setq-default right-fringe-width 20)
 #+END_SRC
+
 ** Minibuffer
 
 Save minibuffer history
@@ -1175,7 +1230,6 @@ Fancy minibuffer completion and display
 
 ** Multiple cursors
 
-**
 #+BEGIN_SRC emacs-lisp
   (use-package multiple-cursors
   :bind (("C-S-c C-S-c" . mc/edit-lines)
@@ -1193,7 +1247,7 @@ Setup default connections, as seen [[https://truongtx.me/2014/08/23/setup-emacs-
     :config
     ;; Make sure MySQL know where the plugins directory is
     (setq sql-mysql-options
-          '("--plugin-dir                                                                                              =/usr/lib/mysql/plugin" "--binary-mode"))
+          '("--plugin-dir=/usr/lib/mysql/plugin" "--binary-mode"))
     :custom
     ;; Try to catch the stupid MySQL prompt using a better regex
     (sql-set-product-feature 'mysql :prompt-regexp "^\\(?:mysql\\|mariadb\\).*> "))
@@ -1267,6 +1321,51 @@ Turn org-mode bullets into utf-8 characters
   ;;       :init (add-hook 'org-mode-hook 'org-bullets-mode))
 #+END_SRC
 
+Sort TODOs
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/org-sort-todos ()
+    "Move all completed TODOs (DONE) to the bottom of the list."
+    (interactive)
+    (save-excursion
+      (goto-char (point-min))
+      (let ((inhibit-read-only t)
+            (org-inhibit-blocking t))
+        (while (re-search-forward org-heading-regexp nil t)
+          (let ((element (org-element-at-point)))
+            (when (string= (org-element-property :todo-keyword element) "DONE")
+              (org-cut-subtree)
+              (goto-char (point-max))
+              (yank)
+              (insert "\n")))))))
+
+  ;; Add the function to a keybinding for convenience
+  (define-key org-mode-map (kbd "C-c C-x C-o") 'p3/org-sort-todos)
+#+END_SRC
+
+Export org to ms-office files!
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/org-export-to-office (output-format &optional template-file)
+  "Export the current Org file to PPTX or DOCX format using Pandoc with an optional TEMPLATE-FILE."
+  (interactive
+   (list (completing-read "Output format (pptx/docx): " '("pptx" "docx"))
+         (read-file-name "Template file (leave blank for none): " nil nil t)))
+  (if (executable-find "pandoc")
+      (let* ((org-file (buffer-file-name))
+             (output-file (concat (file-name-sans-extension org-file) (if (string= output-format "pptx") ".pptx" ".docx")))
+             (template-option (if (and template-file (not (string= template-file "")))
+                                  (format "--reference-doc=%s" (shell-quote-argument template-file))
+                                ""))
+             (command (format "pandoc %s -o %s %s" org-file output-file template-option)))
+        (shell-command command)
+        (message "Converted %s to %s" org-file output-file))
+    (message "Pandoc is not installed. Please install Pandoc first.")))
+
+;; Bind the function to a key for easy access
+(define-key org-mode-map (kbd "C-c C-o") 'p3/org-export-to-office)
+#+END_SRC
+
 Make sure org-mode calls evince (gnome pdf viewer) to [[https://emacs.stackexchange.com/questions/28037/org-mode-file-hyperlinks-always-use-doc-view-cant-force-it-to-use-external-pdf][open up pdf files]]
 
 #+BEGIN_SRC emacs-lisp
@@ -1334,7 +1433,8 @@ org-agenda defaults, as shown [[https://orgmode.org/worg/org-tutorials/org-custo
           (apply #'org-roam-node-insert args)))
 #+END_SRC
 
-[[https://www.reddit.com/r/orgmode/comments/vvx54j/comment/ifn434u/?utm_source                                         =share&utm_medium=web2x&context=3][Search roam for...]] anything
+
+[[https://www.reddit.com/r/orgmode/comments/vvx54j/comment/ifn434u/?utm_source=share&utm_medium=web2x&context=3][Search roam for...]] anything
 
 #+BEGIN_SRC emacs-lisp
   (defun org-roam-rg-search ()
@@ -1526,7 +1626,7 @@ Do presentations with org-present
                                       :project-file #'p3/projectile-r-project-p))
 #+END_SRC
 
-
+Find helper functions file in project
 
 #+BEGIN_SRC emacs-lisp
   (defun p3/projectile-open-r-helper-functions-file ()
@@ -1624,7 +1724,7 @@ Shell-pop in linux; git's bin/bash in windows
         (setenv "SHELL" shell-file-name)
         ;;(add-to-list 'exec-path "C:/msys64/usr/bin")
         (global-set-key (kbd "C-x C-u") 'shell)))
-        ;; (add-hook 'comint-output-filter-functions 'comint-strip-ctrl-m)))
+  ;; (add-hook 'comint-output-filter-functions 'comint-strip-ctrl-m)))
   (when (eq system-type 'gnu/linux)
     (use-package shell-pop
       :bind (("C-x C-u" . shell-pop))
