@@ -68,7 +68,7 @@ Set font and size
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
-    (set-face-attribute 'default nil :family "Inconsolata" :height 125))
+    (set-face-attribute 'default nil :family "Consolas" :height 125))
   (when (eq system-type 'gnu/linux)
     (set-face-attribute 'default nil :family "Inconsolata" :height 140)
     (setq-default line-spacing 20))
@@ -939,6 +939,42 @@ View df using DT (assuming running R session and exwm)
   ;;         (pop-to-buffer buff))))))
 #+END_SRC
 
+Archive R scripts in the current directory
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/archive-r-scripts ()
+    (interactive)
+    (let* ((current-dir (file-name-directory (buffer-file-name)))
+           (project-root (projectile-project-root))
+           (archive-dir (expand-file-name "Archive" project-root))
+           (current-date (format-time-string "%Y-%m-%d"))
+           (date-dir (expand-file-name current-date archive-dir))
+           (current-time (format-time-string "%H-%M-%S"))
+           (time-dir (expand-file-name current-time date-dir))
+           (dir-name (file-name-nondirectory (directory-file-name current-dir))))
+      (if (and (member dir-name '("R" "src"))
+               project-root)
+          (progn
+            (unless (file-directory-p archive-dir)
+              (make-directory archive-dir))
+            (if (file-directory-p date-dir)
+                (progn
+                  (unless (file-directory-p time-dir)
+                    (make-directory time-dir))
+                  (p3/copy-r-files current-dir time-dir))
+              (make-directory date-dir)
+              (p3/copy-r-files current-dir date-dir))
+            (message "Archived R scripts successfully."))
+        (message "Current directory is not 'R' or 'src' or not associated with a project."))))
+
+  (defun p3/copy-r-files (source-dir target-dir)
+    "Copy all *.R and *.[Rr]md files from SOURCE-DIR to TARGET-DIR."
+    (dolist (file (directory-files source-dir t "\\.\\(R\\|r\\|Rmd\\|rmd\\)$"))
+      (copy-file file target-dir t)))
+
+  ;; ;; Bind the function to a key for easy access
+  ;; (global-set-key (kbd "C-c a") 'p3/archive-r-scripts)
+#+END_SRC
 
 #+BEGIN_SRC emacs-lisp
   (use-package ess-r-mode
@@ -1019,6 +1055,26 @@ Windows work-around for not being able to find R
   (add-hook 'markdown-mode-hook 'compile-rmd)
 #+END_SRC
 
+** GPT
+
+A chatgpt mode!
+
+#+BEGIN_SRC emacs-lisp
+(use-package gptel
+  :config
+  ;; Set the default model to use
+  (setq gptel-model "gpt-3.5-turbo"))
+
+(defun gptel-test-request ()
+  "Send a simple test request to GPT."
+  (interactive)
+  (gptel-send "Hello, GPT! How are you today?"
+              (lambda (response)
+                (message "Response: %s" response))))
+
+(global-set-key (kbd "C-c g t") 'gptel-test-request)
+
+#+END_SRC
 ** Flycheck
 Flycheck mode (but not for org/latex).
 
@@ -1173,7 +1229,7 @@ Auto-fill
                      (nth 0 results) (nth 1 results))))))))
 
   ;; Bind the function to a key for easy access
-  (global-set-key (kbd "C-c g") 'p3/git-commit-and-push-emacs-config)
+  (global-set-key (kbd "C-c C-g") 'p3/git-commit-and-push-emacs-config)
 #+END_SRC
 
 Use magit to manage git
@@ -1184,6 +1240,18 @@ Use magit to manage git
     :config
     (with-eval-after-load 'magit-mode
       (add-hook 'after-save-hook 'magit-after-save-refresh-status t)))
+#+END_SRC
+
+Close all magit-related buffers
+
+#+BEGIN_SRC emacs-lisp
+  (defun close-magit-buffers ()
+    "Close all Magit related buffers."
+    (interactive)
+    (dolist (buffer (buffer-list))
+      (when (or (string-prefix-p "magit-" (buffer-name buffer))
+                (string-prefix-p "*magit" (buffer-name buffer)))
+        (kill-buffer buffer))))
 #+END_SRC
 
 Git changes in the fringe
@@ -1678,7 +1746,7 @@ Find helper functions file in project
       ;; :hook (python-mode lambda() (pyvenv-workon "myvenv"))
       :init
       (if (eq system-type 'windows-nt)
-          (add-hook 'python-mode-hook (lambda() (pyvenv-workon "~/Miniconda3/envs/kt"))))
+          (add-hook 'python-mode-hook (lambda() (pyvenv-workon "~/python/envs/myvenv"))))
       (if (eq system-type 'gnu/linux)
           (add-hook 'python-mode-hook (lambda() (pyvenv-workon "myvenv"))))
       ;; Enable elpy after loading a python buffer
@@ -1692,7 +1760,7 @@ Find helper functions file in project
       (remove-hook 'elpy-modules 'elpy-module-flymake)
       ;; Resolve indent issues
       (if (eq system-type 'windows-nt)
-          (setq python-shell-interpreter "~/Miniconda3/python.exe"))
+          (setq python-shell-interpreter "C:/Users/ppanko/AppData/Local/miniconda3/python.exe"))
         (if (eq system-type 'gnu/linux)
           (setq python-shell-interpreter "python"))
       (setq python-indent-guess-indent-offset t
