@@ -301,16 +301,6 @@ Input method configuration.
   (setq default-input-method "cyrillic-translit")
 #+END_SRC
 
-Create a variable that defines the linux subsystem path and make sure emacs looks for utils there first
-
-#+BEGIN_SRC emacs-lisp
-  (when (eq system-type 'windows-nt)
-    (defvar p3-utils-dir "C:/rtools43/usr/bin/")
-
-    (setq exec-path (cons p3-utils-dir exec-path)))
-
-#+END_SRC
-
 * Functions
 
 Save and kill all buffers (for emacs daemon).
@@ -1079,68 +1069,281 @@ Windows work-around for not being able to find R
 
 ** GPT
 
-A chatgpt mode!
+A gpt (and other llm) mode!
 
 #+BEGIN_SRC emacs-lisp
-  (use-package gptel
-    :config
-    ;; Set the default model to use
-    (setq-default gptel-model "gpt-4o")
-
-    ;; (defun gptel-set-curl-args ()
-
-    ;; (if (eq system-type 'windows-nt)
-        ;; (gptel-make-openai
-        ;;  :stream t
-        ;;  :curl-args '("--cacert" "~/cert/ca-bundle.trust.crt")))
-       ;; :models '("gpt-3.5-turbo" "gpt-3.5-turbo-16k" "gpt-4"
-         ;;           "gpt-4-turbo-preview" "gpt-4-32k" "gpt-4-1106-preview"
-         ;;           "gpt-4-0125-preview")
-
-
-    ;;  "Set curl arguments for gptel based on the operating system."
-      ;; (if (eq system-type 'windows-nt)
-      ;;     (setf (gptel-backend-curl-args gptel--openai)
-      ;;           '("--cacert" "~/cert/ca-bundle.trust.crt")))
-      ;;)
-
-    ;; (defun gptel-rewrite-and-replace (bounds &optional directive)
-    ;; (interactive
-    ;;  (list
-    ;;   (cond
-    ;;    ((use-region-p) (cons (region-beginning) (region-end)))
-    ;;    ((derived-mode-p 'text-mode)
-    ;;     (list (bounds-of-thing-at-point 'sentence)))
-    ;;    (t (cons (line-beginning-position) (line-end-position))))
-    ;;   (and current-prefix-arg
-    ;;        (read-string "ChatGPT Directive: "
-    ;;                     "You are a prose editor. Rewrite my prompt more professionally."))))
-    ;; (gptel-request
-    ;;  (buffer-substring-no-properties (car bounds) (cdr bounds)) ;the prompt
-    ;;  :system (or directive "You are a prose editor. Rewrite my prompt more professionally.")
-    ;;  :buffer (current-buffer)
-    ;;  :context (cons (set-marker (make-marker) (car bounds))
-    ;;                 (set-marker (make-marker) (cdr bounds)))
-    ;;  :callback
-    ;;  (lambda (response info)
-    ;;    (if (not response)
-    ;;        (message "ChatGPT response failed with: %s" (plist-get info :status))
-    ;;      (let* ((bounds (plist-get info :context))
-    ;;             (beg (car bounds))
-    ;;             (end (cdr bounds))
-    ;;             (buf (plist-get info :buffer)))
-    ;;        (with-current-buffer buf
-    ;;          (save-excursion
-    ;;            (goto-char beg)
-    ;;            (kill-region beg end)
-    ;;            (insert response)
-    ;;            (set-marker beg nil)
-    ;;            (set-marker end nil)
-    ;;            (message "Rewrote line. Original line saved to kill-ring."))))))))
-    ;; (global-set-key (kbd "C-c g r") 'gptel-rewrite-and-replace)
-    (global-set-key (kbd "C-c g t") 'gptel-org-set-topic)
-    (global-set-key (kbd "C-c g s") 'gptel-send))
+  ;; (use-package gptel
+  ;;   :config
+  ;;   ;; Set the default model to use
+  ;;   (setq-default ;;gptel-backend
+  ;;                 ;; (gptel-make-openai "gpt"
+  ;;                 ;;   :stream t
+  ;;                 ;;   :models '("gpt-3.5-turbo", "gpt-4")
+  ;;                 ;;   :curl-args '("--cacert /c/Users/ppanko/Documents/Repos/cert/ca-bundle.trust.crt"))
+  ;;    gptel-model "gpt-3.5-turbo")
+  ;;   ;; keybinds   (global-set-key (kbd "C-c g t") 'gptel-org-set-topic)
+  ;;   (global-set-key (kbd "C-c g s") 'gptel-send))
 #+END_SRC
+
+gptel helper functions
+
+#+BEGIN_SRC emacs-lisp
+    ;;     (defun gptel-get-selected-region ()
+    ;;                           "Get the selected region as a string.
+    ;;                                                       Return nil if no region is selected."
+    ;;                           (if (use-region-p)
+    ;;                               (buffer-substring-no-properties (region-beginning) (region-end))
+    ;;                             nil))
+
+    ;;                         (defun gptel-select-model ()
+    ;;                           "Prompt the user to select a model, falling back on the default model if Enter is pressed."
+    ;;                           (completing-read "Select model (press Enter for default): "
+    ;;                                            '("gpt-3.5-turbo" "gpt-4") nil t nil nil gptel-model))
+
+    ;;                         (defun gptel-send-request (prompt model callback)
+    ;;                           "Send a request to GPT with the given PROMPT and MODEL, and execute CALLBACK on the response."
+    ;;                           (let ((gptel-model model))  ;; Use the selected or default model
+    ;;                             (gptel-request prompt callback)))
+
+    ;;                         (defun gptel-get-task-prefix (task-type)
+    ;;                           "Return the prompt prefix for the given TASK-TYPE."
+    ;;                           (let ((task-prefixes '(("Refactor" . "You are a coding assistant operating inside Emacs. Your task is to refactor the code provided to you. Ensure the refactored code is more efficient, follows best practices, and maintains the original functionality. Provide the refactored code only; no explanations or comments.\n\n")
+    ;;                                                  ("Generate Documentation" . "You are a coding assistant operating inside Emacs. Your task is to generate detailed documentation for the code provided. Include comments, docstrings, or external documentation as appropriate. Provide the documentation only; no explanations or additional text.\n\n")
+    ;;                                                  ("Write Tests" . "You are a coding assistant operating inside Emacs. Your task is to write unit tests or test cases for the code provided. Ensure the tests cover various scenarios and edge cases. Provide the tests only; no explanations or additional text.\n\n")
+    ;;                                                  ("Translate Code" . "You are a coding assistant operating inside Emacs. Your task is to translate the provided code from one programming language to another. Ensure the translated code maintains the original functionality. Provide the translated code only; no explanations or additional text.\n\n")
+    ;;                                                  ("Send Line" . "You are a coding assistant operating inside Emacs. Your task is to assist with the following line of code. Provide your response as a comment in the style of the programming language of the code provided.\n\n"))))
+    ;;                             (cdr (assoc task-type task-prefixes))))
+    ;;                         (defun gptel-construct-prompt (prefix code)
+    ;;                           "Construct the prompt by concatenating PREFIX and CODE."
+    ;;                           (concat prefix code))
+
+    ;;                     (defun gptel-handle-insert (response insert-type)
+    ;;                       "Insert RESPONSE based on INSERT-TYPE.
+    ;;                     INSERT-TYPE should be 'replace, 'append, or 'prepend."
+    ;;                       (let ((text (json-serialize response)))
+    ;;                         (save-excursion
+    ;;                           (cond
+    ;;                            ((eq insert-type 'replace)
+    ;;                             (goto-char (region-beginning))
+    ;;                             (delete-region (region-beginning) (region-end))
+    ;;                             (insert text))
+    ;;                            ((eq insert-type 'append)
+    ;;                             (goto-char (region-end))
+    ;;                             (insert "\n" text))
+    ;;                            ((eq insert-type 'prepend)
+    ;;                             (goto-char (region-beginning))
+    ;;                             (insert text "\n"))))))
+
+    ;; (defun gptel-send-request (prompt callback)
+    ;;   "Send a request to GPT with the given PROMPT and execute CALLBACK on the response."
+    ;;   (gptel-request
+    ;;       prompt
+    ;;    :callback (lambda (response info)
+    ;;                (if (not response)
+    ;;                    (message "ChatGPT response failed with: %s" (plist-get info :status))
+
+    ;;                ;; Log the raw response and info for debugging
+    ;;                (message "Debug: Raw Response: %s" response)
+    ;;                (message "Debug: Info: %s" info)
+    ;;                ;; Check if the response is nil
+    ;;                (if (not response)
+    ;;                    (message "Error: Received nil response")
+    ;;                  ;; Check if the response is a string and attempt to parse as JSON
+    ;;                  (condition-case err
+    ;;                      (let ((json-response (if (stringp response)
+    ;;                                               (json-parse-string response)
+    ;;                                             response)))
+    ;;                        (message "Debug: JSON Response Parsed Successfully: %s" json-response)
+    ;;                        (funcall callback json-response))
+    ;;                    (json-error
+    ;;                     (message "Error parsing JSON: %s" (error-message-string err))
+    ;;                     (funcall callback response)))))))
+
+
+
+
+
+
+
+
+    ;; (defun my-callback (response)
+    ;;   "Callback function to print the response."
+    ;;   (message "Received response: %s" response)
+    ;;   (message "Response Type: %s" (type-of response)))
+
+    ;; (defun test-gptel-send-request ()
+    ;;   "Function to test `gptel-send-request` and print the response."
+    ;;   (interactive)
+    ;;   (gptel-send-request "Hello, GPT!" #'my-callback))
+
+
+
+
+
+
+
+
+
+    ;;elisp:fizzbuzz
+
+    ;; (defun gptel-send-request (prompt callback)
+    ;;   "Send a request to GPT with the given PROMPT and execute CALLBACK on the response."
+    ;;   (gptel-request prompt
+    ;;    :callback (lambda (response proc-info)
+    ;;                (let ((http-msg (plist-get proc-info :status))
+    ;;                      (error (plist-get proc-info :error)))
+    ;;                  (message "Debug: HTTP message: %s, Error: %s, Response: %s" http-msg error response)  ;; Debugging statement
+    ;;                  (if (or error (not (stringp response)))
+    ;;                      (message "Error: Invalid response received from GPT: %s" (or error http-msg))
+    ;;                    (funcall callback response))))))
+
+
+
+
+    ;;     (defun gptel-get-code (task-type)
+    ;;       "Get the selected code or current line based on TASK-TYPE."
+    ;;       (if (string-equal task-type "Send Line")
+    ;;           (thing-at-point 'line t)
+    ;;         (gptel-get-selected-region)))
+
+    ;;     (defun gptel-prepare-prompt (task-type selected-code)
+    ;;       "Prepare the prompt to be sent to GPT based on TASK-TYPE and SELECTED-CODE."
+    ;;       (let ((prefix (gptel-get-task-prefix task-type)))
+    ;;         (gptel-construct-prompt prefix selected-code)))
+
+    ;; (defun gptel-handle-response (response task-type insert-type)
+    ;;   "Handle the RESPONSE from GPT based on TASK-TYPE and INSERT-TYPE."
+    ;;   (message "Debug: Received response: %s" response)  ;; Debugging statement
+    ;;   (if (eq insert-type 'message)
+    ;;       (message "GPT response: %s" (json-serialize response))
+    ;;     (gptel-handle-insert response insert-type)
+    ;;     (message "%s completed and %s." task-type
+    ;;              (pcase insert-type
+    ;;                ('replace "inserted")
+    ;;                ('append "appended")
+    ;;                ('prepend "prepended")))))
+
+
+    ;; (defun gptel-handle-task (task-type insert-type)
+    ;;   "Handle sending the last marked region or current line to GPT based on the TASK-TYPE and INSERT-TYPE.
+    ;;     INSERT-TYPE should be 'replace, 'append, 'prepend, or 'message."
+    ;;   (let* ((selected-code (gptel-get-code task-type))
+    ;;          (prompt (gptel-prepare-prompt task-type selected-code))
+    ;;          (model (gptel-select-model)))
+    ;;     (if selected-code
+    ;;         (gptel-send-request prompt model
+    ;;                             (lambda (response)
+    ;;                               (gptel-handle-response response task-type insert-type)))
+    ;;       (message "No region or line selected."))))
+
+
+    ;; (defun gptel-handle-request-message (prompt model task-type)
+    ;;   "Send PROMPT to GPT using MODEL and display the response as a message."
+    ;;   (gptel-send-request
+    ;;    prompt
+    ;;    model
+    ;;    (lambda (response)
+    ;;      (message "GPT response: %s" response))))
+
+
+    (use-package gptel
+      ;; :config
+      ;; Set the default model to use
+      ;; (setq-default gptel-model "gpt-3.5-turbo")
+      )
+
+    (defun gptel-rewrite-and-replace (bounds &optional directive)
+      (interactive
+       (list
+        (cond
+         ((use-region-p) (cons (region-beginning) (region-end)))
+         ((derived-mode-p 'text-mode)
+          (list (bounds-of-thing-at-point 'sentence)))
+         (t (cons (line-beginning-position) (line-end-position))))
+        (and current-prefix-arg
+             (read-string "ChatGPT Directive: "
+                          "You are a prose editor. Rewrite my prompt more professionally."))))
+      (gptel-request
+          (buffer-substring-no-properties (car bounds) (cdr bounds)) ;the prompt
+        :system (or directive "You are a prose editor. Rewrite my prompt more professionally.")
+        :buffer (current-buffer)
+        :context (cons (set-marker (make-marker) (car bounds))
+                       (set-marker (make-marker) (cdr bounds)))
+        :callback
+        (lambda (response info)
+          (if (not response)
+              (message "ChatGPT response failed with: %s" (plist-get info :status))
+            (let* ((bounds (plist-get info :context))
+                   (beg (car bounds))
+                   (end (cdr bounds))
+                   (buf (plist-get info :buffer)))
+              (with-current-buffer buf
+                (save-excursion
+                  (goto-char beg)
+                  (kill-region beg end)
+                  (insert response)
+                  (set-marker beg nil)
+                  (set-marker end nil)
+                  (message "Rewrote line. Original line saved to kill-ring."))))))))
+
+
+  #+END_SRC
+
+gptel copilot functions
+
+  #+BEGIN_SRC emacs-lisp
+    ;;     (defun gptel-send-current-line ()
+    ;;       "Send the current line to GPT via gptel."
+    ;;       (interactive)
+    ;;       (gptel-handle-task "Send Line" 'message))
+
+    ;;     (defun gptel-write-tests ()
+    ;;       "Send the last marked region to GPT for test writing and append the response."
+    ;;       (interactive)
+    ;;       (gptel-handle-task "Write Tests" 'append))
+
+
+    ;;     (defun gptel-refactor-region ()
+    ;;       "Send the last marked region to GPT for refactoring and replace it with the response."
+    ;;       (interactive)
+    ;;       (gptel-handle-task "Refactor" 'replace))
+
+
+    ;;     (defun gptel-generate-doc ()
+    ;;       "Send the last marked region to GPT for documentation generation and prepend the response."
+    ;;       (interactive)
+    ;;       (gptel-handle-task "Generate Documentation" 'prepend))
+
+
+    ;;     (defun gptel-translate-code ()
+    ;;       "Send the last marked region to GPT for language translation and append the response."
+    ;;       (interactive)
+    ;;       (gptel-handle-task "Translate Code" 'append))
+
+
+    ;;            (global-set-key (kbd "C-c g l") 'gptel-send-current-line)
+    ;;            (global-set-key (kbd "C-c g r") 'gptel-refactor-region)
+    ;;            (global-set-key (kbd "C-c g d") 'gptel-generate-doc)
+    ;;            (global-set-key (kbd "C-c g t") 'gptel-write-tests)
+    ;;            (global-set-key (kbd "C-c g c") 'gptel-translate-code)
+
+    ;; (defun gptel-curl--parse-response-advice (orig-fun &rest args)
+    ;;   "Advice to add detailed logging to `gptel-curl--parse-response`."
+    ;;   (condition-case err
+    ;;       (let ((response (apply orig-fun args)))
+    ;;         (message "Debug: Parsed Response: %s" response)
+    ;;         response)
+    ;;     (error
+    ;;      (message "Error in `gptel-curl--parse-response`: %s" (error-message-string err))
+    ;;      (message "%s" (with-output-to-string (backtrace)))
+    ;;      (signal (car err) (cdr err)))))
+
+    ;; (advice-add 'gptel-curl--parse-response :around #'gptel-curl--parse-response-advice)
+
+
+
+#+END_SRC
+
 ** Flycheck
 Flycheck mode (but not for org/latex).
 
@@ -1150,26 +1353,6 @@ Flycheck mode (but not for org/latex).
     :config
     (setq flycheck-global-modes '(not LaTeX-mode latex-mode org-mode))
     (setq flycheck-python-flake8-executable "flake8"))
-#+END_SRC
-** Flyspell
-
-#+BEGIN_SRC emacs-lisp
-  (use-package ispell
-    :defer nil
-    :ensure nil
-    :init
-    (if (eq system-type 'windows-nt)
-        (progn
-          (setenv "DICTPATH" "C:/rtools43/mingw64/share/hunspell")
-          (setenv "DICTIONARY" "en_US")		;C:/msys64/mingw64/share/hunspell/
-          (setq ispell-program-name "C:/rtools43/mingw64/bin/hunspell.exe")))
-    (if (eq system-type 'gnu/linux)
-        (setq ispell-program-name "hunspell"))
-    :config
-    (setq ispell-local-dictionary "en_US"
-          ispell-dictionary "english"
-          ispell-local-dictionary-alist
-          '(("en_US" "[[:alpha:]]" "[^[:alpha:]]" "[']" nil ("-d" "en_US") nil utf-8))))
 #+END_SRC
 ** Frames and buffers
 Transpose horizontal/vertical split
@@ -1847,12 +2030,45 @@ Find helper functions file in project
 #+END_SRC
 ** Shell
 
+#+BEGIN_SRC emacs-lisp
+     (defvar linuxy-environment-path nil
+    "Global variable to store the path to the latest Rtools version.")
+
+  (defun find-latest-rtools-version ()
+    "Find and return the path of the latest version of Rtools installed, only on Windows."
+    (when (eq system-type 'windows-nt)
+      (let* ((rtools-root "C:")
+             (dirs (directory-files rtools-root t "^rtools[0-9]+$" t))
+             (versions (mapcar (lambda (dir)
+                                 (string-to-number (substring (file-name-nondirectory dir) 6)))
+                               dirs))
+             (latest-version (car (sort versions #'>))))
+        (if latest-version
+            (let ((latest-rtools-path (concat rtools-root "/" (concat "rtools" (number-to-string latest-version)))))
+              (message "Latest Rtools version detected: %s" latest-rtools-path)
+              latest-rtools-path)
+          (message "No Rtools versions found.")
+          nil))))
+
+  ;; Update exec-path to include the latest Rtools
+  (when (eq system-type 'windows-nt)
+    (let ((latest-rtools-path (find-latest-rtools-version)))
+      (when latest-rtools-path
+        (setq rtools-path latest-rtools-path)
+        (setq mingw64-path (concat rtools-path "/mingw64/bin/"))
+        (setq linuxy-environment-path (concat rtools-path "/usr/bin/"))
+        (setq exec-path (cons linuxy-environment-path exec-path))
+        (message "Updated exec-path with: %s" linuxy-environment-path))))
+#+END_SRC
+
+
+
 Shell-pop in linux; git's bin/bash in windows
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
       (progn
-        (setq explicit-shell-file-name (concat p3-utils-dir "zsh.exe")
+        (setq explicit-shell-file-name (concat linuxy-environment-path "zsh.exe")
               shell-file-name "bash";;explicit-shell-file-name
               explicit-bash.exe-args '("--login"))
         (setenv "SHELL" shell-file-name)
@@ -1867,6 +2083,26 @@ Shell-pop in linux; git's bin/bash in windows
       (setq shell-pop-term-shell "/bin/bash")
       ;; need to do this manually or not picked up by `shell-pop'
       (shell-pop--set-shell-type 'shell-pop-shell-type shell-pop-shell-type)))
+#+END_SRC
+** Spelling
+
+#+BEGIN_SRC emacs-lisp
+  (use-package ispell
+    :defer nil
+    :ensure nil
+    :init
+    (if (eq system-type 'windows-nt)
+        (progn
+          (setenv "DICTPATH" (concat mingw64-path "/hunspell"))
+          (setenv "DICTIONARY" "en_US")		;C:/msys64/mingw64/share/hunspell/
+          (setq ispell-program-name (concat mingw64-path "/hunspell.exe"))))
+    (if (eq system-type 'gnu/linux)
+        (setq ispell-program-name "hunspell"))
+    :config
+    (setq ispell-local-dictionary "en_US"
+          ispell-dictionary "english"
+          ispell-local-dictionary-alist
+          '(("en_US" "[[:alpha:]]" "[^[:alpha:]]" "[']" nil ("-d" "en_US") nil utf-8))))
 #+END_SRC
 ** TRAMP
 
