@@ -809,7 +809,7 @@ Inline auto-complete mode w/company.
   (defun p3/ess-company-config ()
     "Configuration for ESS."
     (setq-local company-backends '(company-R-args company-R-object company-dabbrev)))
-  (add-hook 'ess-r-mode-hook #'p3/ess-config))
+  (add-hook 'ess-r-mode-hook #'p3/ess-company-config))
 #+END_SRC
 
 Thesaurus
@@ -914,25 +914,25 @@ Set working directory to Rproj root at R startup, if it exists
 View df using DT (assuming running R session)
 
 #+BEGIN_SRC emacs-lisp
+  (defun p3/r-view-df-at-point ()
+    (interactive)
+    (let ((sym (ess-symbol-at-point)))
+      (if sym
+          (ess-send-string (ess-get-process ess-local-process-name)
+                           (concat "DT::datatable(" (symbol-name sym) ", options = list(autoWidth = TRUE), filter = list(position = 'top', clear = FALSE))\n") t)
+        (message "No valid R symbol at point"))))
+
   ;; (defun p3/r-view-df-at-point ()
-  ;; (interactive)
-  ;; (let ((sym (ess-symbol-at-point)))
-  ;;   (if sym
-  ;;       (ess-send-string (ess-get-process ess-local-process-name)
-  ;;                        (concat "DT::datatable(" (symbol-name sym) ", options = list(autoWidth = TRUE), filter = list(position = 'top', clear = FALSE))\n") t)
-  ;;     (message "No valid R symbol at point"))))
+  ;;   "Display R data frame objects interactively using the DT package."
+  ;;   (interactive)
+  ;;   (let* ((object-at-point (thing-at-point 'symbol))
+  ;;          (object (if (and object-at-point (stringp object-at-point))
+  ;;                      object-at-point
+  ;;                    (completing-read "Choose data frame: " (ess-get-object-list ess-current-process-name)))))
+  ;;     (ess-send-string (format "DT::datatable(%s, options = list(autoWidth = TRUE), filter = list(position = 'top', clear = FALSE))\n" object))))
 
-(defun p3/r-view-df-at-point ()
-  "Display R data frame objects interactively using the DT package."
-  (interactive)
-  (let* ((object-at-point (thing-at-point 'symbol))
-         (object (if (and object-at-point (stringp object-at-point))
-                     object-at-point
-                   (completing-read "Choose data frame: " (ess-get-object-list ess-current-process-name)))))
-    (ess-send-string (format "DT::datatable(%s, options = list(autoWidth = TRUE), filter = list(position = 'top', clear = FALSE))\n" object))))
-
-;; Bind the function to a key for easy access
-;; (define-key ess-mode-map (kbd "C-c v") 'my/ess-display-dt-data-frame-at-point)
+  ;; Bind the function to a key for easy access
+  ;; (define-key ess-mode-map (kbd "C-c v") 'my/ess-display-dt-data-frame-at-point)
 
 #+END_SRC
 
