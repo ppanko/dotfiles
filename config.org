@@ -6,8 +6,8 @@ Start up in fullscreen
   (add-to-list 'default-frame-alist '(fullscreen . maximized))
 #+END_SRC
 
-The rest of the stuff in this section was stolen from [[https://github.com/hrs/dotfiles/blob/master/emacs/.emacs.d/configuration.org][here]],
-thanks Harry Schwartz.
+The rest of the stuff in this section was stolen from [[https://github.com/hrs/dotfiles/blob/master/emacs/.emacs.d/configuration.org][here]];
+thanks to Harry Schwartz.
 
 Have use-package install any unavailable packages.
 
@@ -48,14 +48,6 @@ Load secrets if they exist
     (load-file secrets-file))
 #+END_SRC
 
-Start server on Windows
-
-#+BEGIN_SRC emacs-lisp
-  ;; (when (eq system-type 'windows-nt)
-  ;;   (progn
-  ;;     (require 'server)
-  ;;     (server-start)))
-#+END_SRC
 * General
 
 Default web browser
@@ -64,13 +56,14 @@ Default web browser
   ;; (setq browse-url-browser-function 'eww-browse-url)
 #+END_SRC
 
-Set fxont and size
+Set font and size
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
-      (set-face-attribute 'default nil :family "Consolas" :height 125))
+    (set-face-attribute 'default nil :family "Consolas" :height 125))
   (when (eq system-type 'gnu/linux)
-      (set-face-attribute 'default nil :family "Inconsolata" :height 140))
+    (set-face-attribute 'default nil :family "Inconsolata" :height 140)
+    (setq-default line-spacing 20))
 #+END_SRC
 
 Delete seleted text when typing over it.
@@ -268,6 +261,12 @@ dired settings
     :custom
     (dired-auto-revert-buffer t)
     (dired-kill-when-opening-new-dired-buffer t))
+#+END_SRC
+
+[[https://stackoverflow.com/a/1012871/6249236][Do not replace white space with tabs!]]
+
+#+BEGIN_SRC emacs-lisp
+  (setq-default indent-tabs-mode nil)
 #+END_SRC
 
 Graphical icons?
@@ -612,6 +611,47 @@ Move lines from [[https://www.emacswiki.org/emacs/MoveLine][emacswiki]]
 (global-set-key (kbd "M-<down>") 'move-line-down)
 #+END_SRC
 
+Open files using default external programs via dired as shown [[https://stackoverflow.com/questions/25109968/in-emacs-how-to-open-file-in-external-program-without-errors][here]].
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/open-in-external-app (&optional file)
+  "Open the current file or dired marked files in external app.
+
+The app is chosen from your OS's preference."
+  (interactive)
+  (let ( doIt
+         (myFileList
+          (cond
+           ((string-equal major-mode "dired-mode") (dired-get-marked-files))
+           ((not file) (list (buffer-file-name)))
+           (file (list file)))))
+
+    (setq doIt (if (<= (length myFileList) 5)
+                   t
+                 (y-or-n-p "Open more than 5 files? ") ) )
+
+    (when doIt
+      (cond
+       ((string-equal system-type "windows-nt")
+        (mapc (lambda (fPath) (w32-shell-execute "open" (replace-regexp-in-string "/" "\\" fPath t t)) ) myFileList))
+       ((string-equal system-type "darwin")
+        (mapc (lambda (fPath) (shell-command (format "open \"%s\"" fPath)) )  myFileList) )
+       ((string-equal system-type "gnu/linux")
+        (mapc (lambda (fPath) (let ((process-connection-type nil)) (start-process "" nil "xdg-open" fPath)) ) myFileList) ) ) ) ) )
+#+END_SRC
+
+Get the curl version, just for fun
+
+#+BEGIN_SRC emacs-lisp
+  (defun check-curl-version ()
+  "Check the version of curl being used by Emacs."
+  (interactive)
+  (let ((curl-version (shell-command-to-string "curl --version")))
+    (if (string-match "^curl \\([0-9.]+\\)" curl-version)
+        (message "Curl version: %s" (match-string 1 curl-version))
+      (message "Could not determine curl version"))))
+#+END_SRC
+
 * Modes
 ** Bibtex & citation-related
 
@@ -669,7 +709,7 @@ Set reftex format as shown [[https://stackoverflow.com/questions/13607156/autoco
   (use-package citar
     :no-require
     :custom
-    (org-cite-global-bibliography p3/bib/library)
+    (org-cite-global-bibliography p3/bib-library)
     (org-cite-insert-processor 'citar)
     (org-cite-follow-processor 'citar)
     (org-cite-activate-processor 'citar)
@@ -691,12 +731,6 @@ Set reftex format as shown [[https://stackoverflow.com/questions/13607156/autoco
     (citar-org-roam-mode))
 #+END_SRC
 
-Citation processing (see [[https://github.com/andras-simonyi/citeproc-el?tab=readme-ov-file#requirements][github]])
-
-#+BEGIN_SRC emacs-lisp
-  (use-package citeproc
-  :after org)
-#+END_SRC
 ** Completion-related
 
 ivy completion
@@ -747,22 +781,28 @@ smex completion for M-x commands
 auto-complete yas snippets with company
 
 #+BEGIN_SRC emacs-lisp
-  (defvar company-mode/enable-yas t
-    "Enable yasnippet for all backends.")
-  (defun company-mode/backend-with-yas (backend)
-    (if (or (not company-mode/enable-yas) (and (listp backend) (member 'company-yasnippet backend)))
-        backend
-      (append (if (consp backend) backend (list backend))
-              '(:with company-yasnippet))))
+  ;; (defvar company-mode/enable-yas t
+  ;;   "Enable yasnippet for all backends.")
+  ;; (defun company-mode/backend-with-yas (backend)
+  ;;   (if (or (not company-mode/enable-yas) (and (listp backend) (member 'company-yasnippet backend)))
+  ;;       backend
+  ;;     (append (if (consp backend) backend (list backend))
+  ;;             '(:with company-yasnippet))))
 #+END_SRC
 
 Inline auto-complete mode w/company.
 
 #+BEGIN_SRC emacs-lisp
-  (use-package company
-    :hook (after-init . global-company-mode)
-    :config
-    (setq company-backends (mapcar #'company-mode/backend-with-yas company-backends)))
+  ;;   (use-package company
+  ;;   :hook (after-init . global-company-mode)
+  ;;   :config
+  ;;   (setq company-backends (mapcar #'company-mode/backend-with-yas company-backends))
+  ;;   :init
+  ;;   (defun p3/ess-company-config ()
+  ;;     "Configuration for ESS."
+  ;;     (setq-local company-backends '(company-R-args company-R-object company-dabbrev)))
+  ;;   (add-hook 'ess-r-mode-hook #'p3/ess-company-config))
+  ;; (setq company-idle-delay nil)
 #+END_SRC
 
 Thesaurus
@@ -845,6 +885,8 @@ auto-save changed files
 
 ** ESS
 
+Options for inferior ESS
+
 #+BEGIN_SRC emacs-lisp
   (defun p3/my-inferior-ess-init ()
       (setq-local ansi-color-for-comint-mode 'filter)
@@ -852,13 +894,12 @@ auto-save changed files
     ;; (add-hook 'inferior-ess-mode-hook 'p3/my-inferior-ess-init)
 #+END_SRC
 
-Set working directory to Rproj root at R startup
+Set working directory to Rproj root at R startup, if it exists
 
 #+BEGIN_SRC emacs-lisp
   (defun p3/set-projectile-wd-on-startup ()
-    (setq ess-startup-directory 'projectile-project-root))
-  ;; (add-hook 'ess-r-post-run-hook 'set-projectile-wd-on-startup)
-
+    (cond ((f-exists-p ((projectile-project-root)))
+           (setq ess-startup-directory 'projectile-project-root))))
   ;; (projectile-register-project-type 'r '(".r" ".R" ".Rproj")
   ;;                                   :project-file ".Rproj")
 #+END_SRC
@@ -866,13 +907,26 @@ Set working directory to Rproj root at R startup
 View df using DT (assuming running R session)
 
 #+BEGIN_SRC emacs-lisp
-    (defun p3/r-view-df-at-point ()
+  (defun p3/r-view-df-at-point ()
     (interactive)
     (let ((sym (ess-symbol-at-point)))
       (if sym
           (ess-send-string (ess-get-process ess-local-process-name)
                            (concat "DT::datatable(" (symbol-name sym) ", options = list(autoWidth = TRUE), filter = list(position = 'top', clear = FALSE))\n") t)
         (message "No valid R symbol at point"))))
+
+  ;; (defun p3/r-view-df-at-point ()
+  ;;   "Display R data frame objects interactively using the DT package."
+  ;;   (interactive)
+  ;;   (let* ((object-at-point (thing-at-point 'symbol))
+  ;;          (object (if (and object-at-point (stringp object-at-point))
+  ;;                      object-at-point
+  ;;                    (completing-read "Choose data frame: " (ess-get-object-list ess-current-process-name)))))
+  ;;     (ess-send-string (format "DT::datatable(%s, options = list(autoWidth = TRUE), filter = list(position = 'top', clear = FALSE))\n" object))))
+
+  ;; Bind the function to a key for easy access
+  ;; (define-key ess-mode-map (kbd "C-c v") 'my/ess-display-dt-data-frame-at-point)
+
 #+END_SRC
 
 View df using DT (assuming running R session and exwm)
@@ -890,61 +944,99 @@ View df using DT (assuming running R session and exwm)
   ;;         (pop-to-buffer buff))))))
 #+END_SRC
 
+Archive R scripts in the current directory
 
 #+BEGIN_SRC emacs-lisp
-    (use-package ess-r-mode
-      :ensure ess
-      :hook ((inferior-ess-mode . p3/my-inferior-ess-init)
-             (ess-r-post-run-hook . set-projectile-wd-on-startup))
-      :bind (:map ess-mode-map
-                  ;; Re-map ess "run" to S-RET because of CUA mode
-                  ("C-<return>" . nil)
-                  ("S-<return>" . ess-eval-region-or-line-visibly-and-step)
-                  ;; Pipe operator
-                  ("C->" . add-pipe-and-step)
-                  ;; Run library/source commands at the top of the script
-                  ("C-c i" . p3/ess-library-and-source)
-                  ;; View data.frame in DT::datatable at a point
-                  ("C-c v" . p3/r-view-df-at-point))
-      :bind (:map inferior-ess-r-mode-map
-                  ("C-c v" . p3/r-view-df-at-point))
-      ;; :hook
-      ;; (ess-r-mode . (lambda () (yas-minor-mode)))
-      :config
-      ;; Start R in current working directory, don't let R ask user
-      (setq ess-ask-for-ess-directory nil
-            ;; Set indent at Google-standard 2-spaces.
-            ess-style 'RStudio
-            ;; Echo highlighted code in R buffer
-            ess-eval-visibly t;;'nowait
-            ;; Remove underscore funny-business
-            ess-toggle-underscore nil
-            ;; Turn off ess-flymake
-            ess-use-flymake nil
-            ;; Flycheck defaults
-            flycheck-lintr-linters "with_defaults(object_name_linter(c('snake_case','camelCase')), commented_code_linter = NULL, line_length_linter(90), single_quotes_linter=NULL)"
-            ;; Attempt to prevent process timeout hang
-            ess--command-default-timeout 1
-            ;; ess-can-eval-in-background nil
-            ;; Font lock all ESS keywords
-            ess-R-font-lock-keywords
-            (quote
-             ((ess-R-fl-keyword:modifiers . t)
-              (ess-R-fl-keyword:fun-defs . t)
-              (ess-R-fl-keyword:keywords . t)
-              (ess-R-fl-keyword:assign-ops)
-              (ess-R-fl-keyword:constants . t)
-              (ess-fl-keyword:fun-calls . t)
-              (ess-fl-keyword:numbers . t)
-              (ess-fl-keyword:operators . t)
-              (ess-fl-keyword:delimiters . t)
-              (ess-fl-keyword:= . t)
-              (ess-R-fl-keyword:F&T . t)
-              (ess-R-fl-keyword:%op% . t)))
-            ;; Prepend directory name to R process name
-            ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:project-or-simple)
-      :custom
-      (defvar ess--command-default-timeout most-positive-fixnum))
+  (defun p3/archive-r-scripts ()
+    (interactive)
+    (let* ((current-dir (file-name-directory (buffer-file-name)))
+           (project-root (projectile-project-root))
+           (archive-dir (expand-file-name "Archive" project-root))
+           (current-date (format-time-string "%Y-%m-%d"))
+           (date-dir (expand-file-name current-date archive-dir))
+           (current-time (format-time-string "%H-%M-%S"))
+           (time-dir (expand-file-name current-time date-dir))
+           (dir-name (file-name-nondirectory (directory-file-name current-dir))))
+      (if (and (member dir-name '("R" "src"))
+               project-root)
+          (progn
+            (unless (file-directory-p archive-dir)
+              (make-directory archive-dir))
+            (if (file-directory-p date-dir)
+                (progn
+                  (unless (file-directory-p time-dir)
+                    (make-directory time-dir))
+                  (p3/copy-r-files current-dir time-dir))
+              (make-directory date-dir)
+              (p3/copy-r-files current-dir date-dir))
+            (message "Archived R scripts successfully."))
+        (message "Current directory is not 'R' or 'src' or not associated with a project."))))
+
+  (defun p3/copy-r-files (source-dir target-dir)
+    "Copy all *.R and *.[Rr]md files from SOURCE-DIR to TARGET-DIR."
+    (dolist (file (directory-files source-dir t "\\.\\(R\\|r\\|Rmd\\|rmd\\)$"))
+      (copy-file file target-dir t)))
+
+  ;; ;; Bind the function to a key for easy access
+  ;; (global-set-key (kbd "C-c a") 'p3/archive-r-scripts)
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+  (use-package ess-r-mode
+    :ensure ess
+    :hook ((inferior-ess-mode . p3/my-inferior-ess-init)
+           (ess-r-post-run-hook . set-projectile-wd-on-startup)
+           ;; Treat "_" as part of a word when navigating across words
+           (ess-mode . (lambda () (modify-syntax-entry ?_ "w"))))
+    :bind (:map ess-mode-map
+                ;; Re-map ess "run" to S-RET because of CUA mode
+                ("C-<return>" . nil)
+                ("S-<return>" . ess-eval-region-or-line-visibly-and-step)
+                ;; Pipe operator
+                ("C->" . add-pipe-and-step)
+                ;; Run library/source commands at the top of the script
+                ("C-c i" . p3/ess-library-and-source)
+                ;; View data.frame in DT::datatable at a point
+                ("C-c v" . p3/r-view-df-at-point))
+    :bind (:map inferior-ess-r-mode-map
+                ("C-c v" . p3/r-view-df-at-point))
+    ;; :hook
+    ;; (ess-r-mode . (lambda () (yas-minor-mode)))
+    :config
+    ;; Start R in current working directory, don't let R ask user
+    (setq ess-ask-for-ess-directory nil
+          ;; Set indent at Google-standard 2-spaces.
+          ess-style 'RStudio
+          ;; Echo highlighted code in R buffer
+          ess-eval-visibly t;;'nowait
+          ;; Remove underscore funny-business
+          ess-toggle-underscore nil
+          ;; Turn off ess-flymake
+          ess-use-flymake nil
+          ;; Flycheck defaults
+          flycheck-lintr-linters "with_defaults(object_name_linter(c('snake_case','camelCase')), commented_code_linter = NULL, line_length_linter(90), single_quotes_linter=NULL)"
+          ;; Attempt to prevent process timeout hang
+          ess--command-default-timeout 1
+          ;; ess-can-eval-in-background nil
+          ;; Font lock all ESS keywords
+          ess-R-font-lock-keywords
+          (quote
+           ((ess-R-fl-keyword:modifiers . t)
+            (ess-R-fl-keyword:fun-defs . t)
+            (ess-R-fl-keyword:keywords . t)
+            (ess-R-fl-keyword:assign-ops)
+            (ess-R-fl-keyword:constants . t)
+            (ess-fl-keyword:fun-calls . t)
+            (ess-fl-keyword:numbers . t)
+            (ess-fl-keyword:operators . t)
+            (ess-fl-keyword:delimiters . t)
+            (ess-fl-keyword:                                                                                           = . t)
+            (ess-R-fl-keyword:F&T . t)
+            (ess-R-fl-keyword:%op% . t)))
+          ;; Prepend directory name to R process name
+          ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:project-or-simple)
+    :custom
+    (defvar ess--command-default-timeout most-positive-fixnum))
 #+END_SRC
 
 Windows work-around for not being able to find R
@@ -957,7 +1049,7 @@ Windows work-around for not being able to find R
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
-    (setq-default inferior-R-program-name "C:\\Program Files\\R\\R-4.3.2\\bin\\x64\\Rterm.exe"))
+    (setq-default inferior-R-program-name "C:\\Program Files\\R\\R-4.4.0\\bin\\x64\\Rterm.exe"))
 #+END_SRC
 
 #+BEGIN_SRC emacs-lisp
@@ -968,7 +1060,170 @@ Windows work-around for not being able to find R
   (add-hook 'markdown-mode-hook 'compile-rmd)
 #+END_SRC
 
-#+RESULTS:
+** GPT
+
+A GPT (and other LLM) co-pilot for Emacs
+
+#+BEGIN_SRC emacs-lisp
+  (use-package gptel
+    :config
+    ;; Set the default model to use
+    (setq-default gptel-model "gpt-4o-mini"
+                  gptel-backend (gptel-make-openai "gpt"
+                                  :stream t
+                                  :key #'gptel-api-key)))
+  ;; (setq-default gptel-model "gpt-4o-mini"))
+
+  ;; Add to .emacs or init.el
+  (when (eq system-type 'windows-nt)
+    ;; BUG?? There will be problems when using gptel-request directly on Windows. It needs to be enabled when used in the buffer started by the gptel command.
+    (setq-default gptel-use-curl nil)
+    (add-hook 'gptel-mode-hook '(lambda () (setq-local gptel-use-curl t))))
+
+  (defun gptel-get-task-prefix (task-type)
+    "Return the prompt prefix for the given TASK-TYPE."
+    (let ((task-prefixes '(("Write Code" . "You are a coding assistant operating inside a programming buffer wiithin Emacs. Your task is to write the code in the programming language indicated by the prompt prior to the semicolon. No delimiting characters, such as backticks, are necessary. Your response will be going directly into the script for the language indicated.\n\n")
+                           ("Refactor" . "You are a coding assistant operating inside Emacs. Your task is to refactor the code provided to you. Ensure the refactored code is more efficient, follows best practices, and maintains the original functionality. Provide the refactored code only; no explanations or comments. No delimiting characters, such as backticks, are necessary. Your response will be going directly into the script for the language indicated.\n\n")
+                           ("Generate Documentation" . "You are a coding assistant operating inside Emacs. Your task is to generate detailed documentation for the code provided. Include comments, docstrings, or external documentation as appropriate. Provide the documentation only as a commented block appropriate to the language given by the prompt; no explanations or additional text in your response. Do not replicate the code condatined in the prompt in your response and do not delimit the text using backticks.\n\n")
+                           ("Write Tests" . "You are a coding assistant operating inside Emacs. Your task is to write unit tests or test cases for the code provided. Ensure the tests cover various scenarios and edge cases. Provide the tests only; no explanations or additional text. No delimiting characters, such as backticks, are necessary. Your response will be going directly into the script for the language indicated.\n\n")
+                           ("Translate Code" . "You are a coding assistant operating inside Emacs. Your task is to translate the provided code from one programming language to another. Ensure the translated code maintains the original functionality. Provide the translated code only; no explanations, delimiters or additional text. No delimiting characters, such as backticks, are necessary. Your response will be going directly into the script for the language indicated.\n\n")
+                           ("Send Line" . "You are a coding assistant operating inside Emacs. Your task is to assist with the following line of code. Provide your response as a comment in the style of the programming language of the code provided.\n\n"))))
+      (cdr (assoc task-type task-prefixes))))
+
+  (defun gptel-construct-prompt (prefix code)
+    "Construct the prompt by concatenating PREFIX and CODE."
+    (concat prefix code))
+
+  (defun gptel-get-selected-region ()
+    "Get the selected region as a string. Return nil if no region is selected."
+    (if (use-region-p)
+        (buffer-substring-no-properties (region-beginning) (region-end)) nil))
+
+  (defun gptel-get-code (task-type)
+    "Get the selected code or current line based on TASK-TYPE."
+    (if (string-equal task-type "Send Line")
+        (thing-at-point 'line t)
+      (gptel-get-selected-region)))
+
+  (defun gptel-prepare-prompt (task-type selected-code)
+    "Prepare the prompt to be sent to GPT based on TASK-TYPE and SELECTED-CODE."
+    (let ((prefix (gptel-get-task-prefix task-type)))
+      (gptel-construct-prompt prefix selected-code)))
+
+  (defun gptel-handle-response (response task-type insert-type use-buffer start-reg end-reg)
+    "Handle the RESPONSE from GPT based on TASK-TYPE and INSERT-TYPE."
+    ;; (message "Debug: Received response: %s" response)
+    (if (eq insert-type 'message)
+        (message "GPT response: %s" response)
+      (with-current-buffer use-buffer
+        ;; (message "Current buffer name: %s" (buffer-name))
+        (gptel-handle-insert response insert-type start-reg end-reg))
+      (message "%s completed and %s." task-type
+               (pcase insert-type
+                 ("replace" "inserted")
+                 ("append" "appended")
+                 ("prepend" "prepended")))))
+
+  (defun gptel-send-request (prompt task-type insert-type start-reg end-reg)
+    "Send a request to GPT with the given PROMPT, and process the response with gptel-handle-response."
+    (gptel-request
+        prompt
+      :buffer (current-buffer)
+      :context (list :task task-type
+                     :insert insert-type
+                     :start start-reg
+                     :end end-reg)
+      :callback (lambda (response info)
+                  (if (not response)
+                      (message "ChatGPT response failed with: %s" (plist-get info :status))
+                    (let* ((context (plist-get info :context))
+                           (task-type (plist-get context :task))
+                           (insert-type (plist-get context :insert))
+                           (start-reg (plist-get context :start))
+                           (end-reg (plist-get context :end))
+                           (use-buffer (plist-get info :buffer)))
+                      (gptel-handle-response response task-type insert-type use-buffer start-reg end-reg))))))
+
+  (defun gptel-handle-insert (response insert-type start-reg end-reg)
+    "Insert RESPONSE based on INSERT-TYPE. INSERT-TYPE should be 'replace, 'append, or 'prepend."
+    ;; (message "Response structure: %S" response)
+    ;; (message "Type of response: %s" (type-of response))
+    ;; (message "Previous region starts at: %d, ends at: %d" start-reg end-reg)
+    (save-excursion
+      (cond
+       ((string= insert-type "replace")
+        (delete-region start-reg end-reg)
+        (insert (format "%s" response)))  ;; Ensure response is a string
+       ((string= insert-type "append")
+        (goto-char end-reg)
+        (insert "\n" (format "%s" response)))  ;; Ensure response is a string
+       ((string= insert-type "prepend")
+        (goto-char start-reg)
+        (insert (format "%s\n\n" response))))))  ;; Ensure response is a string
+
+  (defun gptel-handle-task (task-type insert-type)
+    "Handle sending the last marked region or current line to GPT based on the TASK-TYPE and INSERT-TYPE. INSERT-TYPE should be 'replace, 'append, 'prepend, or 'message."
+    (let* ((start-reg (region-beginning))
+           (end-reg (region-end))
+           (selected-code (gptel-get-code task-type))
+           (prompt (gptel-prepare-prompt task-type selected-code)))
+      ;; (model (gptel-select-model)))
+      (if selected-code
+          (gptel-send-request prompt task-type insert-type start-reg end-reg)
+        (message "No region or line selected."))))
+
+  (defun gptel-send-current-line ()
+    "Send the current line to GPT via gptel."
+    (interactive)
+    (gptel-handle-task "Send Line" "message"))
+
+  (defun gptel-write-tests ()
+    "Send the last marked region to GPT for test writing and append the response."
+    (interactive)
+    (gptel-handle-task "Write Tests" "append"))
+
+  (defun gptel-write-code ()
+    "Send the last marked region to GPT as instructions for writing a function."
+    (interactive)
+    (gptel-handle-task "Write Code" "replace"))
+
+  (defun gptel-refactor-region ()
+    "Send the last marked region to GPT for refactoring and replace it with the response."
+    (interactive)
+    (gptel-handle-task "Refactor" "replace"))
+
+  (defun gptel-generate-doc ()
+    "Send the last marked region to GPT for documentation generation and prepend the response."
+    (interactive)
+    (gptel-handle-task "Generate Documentation" "prepend"))
+
+  (defun gptel-translate-code ()
+    "Send the last marked region to GPT for language translation and append the response."
+    (interactive)
+    (gptel-handle-task "Translate Code" "append"))
+
+  ;; (global-set-key (kbd "C-c g l") 'gptel-send-current-line)
+  ;; (global-set-key (kbd "C-c g r") 'gptel-refactor-region)
+  ;; (global-set-key (kbd "C-c g d") 'gptel-generate-doc)
+  ;; (global-set-key (kbd "C-c g t") 'gptel-write-tests)
+  ;; (global-set-key (kbd "C-c g c") 'gptel-translate-code)
+
+  ;; (defun gptel-select-model ()
+  ;;   "Prompt the user to select a model, falling back on the default model if Enter is pressed."
+  ;;   (completing-read "Select model (press Enter for default): "
+  ;;                    '("gpt-3.5-turbo" "gpt-4") nil t nil nil gptel-model))
+
+  ;; (defun gptel-handle-request-message (prompt model task-type)
+  ;;   "Send PROMPT to GPT using MODEL and display the response as a message."
+  ;;   (gptel-send-request
+  ;;    prompt
+  ;;    model
+  ;;    (lambda (response)
+  ;;      (message "GPT response: %s" response))))
+
+  #+END_SRC
+
+
 ** Flycheck
 Flycheck mode (but not for org/latex).
 
@@ -977,36 +1232,40 @@ Flycheck mode (but not for org/latex).
     :hook (after-init . global-flycheck-mode)
     :config
     (setq flycheck-global-modes '(not LaTeX-mode latex-mode org-mode))
-    (setq flycheck-python-flake8-executable "flake8"))
-#+END_SRC
-** Flyspell
-
-#+BEGIN_SRC emacs-lisp
-  (use-package ispell
-    :defer nil
-    :ensure nil
-    :init
-    (if (eq system-type 'windows-nt)
-        (progn
-          (setenv "DICTPATH" "C:/msys64/mingw64/share/hunspell")
-          (setenv "DICTIONARY" "en_US")		;C:/msys64/mingw64/share/hunspell/
-          (setq ispell-program-name "C:/msys64/mingw64/bin/hunspell.exe")))
-    (if (eq system-type 'gnu/linux)
-        (setq ispell-program-name "hunspell"))
-    :config
-    (setq ispell-local-dictionary "en_US"
-          ispell-dictionary "english"
-          ispell-local-dictionary-alist
-          '(("en_US" "[[:alpha:]]" "[^[:alpha:]]" "[']" nil ("-d" "en_US") nil utf-8))))
+    (setq flycheck-python-flake8-executable "flake8")
+    (setq flycheck-checker-error-threshold 1000))
 #+END_SRC
 ** Buffers, Windows, and Frames
-
 Transpose horizontal/vertical split
 
 #+BEGIN_SRC emacs-lisp
   (use-package transpose-frame
     :defer t
     :bind ("C-c t" . transpose-frame))
+#+END_SRC
+
+OLD: Always make R buffer split right & R code buffer split left, as shown [[https://lambdaland.org/posts/2022-12-27_repl_buffer_on_the_right/][here]]
+
+#+BEGIN_SRC emacs-lisp
+  (add-to-list 'display-buffer-alist
+             '("\\*R\\*"
+               (display-buffer-reuse-window
+                display-buffer-in-side-window)
+               (side . right)
+               (slot . 1)
+               (window-width . 0.5)
+               (reusable-frames . visible)))
+  ;; (setq display-buffer-alist
+  ;;       '(((major-mode . inferior-ess-r-mode)
+  ;;          (display-buffer-reuse-mode-window
+  ;;           display-buffer-in-direction)
+  ;;          (direction . rightmost))
+
+  ;;         ((not (major-mode . inferior-ess-r-mode))
+  ;;          (display-buffer-reuse-mode-window
+  ;;           display-buffer-same-window
+  ;;           display-buffer-in-direction)
+  ;;          (direction . leftmost))))
 #+END_SRC
 
 Set ace-window shortcut
@@ -1016,7 +1275,7 @@ Set ace-window shortcut
     :bind ("M-o" . ace-window))
 #+END_SRC
 
-Re-do window configurations
+Cycle through history of window configurations
 
 #+BEGIN_SRC emacs-lisp
   (use-package winner
@@ -1114,7 +1373,61 @@ Process latex pdf with bibtex [[https://tex.stackexchange.com/questions/197707/u
 "pdflatex -interaction nonstopmode -output-directory %o %f"
 "pdflatex -interaction nonstopmode -output-directory %o %f"))
 #+END_SRC
+
 ** Git
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/check-git-installed ()
+    "Check if Git is installed."
+    (unless (executable-find "git")
+      (error "Git is not installed. Please install Git first.")))
+
+  (defun p3/get-commit-message ()
+    "Prompt the user for a commit message. If empty, use the current date and time."
+    (let ((commit-message (read-string "Commit message (leave blank for default): ")))
+      (if (string= commit-message "")
+          (format "Update: %s" (format-time-string "%Y-%m-%d %H:%M:%S"))
+        commit-message)))
+
+  (defun p3/construct-git-commands (config-file final-message notes-dir)
+    "Construct the git commands for the config file and notes directory."
+    (let ((config-commands (format "cd %s && git add %s && git commit -m \"%s\" && git push"
+                                   (file-name-directory config-file) config-file final-message))
+          (notes-commands (format "cd %s && git add -u && git commit -m \"%s\" && git push"
+                                  notes-dir final-message)))
+      (list config-commands notes-commands)))
+
+  (defun p3/execute-git-commands (commands)
+    "Execute the git commands and return the results."
+    (let ((config-result (shell-command (nth 0 commands)))
+          (notes-result (shell-command (nth 1 commands))))
+      (list config-result notes-result)))
+
+  (defun p3/git-commit-and-push-emacs-config (&optional commit-message)
+    "Automatically add, commit, and push changes in the Emacs config file and org notes directory.
+  If COMMIT-MESSAGE is provided, use it; otherwise, use the current date and time as the commit message."
+    (interactive
+     (p3/check-git-installed)
+     (list (p3/get-commit-message)))
+    (let* ((config-file (expand-file-name "~/.emacs.d/config.org"))
+           (notes-dir (expand-file-name "~/org/notes"))
+           (final-message (if (string= commit-message "") (p3/get-commit-message) commit-message))
+           (commands (p3/construct-git-commands config-file final-message notes-dir)))
+      (cond
+       ((not (file-exists-p config-file))
+        (message "The config file %s does not exist." config-file))
+       ((not (file-directory-p notes-dir))
+        (message "The notes directory %s does not exist." notes-dir))
+       (t
+        (let ((results (p3/execute-git-commands commands)))
+          (if (and (zerop (nth 0 results)) (zerop (nth 1 results)))
+              (message "Committed and pushed changes to config file and notes directory.")
+            (message "Failed to commit and push changes. Config result: %d, Notes result: %d"
+                     (nth 0 results) (nth 1 results))))))))
+
+  ;; Bind the function to a key for easy access
+  (global-set-key (kbd "C-c C-g") 'p3/git-commit-and-push-emacs-config)
+#+END_SRC
 
 Use magit to manage git
 
@@ -1124,6 +1437,18 @@ Use magit to manage git
     :config
     (with-eval-after-load 'magit-mode
       (add-hook 'after-save-hook 'magit-after-save-refresh-status t)))
+#+END_SRC
+
+Close all magit-related buffers
+
+#+BEGIN_SRC emacs-lisp
+  (defun close-magit-buffers ()
+    "Close all Magit related buffers."
+    (interactive)
+    (dolist (buffer (buffer-list))
+      (when (or (string-prefix-p "magit-" (buffer-name buffer))
+                (string-prefix-p "*magit" (buffer-name buffer)))
+        (kill-buffer buffer))))
 #+END_SRC
 
 Git changes in the fringe
@@ -1137,7 +1462,39 @@ Git changes in the fringe
   (setq-default right-fringe-width 20)
 #+END_SRC
 
+** Minibuffer
+
+Save minibuffer history
+
+#+BEGIN_SRC emacs-lisp
+(use-package savehist
+  :config
+  (setq history-length 25)
+  (savehist-mode 1))
+#+END_SRC
+
+Include additional information in minibuffer
+
+#+BEGIN_SRC emacs-lisp
+  (use-package marginalia
+  ;; Bind `marginalia-cycle' locally in the minibuffer.  To make the binding
+  ;; available in the *Completions* buffer, add it to the
+  ;; `completion-list-mode-map'.
+  :bind (:map minibuffer-local-map
+         ("M-A" . marginalia-cycle))
+  :init (marginalia-mode))
+#+END_SRC
+
+Fancy minibuffer completion and display
+
+#+BEGIN_SRC emacs-lisp
+  (use-package vertico
+    :init
+    (vertico-mode))
+#+END_SRC
+
 ** Multiple cursors
+
 #+BEGIN_SRC emacs-lisp
   (use-package multiple-cursors
   :bind (("C-S-c C-S-c" . mc/edit-lines)
@@ -1229,6 +1586,51 @@ Turn org-mode bullets into utf-8 characters
   ;;       :init (add-hook 'org-mode-hook 'org-bullets-mode))
 #+END_SRC
 
+Sort TODOs
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/org-sort-todos ()
+    "Move all completed TODOs (DONE) to the bottom of the list."
+    (interactive)
+    (save-excursion
+      (goto-char (point-min))
+      (let ((inhibit-read-only t)
+            (org-inhibit-blocking t))
+        (while (re-search-forward org-heading-regexp nil t)
+          (let ((element (org-element-at-point)))
+            (when (string= (org-element-property :todo-keyword element) "DONE")
+              (org-cut-subtree)
+              (goto-char (point-max))
+              (yank)
+              (insert "\n")))))))
+
+  ;; Add the function to a keybinding for convenience
+  (define-key org-mode-map (kbd "C-c C-x C-o") 'p3/org-sort-todos)
+#+END_SRC
+
+Export org to ms-office files!
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/org-export-to-office (output-format &optional template-file)
+  "Export the current Org file to PPTX or DOCX format using Pandoc with an optional TEMPLATE-FILE."
+  (interactive
+   (list (completing-read "Output format (pptx/docx): " '("pptx" "docx"))
+         (read-file-name "Template file (leave blank for none): " nil nil t)))
+  (if (executable-find "pandoc")
+      (let* ((org-file (buffer-file-name))
+             (output-file (concat (file-name-sans-extension org-file) (if (string= output-format "pptx") ".pptx" ".docx")))
+             (template-option (if (and template-file (not (string= template-file "")))
+                                  (format "--reference-doc=%s" (shell-quote-argument template-file))
+                                ""))
+             (command (format "pandoc %s -o %s %s" org-file output-file template-option)))
+        (shell-command command)
+        (message "Converted %s to %s" org-file output-file))
+    (message "Pandoc is not installed. Please install Pandoc first.")))
+
+;; Bind the function to a key for easy access
+(define-key org-mode-map (kbd "C-c C-o") 'p3/org-export-to-office)
+#+END_SRC
+
 Make sure org-mode calls evince (gnome pdf viewer) to [[https://emacs.stackexchange.com/questions/28037/org-mode-file-hyperlinks-always-use-doc-view-cant-force-it-to-use-external-pdf][open up pdf files]]
 
 #+BEGIN_SRC emacs-lisp
@@ -1251,6 +1653,15 @@ Set region to checkboxes
         (insert "- [ ] ")
         (forward-line))
       (beginning-of-line)))
+#+END_SRC
+
+Include additional states in TODO cycle, as shown [[https://christiantietze.de/posts/2021/02/emacs-org-todo-doing-done-checkbox-cycling/][here]]
+
+#+BEGIN_SRC emacs-lisp
+    (setq org-todo-keywords
+        (quote ((sequence "TODO(t)" "WAIT(w)" "|" "DONE(d)")))
+        org-todo-keyword-faces
+        '(("WAIT" .  "DarkOrange" )))
 #+END_SRC
 
 ** org-agenda
@@ -1286,6 +1697,7 @@ org-agenda defaults, as shown [[https://orgmode.org/worg/org-tutorials/org-custo
                                                         '(:immediate-finish t)))))
           (apply #'org-roam-node-insert args)))
 #+END_SRC
+
 
 [[https://www.reddit.com/r/orgmode/comments/vvx54j/comment/ifn434u/?utm_source=share&utm_medium=web2x&context=3][Search roam for...]] anything
 
@@ -1381,10 +1793,10 @@ Require poly-R
     :config
       ;; Get rid of annoying appended text after weaving/exporting
       (setq polymode-exporter-output-file-format "%s"
-polymode-weaver-output-file-format "%s"
-;; Do not display output file or process buffer
-polymode-display-output-file nil
-polymode-display-process-buffers nil))
+            polymode-weaver-output-file-format "%s"
+            ;; Do not display output file or process buffer
+            polymode-display-output-file nil
+            polymode-display-process-buffers nil))
 #+END_SRC
 ** Presentation
 
@@ -1478,6 +1890,15 @@ Do presentations with org-present
     (projectile-register-project-type 'r #'p3/projectile-r-project-file-p
                                       :project-file #'p3/projectile-r-project-p))
 #+END_SRC
+
+Find helper functions file in project
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/projectile-open-r-helper-functions-file ()
+    (interactive)
+    (projectile--find-file . "R/99_helperFunctions.R"))
+#+END_SRC
+
 ** Python
 
 #+BEGIN_SRC emacs-lisp
@@ -1522,7 +1943,7 @@ Do presentations with org-present
       ;; :hook (python-mode lambda() (pyvenv-workon "myvenv"))
       :init
       (if (eq system-type 'windows-nt)
-          (add-hook 'python-mode-hook (lambda() (pyvenv-workon "~/Miniconda3/envs/kt"))))
+          (add-hook 'python-mode-hook (lambda() (pyvenv-workon "~/python/envs/myvenv"))))
       (if (eq system-type 'gnu/linux)
           (add-hook 'python-mode-hook (lambda() (pyvenv-workon "myvenv"))))
       ;; Enable elpy after loading a python buffer
@@ -1536,7 +1957,7 @@ Do presentations with org-present
       (remove-hook 'elpy-modules 'elpy-module-flymake)
       ;; Resolve indent issues
       (if (eq system-type 'windows-nt)
-          (setq python-shell-interpreter "~/Miniconda3/python.exe"))
+          (setq python-shell-interpreter "C:/Users/ppanko/AppData/Local/miniconda3/python.exe"))
         (if (eq system-type 'gnu/linux)
           (setq python-shell-interpreter "python"))
       (setq python-indent-guess-indent-offset t
@@ -1557,16 +1978,50 @@ Do presentations with org-present
 #+END_SRC
 ** Shell
 
-Shell-pop in linux; git's bin/bash in windows
+#+BEGIN_SRC emacs-lisp
+  (defvar linuxy-environment-path nil
+    "Global variable to store the path to the latest Rtools version.")
+
+  (defun find-latest-rtools-version ()
+    "Find and return the path of the latest version of Rtools installed, only on Windows."
+    (when (eq system-type 'windows-nt)
+      (let* ((rtools-root "C:")
+             (dirs (directory-files rtools-root t "^rtools[0-9]+$" t))
+             (versions (mapcar (lambda (dir)
+                                 (string-to-number (substring (file-name-nondirectory dir) 6)))
+                               dirs))
+             (latest-version (car (sort versions #'>))))
+        (if latest-version
+            (let ((latest-rtools-path (concat rtools-root "/" (concat "rtools" (number-to-string latest-version)))))
+              (message "Latest Rtools version detected: %s" latest-rtools-path)
+              latest-rtools-path)
+          (message "No Rtools versions found.")
+          nil))))
+
+  ;; Update exec-path to include the latest Rtools
+  (when (eq system-type 'windows-nt)
+    (let ((latest-rtools-path (find-latest-rtools-version)))
+      (when latest-rtools-path
+        (setq rtools-path latest-rtools-path)
+        (setq mingw64-path (concat rtools-path "/mingw64/bin/"))
+        (setq linuxy-environment-path (concat rtools-path "/usr/bin/"))
+        (setq exec-path (cons linuxy-environment-path exec-path))
+        (message "Updated exec-path with: %s" linuxy-environment-path))))
+#+END_SRC
+
+
+Shell-pop in linux; Rtools bin/zsh in windows
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
       (progn
-        (setq explicit-shell-file-name "C:/msys64/usr/bin/bash.exe"
-              shell-file-name explicit-shell-file-name
-              explicit-bash.exe-args '("--login" "-i"))
-        (add-to-list 'exec-path "C:/msys64/usr/bin")
+        (setq explicit-shell-file-name (concat linuxy-environment-path "zsh.exe")
+              shell-file-name "bash";;explicit-shell-file-name
+              explicit-bash.exe-args '("--login"))
+        (setenv "SHELL" shell-file-name)
+        ;;(add-to-list 'exec-path "C:/msys64/usr/bin")
         (global-set-key (kbd "C-x C-u") 'shell)))
+  ;; (add-hook 'comint-output-filter-functions 'comint-strip-ctrl-m)))
   (when (eq system-type 'gnu/linux)
     (use-package shell-pop
       :bind (("C-x C-u" . shell-pop))
@@ -1575,6 +2030,26 @@ Shell-pop in linux; git's bin/bash in windows
       (setq shell-pop-term-shell "/bin/bash")
       ;; need to do this manually or not picked up by `shell-pop'
       (shell-pop--set-shell-type 'shell-pop-shell-type shell-pop-shell-type)))
+#+END_SRC
+** Spelling
+
+#+BEGIN_SRC emacs-lisp
+  (use-package ispell
+    :defer nil
+    :ensure nil
+    :init
+    (if (eq system-type 'windows-nt)
+        (progn
+          (setenv "DICTPATH" (concat mingw64-path "/hunspell"))
+          (setenv "DICTIONARY" "en_US")		;C:/msys64/mingw64/share/hunspell/
+          (setq ispell-program-name (concat mingw64-path "/hunspell.exe"))))
+    (if (eq system-type 'gnu/linux)
+        (setq ispell-program-name "hunspell"))
+    :config
+    (setq ispell-local-dictionary "en_US"
+          ispell-dictionary "english"
+          ispell-local-dictionary-alist
+          '(("en_US" "[[:alpha:]]" "[^[:alpha:]]" "[']" nil ("-d" "en_US") nil utf-8))))
 #+END_SRC
 ** TRAMP
 
@@ -1611,8 +2086,14 @@ Don't ring the bell when running up against buffer end
   (blink-cursor-mode 0)
 
   (setq inhibit-startup-message t)
-  (setq initial-scratch-message nil)
   (setq ring-bell-function 'ignore)
+#+END_SRC
+
+Empty the initial scratch message and set the major mode to elisp
+
+#+BEGIN_SRC emacs-lisp
+  (setq initial-scratch-message nil)
+  (setq initial-major-mode 'lisp-interaction-mode)
 #+END_SRC
 
 Set ashes theme
@@ -1677,7 +2158,7 @@ Light-up matching parens.
   (show-paren-mode t)
   (setq show-paren-when-point-inside-paren t)
 #+END_SRC
-* Encoding
+* Encoding & fonts
 
 Use utf-8 everywhere all the time
 
@@ -1690,10 +2171,19 @@ Use utf-8 everywhere all the time
   (set-selection-coding-system 'utf-8)
 #+END_SRC
 
+Install unicode fonts
+
+#+BEGIN_SRC emacs-lisp
+  (use-package unicode-fonts
+    :after doom-themes
+    :init
+    (unicode-fonts-setup))
+#+END_SRC
+
 Set Rmd to CRLF
 
 #+BEGIN_SRC emacs-lisp
-  (add-to-list 'file-coding-system-alist '("\\.Rmd\\'" . utf-8-dos))
+    (add-to-list 'file-coding-system-alist '("\\.Rmd\\'" . utf-8-dos))
 #+END_SRC
 
 * Not in use
@@ -1819,3 +2309,13 @@ ivy bibtex plugin
   ;; :bind
   ;; (("C-c n B" . ivy-bibtex)))
 #+END_SRC
+
+Start server on Windows
+
+#+BEGIN_SRC emacs-lisp
+  ;; (when (eq system-type 'windows-nt)
+  ;;   (progn
+  ;;     (require 'server)
+  ;;     (server-start)))
+#+END_SRC
+>>>>>>> origin/master
