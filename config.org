@@ -6,8 +6,8 @@ Start up in fullscreen
   (add-to-list 'default-frame-alist '(fullscreen . maximized))
 #+END_SRC
 
-The rest of the stuff in this section was stolen from [[https://github.com/hrs/dotfiles/blob/master/emacs/.emacs.d/configuration.org][here]],
-thanks Harry Schwartz.
+The rest of the stuff in this section was stolen from [[https://github.com/hrs/dotfiles/blob/master/emacs/.emacs.d/configuration.org][here]];
+thanks to Harry Schwartz.
 
 Have use-package install any unavailable packages.
 
@@ -48,14 +48,6 @@ Load secrets if they exist
     (load-file secrets-file))
 #+END_SRC
 
-Start server on Windows
-
-#+BEGIN_SRC emacs-lisp
-  ;; (when (eq system-type 'windows-nt)
-  ;;   (progn
-  ;;     (require 'server)
-  ;;     (server-start)))
-#+END_SRC
 * General
 
 Default web browser
@@ -1070,352 +1062,167 @@ Windows work-around for not being able to find R
 
 ** GPT
 
-A gpt (and other llm) models!
+A GPT (and other LLM) co-pilot for Emacs
 
 #+BEGIN_SRC emacs-lisp
-  ;; (use-package gptel
-  ;;   :config
-  ;;   ;; Set the default model to use
-  ;;   (setq-default ;;gptel-backend
-  ;;                 ;; (gptel-make-openai "gpt"
-  ;;                 ;;   :stream t
-  ;;                 ;;   :models '("gpt-3.5-turbo", "gpt-4")
-  ;;                 ;;   :curl-args '("--cacert /c/Users/ppanko/Documents/Repos/cert/ca-bundle.trust.crt"))
-  ;;    gptel-model "gpt-3.5-turbo")
-  ;;   ;; keybinds   (global-set-key (kbd "C-c g t") 'gptel-org-set-topic)
-  ;;   (global-set-key (kbd "C-c g s") 'gptel-send))
-#+END_SRC
+  (use-package gptel
+    :config
+    ;; Set the default model to use
+    (setq-default gptel-model "gpt-4o-mini"
+                  gptel-backend (gptel-make-openai "gpt"
+                                  :stream t
+                                  :key #'gptel-api-key)))
+  ;; (setq-default gptel-model "gpt-4o-mini"))
 
-gptel helper functions
+  ;; Add to .emacs or init.el
+  (when (eq system-type 'windows-nt)
+    ;; BUG?? There will be problems when using gptel-request directly on Windows. It needs to be enabled when used in the buffer started by the gptel command.
+    (setq-default gptel-use-curl nil)
+    (add-hook 'gptel-mode-hook '(lambda () (setq-local gptel-use-curl t))))
 
-#+BEGIN_SRC emacs-lisp
+  (defun gptel-get-task-prefix (task-type)
+    "Return the prompt prefix for the given TASK-TYPE."
+    (let ((task-prefixes '(("Write Code" . "You are a coding assistant operating inside a programming buffer wiithin Emacs. Your task is to write the code in the programming language indicated by the prompt prior to the semicolon. No delimiting characters, such as backticks, are necessary. Your response will be going directly into the script for the language indicated.\n\n")
+                           ("Refactor" . "You are a coding assistant operating inside Emacs. Your task is to refactor the code provided to you. Ensure the refactored code is more efficient, follows best practices, and maintains the original functionality. Provide the refactored code only; no explanations or comments. No delimiting characters, such as backticks, are necessary. Your response will be going directly into the script for the language indicated.\n\n")
+                           ("Generate Documentation" . "You are a coding assistant operating inside Emacs. Your task is to generate detailed documentation for the code provided. Include comments, docstrings, or external documentation as appropriate. Provide the documentation only as a commented block appropriate to the language given by the prompt; no explanations or additional text in your response. Do not replicate the code condatined in the prompt in your response and do not delimit the text using backticks.\n\n")
+                           ("Write Tests" . "You are a coding assistant operating inside Emacs. Your task is to write unit tests or test cases for the code provided. Ensure the tests cover various scenarios and edge cases. Provide the tests only; no explanations or additional text. No delimiting characters, such as backticks, are necessary. Your response will be going directly into the script for the language indicated.\n\n")
+                           ("Translate Code" . "You are a coding assistant operating inside Emacs. Your task is to translate the provided code from one programming language to another. Ensure the translated code maintains the original functionality. Provide the translated code only; no explanations, delimiters or additional text. No delimiting characters, such as backticks, are necessary. Your response will be going directly into the script for the language indicated.\n\n")
+                           ("Send Line" . "You are a coding assistant operating inside Emacs. Your task is to assist with the following line of code. Provide your response as a comment in the style of the programming language of the code provided.\n\n"))))
+      (cdr (assoc task-type task-prefixes))))
 
-    (use-package gptel
-      :config
-      ;; Set the default model to use
-      (setq-default gptel-model "gpt-3.5-turbo"))
+  (defun gptel-construct-prompt (prefix code)
+    "Construct the prompt by concatenating PREFIX and CODE."
+    (concat prefix code))
 
-    ;; Add to .emacs or init.el
-    (when (eq system-type 'windows-nt)
-      ;; BUG?? There will be problems when using gptel-request directly on Windows. It needs to be enabled when used in the buffer started by the gptel command.
-      (setq-default gptel-use-curl nil)
-      (add-hook 'gptel-mode-hook '(lambda () (setq-local gptel-use-curl t))))
+  (defun gptel-get-selected-region ()
+    "Get the selected region as a string. Return nil if no region is selected."
+    (if (use-region-p)
+        (buffer-substring-no-properties (region-beginning) (region-end)) nil))
 
-    ;; (defun gptel-send-request (prompt model callback)
-    ;;   "Send a request to GPT with the given PROMPT and MODEL, and execute CALLBACK on the response."
-    ;;   (let ((gptel-model model))  ;; Use the selected or default model
-    ;;     (gptel-request prompt callback)))
+  (defun gptel-get-code (task-type)
+    "Get the selected code or current line based on TASK-TYPE."
+    (if (string-equal task-type "Send Line")
+        (thing-at-point 'line t)
+      (gptel-get-selected-region)))
 
+  (defun gptel-prepare-prompt (task-type selected-code)
+    "Prepare the prompt to be sent to GPT based on TASK-TYPE and SELECTED-CODE."
+    (let ((prefix (gptel-get-task-prefix task-type)))
+      (gptel-construct-prompt prefix selected-code)))
 
-    (defun gptel-get-selected-region ()
-      "Get the selected region as a string. Return nil if no region is selected."
-      (if (use-region-p)
-          (buffer-substring-no-properties (region-beginning) (region-end)) nil))
+  (defun gptel-handle-response (response task-type insert-type use-buffer start-reg end-reg)
+    "Handle the RESPONSE from GPT based on TASK-TYPE and INSERT-TYPE."
+    ;; (message "Debug: Received response: %s" response)
+    (if (eq insert-type 'message)
+        (message "GPT response: %s" response)
+      (with-current-buffer use-buffer
+        ;; (message "Current buffer name: %s" (buffer-name))
+        (gptel-handle-insert response insert-type start-reg end-reg))
+      (message "%s completed and %s." task-type
+               (pcase insert-type
+                 ("replace" "inserted")
+                 ("append" "appended")
+                 ("prepend" "prepended")))))
 
-    (defun gptel-select-model ()
-      "Prompt the user to select a model, falling back on the default model if Enter is pressed."
-      (completing-read "Select model (press Enter for default): "
-                       '("gpt-3.5-turbo" "gpt-4") nil t nil nil gptel-model))
+  (defun gptel-send-request (prompt task-type insert-type start-reg end-reg)
+    "Send a request to GPT with the given PROMPT, and process the response with gptel-handle-response."
+    (gptel-request
+        prompt
+      :buffer (current-buffer)
+      :context (list :task task-type
+                     :insert insert-type
+                     :start start-reg
+                     :end end-reg)
+      :callback (lambda (response info)
+                  (if (not response)
+                      (message "ChatGPT response failed with: %s" (plist-get info :status))
+                    (let* ((context (plist-get info :context))
+                           (task-type (plist-get context :task))
+                           (insert-type (plist-get context :insert))
+                           (start-reg (plist-get context :start))
+                           (end-reg (plist-get context :end))
+                           (use-buffer (plist-get info :buffer)))
+                      (gptel-handle-response response task-type insert-type use-buffer start-reg end-reg))))))
 
+  (defun gptel-handle-insert (response insert-type start-reg end-reg)
+    "Insert RESPONSE based on INSERT-TYPE. INSERT-TYPE should be 'replace, 'append, or 'prepend."
+    ;; (message "Response structure: %S" response)
+    ;; (message "Type of response: %s" (type-of response))
+    ;; (message "Previous region starts at: %d, ends at: %d" start-reg end-reg)
+    (save-excursion
+      (cond
+       ((string= insert-type "replace")
+        (delete-region start-reg end-reg)
+        (insert (format "%s" response)))  ;; Ensure response is a string
+       ((string= insert-type "append")
+        (goto-char end-reg)
+        (insert "\n" (format "%s" response)))  ;; Ensure response is a string
+       ((string= insert-type "prepend")
+        (goto-char start-reg)
+        (insert (format "%s\n\n" response))))))  ;; Ensure response is a string
 
-    (defun gptel-get-task-prefix (task-type)
-      "Return the prompt prefix for the given TASK-TYPE."
-      (let ((task-prefixes '(("Refactor" . "You are a coding assistant operating inside Emacs. Your task is to refactor the code provided to you. Ensure the refactored code is more efficient, follows best practices, and maintains the original functionality. Provide the refactored code only; no explanations or comments.\n\n")
-                             ("Generate Documentation" . "You are a coding assistant operating inside Emacs. Your task is to generate detailed documentation for the code provided. Include comments, docstrings, or external documentation as appropriate. Provide the documentation only; no explanations or additional text.\n\n")
-                             ("Write Tests" . "You are a coding assistant operating inside Emacs. Your task is to write unit tests or test cases for the code provided. Ensure the tests cover various scenarios and edge cases. Provide the tests only; no explanations or additional text.\n\n")
-                             ("Translate Code" . "You are a coding assistant operating inside Emacs. Your task is to translate the provided code from one programming language to another. Ensure the translated code maintains the original functionality. Provide the translated code only; no explanations or additional text.\n\n")
-                             ("Send Line" . "You are a coding assistant operating inside Emacs. Your task is to assist with the following line of code. Provide your response as a comment in the style of the programming language of the code provided.\n\n"))))
-        (cdr (assoc task-type task-prefixes))))
+  (defun gptel-handle-task (task-type insert-type)
+    "Handle sending the last marked region or current line to GPT based on the TASK-TYPE and INSERT-TYPE. INSERT-TYPE should be 'replace, 'append, 'prepend, or 'message."
+    (let* ((start-reg (region-beginning))
+           (end-reg (region-end))
+           (selected-code (gptel-get-code task-type))
+           (prompt (gptel-prepare-prompt task-type selected-code)))
+      ;; (model (gptel-select-model)))
+      (if selected-code
+          (gptel-send-request prompt task-type insert-type start-reg end-reg)
+        (message "No region or line selected."))))
 
-    (defun gptel-construct-prompt (prefix code)
-      "Construct the prompt by concatenating PREFIX and CODE."
-      (concat prefix code))
+  (defun gptel-send-current-line ()
+    "Send the current line to GPT via gptel."
+    (interactive)
+    (gptel-handle-task "Send Line" "message"))
 
-    ;; (defun gptel-handle-insert (response insert-type)
-    ;;   "Insert RESPONSE based on INSERT-TYPE. INSERT-TYPE should be 'replace, 'append, or 'prepend."
-    ;;   (if (use-region-p)
-    ;;       (let ((start (region-beginning))
-    ;;             (end (region-end)))
-    ;;         (message "Previous region starts at: %d, ends at: %d" start end)
-    ;;         (save-excursion
-    ;;           (cond
-    ;;            ((eq insert-type "replace")
-    ;;             (goto-char start)
-    ;;             (delete-region start end)
-    ;;             (insert response))
-    ;;            ((eq insert-type "append")
-    ;;             (goto-char end)
-    ;;             (insert "\n" response))
-    ;;            ((eq insert-type "prepend")
-    ;;             (goto-char start)
-    ;;             (insert response "\n")))))))
+  (defun gptel-write-tests ()
+    "Send the last marked region to GPT for test writing and append the response."
+    (interactive)
+    (gptel-handle-task "Write Tests" "append"))
 
-    (defun gptel-handle-insert (response insert-type)
-      "Insert RESPONSE based on INSERT-TYPE. INSERT-TYPE should be 'replace, 'append, or 'prepend."
-      ;; (if (use-region-p)
-      (message "insert type is:" insert-type)
-      (message "Previous region starts at: %d, ends at: %d" (region-beginning) (region-end))
-      (save-excursion
-        (cond
-         ((eq insert-type "replace")
-          (goto-char (region-beginning))
-          (delete-region (region-beginning) (region-end))
-          (insert response))
-         ((eq insert-type "append")
-          (goto-char (region-end))
-          (insert "\n" response))
-         ((eq insert-type "prepend")
-          (goto-char (region-beginning))
-          (insert response "\n")))))
+  (defun gptel-write-code ()
+    "Send the last marked region to GPT as instructions for writing a function."
+    (interactive)
+    (gptel-handle-task "Write Code" "replace"))
 
+  (defun gptel-refactor-region ()
+    "Send the last marked region to GPT for refactoring and replace it with the response."
+    (interactive)
+    (gptel-handle-task "Refactor" "replace"))
 
-    (defun gptel-get-code (task-type)
-      "Get the selected code or current line based on TASK-TYPE."
-      (if (string-equal task-type "Send Line")
-          (thing-at-point 'line t)
-        (gptel-get-selected-region)))
+  (defun gptel-generate-doc ()
+    "Send the last marked region to GPT for documentation generation and prepend the response."
+    (interactive)
+    (gptel-handle-task "Generate Documentation" "prepend"))
 
-    (defun gptel-prepare-prompt (task-type selected-code)
-      "Prepare the prompt to be sent to GPT based on TASK-TYPE and SELECTED-CODE."
-      (let ((prefix (gptel-get-task-prefix task-type)))
-        (gptel-construct-prompt prefix selected-code)))
+  (defun gptel-translate-code ()
+    "Send the last marked region to GPT for language translation and append the response."
+    (interactive)
+    (gptel-handle-task "Translate Code" "append"))
 
-    (defun gptel-handle-response (response task-type insert-type)
-      "Handle the RESPONSE from GPT based on TASK-TYPE and INSERT-TYPE."
-      (message "Debug: Received response: %s" response)  ;; Debugging statement
-      (if (eq insert-type 'message)
-          (message "GPT response: %s" response)
-        (gptel-handle-insert response insert-type)
-        (message "%s completed and %s." task-type
-                 (pcase insert-type
-                   ("replace" "inserted")
-                   ("append" "appended")
-                   ("prepend" "prepended")))))
+  ;; (global-set-key (kbd "C-c g l") 'gptel-send-current-line)
+  ;; (global-set-key (kbd "C-c g r") 'gptel-refactor-region)
+  ;; (global-set-key (kbd "C-c g d") 'gptel-generate-doc)
+  ;; (global-set-key (kbd "C-c g t") 'gptel-write-tests)
+  ;; (global-set-key (kbd "C-c g c") 'gptel-translate-code)
 
-    (defun gptel-send-request (prompt task-type insert-type)
-      "Send a request to GPT with the given PROMPT, and process the response with gptel-handle-response."
-      (gptel-request
-          prompt
-        :context (list :insert insert-type
-                       :task task-type)
-        :callback (lambda (response info)
-                    (if (not response)
-                        (message "ChatGPT response failed with: %s" (plist-get info :status))
-                      ;; Log the raw response and info for debugging
-                      ;; (message "Debug: Raw Response: %s" response)
-                      ;; (message "Debug: Info: %s" info)
-                      (let* ((context (getf info :context))  ; Access the nested context
-                             (task-type (getf context :task))  ; Access first additional argument
-                             (insert-type (getf context :insert)))                       ;; Attempt to parse as JSON, and pass the response to gptel-handle-response
-                        ;; (condition-case err
-                        ;;     (let ((json-response (if (stringp response)
-                        ;;                              (json-parse-string response)
-                        ;;                            response)))
-                        ;;       (message "Debug: JSON Response Parsed Successfully: %s" json-response)
-                        ;;       (gptel-handle-response json-response task-type insert-type))  ;; Call gptel-handle-response
-                        ;;   (json-error
-                        ;;    (message "Error parsing JSON: %s" (error-message-string err))
-                        ;;    ;; Call gptel-handle-response with the raw response
-                        (gptel-handle-response response task-type insert-type))))))
+  ;; (defun gptel-select-model ()
+  ;;   "Prompt the user to select a model, falling back on the default model if Enter is pressed."
+  ;;   (completing-read "Select model (press Enter for default): "
+  ;;                    '("gpt-3.5-turbo" "gpt-4") nil t nil nil gptel-model))
 
-    (defun gptel-handle-task (task-type insert-type)
-      "Handle sending the last marked region or current line to GPT based on the TASK-TYPE and INSERT-TYPE.
-                     INSERT-TYPE should be 'replace, 'append, 'prepend, or 'message."
-      (let* ((selected-code (gptel-get-code task-type))
-             (prompt (gptel-prepare-prompt task-type selected-code))
-             (model (gptel-select-model)))
-        (if selected-code
-            (gptel-send-request prompt task-type insert-type)  ;; No need for a callback here
-          (message "No region or line selected."))))
-
-
-    ;; (defun gptel-send-request (prompt callback)
-    ;;    "Send a request to GPT with the given PROMPT and execute CALLBACK on the response."
-    ;;    (gptel-request
-    ;;        prompt
-    ;;      :callback (lambda (response info)
-    ;;                  (if (not response)
-    ;;                      (message "ChatGPT response failed with: %s" (plist-get info :status))
-    ;;                    ;; Log the raw response and info for debugging
-    ;;                    (message "Debug: Raw Response: %s" response)
-    ;;                    (message "Debug: Info: %s" info)
-    ;;                    ;; Attempt to parse as JSON, and pass the response to the callback
-    ;;                    (condition-case err
-    ;;                        (let ((json-response (if (stringp response)
-    ;;                                                 (json-parse-string response)
-    ;;                                               response)))
-    ;;                          (message "Debug: JSON Response Parsed Successfully: %s" json-response)
-    ;;                          (funcall callback json-response))  ;; Call the passed callback with the parsed response
-    ;;                      (json-error
-    ;;                       (message "Error parsing JSON: %s" (error-message-string err))
-    ;;                       ;; Call the callback with the raw response even if parsing fails
-    ;;                       (funcall callback response)))))))
-
-    ;; (defun gptel-handle-task (task-type insert-type)
-    ;;   "Handle sending the last marked region or current line to GPT based on the TASK-TYPE and INSERT-TYPE.
-    ;;  INSERT-TYPE should be 'replace, 'append, 'prepend, or 'message."
-    ;;   (let* ((selected-code (gptel-get-code task-type))
-    ;;          (prompt (gptel-prepare-prompt task-type selected-code))
-    ;;          (model (gptel-select-model)))  ;; Use model if needed in future expansions
-    ;;     (if selected-code
-    ;;         (gptel-send-request
-    ;;          prompt
-    ;;          (lambda (response)
-    ;;            (gptel-handle-response response task-type insert-type))) ;; Pass gptel-handle-response as callback
-    ;;       (message "No region or line selected."))))
-
-
-
-    (defun gptel-handle-request-message (prompt model task-type)
-      "Send PROMPT to GPT using MODEL and display the response as a message."
-      (gptel-send-request
-       prompt
-       model
-       (lambda (response)
-         (message "GPT response: %s" response))))
-
-    (defun gptel-send-current-line ()
-      "Send the current line to GPT via gptel."
-      (interactive)
-      (gptel-handle-task "Send Line" "message"))
-
-    (defun gptel-write-tests ()
-      "Send the last marked region to GPT for test writing and append the response."
-      (interactive)
-      (gptel-handle-task "Write Tests" "append"))
-
-
-    (defun gptel-refactor-region ()
-      "Send the last marked region to GPT for refactoring and replace it with the response."
-      (interactive)
-      (gptel-handle-task "Refactor" "replace"))
-
-    (defun gptel-generate-doc ()
-      "Send the last marked region to GPT for documentation generation and prepend the response."
-      (interactive)
-      (gptel-handle-task "Generate Documentation" "prepend"))
-
-    (defun gptel-translate-code ()
-      "Send the last marked region to GPT for language translation and append the response."
-      (interactive)
-      (gptel-handle-task "Translate Code" "append"))
-
-
-
-    ;; (defun my-callback (response)
-    ;;   "Callback function to print the response."
-    ;;   (message "Received response: %s" response)
-    ;;   (message "Response Type: %s" (type-of response)))
-
-    ;; (defun test-gptel-send-request ()
-    ;;   "Function to test `gptel-send-request` and print the response."
-    ;;   (interactive)
-    ;;   (gptel-send-request "Hello, GPT!" #'my-callback))
-
-    ;; (defun gptel-send-request (prompt callback)
-    ;;   "Send a request to GPT with the given PROMPT and execute CALLBACK on the response."
-    ;;   (gptel-request prompt
-    ;;     :callback (lambda (response proc-info)
-    ;;                 (let ((http-msg (plist-get proc-info :status))
-    ;;                       (error (plist-get proc-info :error)))
-    ;;                   (message "Debug: HTTP message: %s, Error: %s, Response: %s" http-msg error response)  ;; Debugging statement
-    ;;                   (if (or error (not (stringp response)))
-    ;;                       (message "Error: Invalid response received from GPT: %s" (or error http-msg))
-    ;;                     (funcall callback response))))))
-
-
-
-    ;; (defun gptel-rewrite-and-replace (bounds &optional directive)
-    ;;   (interactive
-    ;;    (list
-    ;;     (cond
-    ;;      ((use-region-p) (cons (region-beginning) (region-end)))
-    ;;      ((derived-mode-p 'text-mode)
-    ;;       (list (bounds-of-thing-at-point 'sentence)))
-    ;;      (t (cons (line-beginning-position) (line-end-position))))
-    ;;     (and current-prefix-arg
-    ;;          (read-string "ChatGPT Directive: "
-    ;;                       "You are a prose editor. Rewrite my prompt more professionally."))))
-    ;;   (gptel-request
-    ;;       (buffer-substring-no-properties (car bounds) (cdr bounds)) ;the prompt
-    ;;     :system (or directive "You are a prose editor. Rewrite my prompt more professionally.")
-    ;;     :buffer (current-buffer)
-    ;;     :context (cons (set-marker (make-marker) (car bounds))
-    ;;                    (set-marker (make-marker) (cdr bounds)))
-    ;;     :callback
-    ;;     (lambda (response info)
-    ;;       (if (not response)
-    ;;           (message "ChatGPT response failed with: %s" (plist-get info :status))
-    ;;         (let* ((bounds (plist-get info :context))
-    ;;                (beg (car bounds))
-    ;;                (end (cdr bounds))
-    ;;                (buf (plist-get info :buffer)))
-    ;;           (with-current-buffer buf
-    ;;             (save-excursion
-    ;;               (goto-char beg)
-    ;;               (kill-region beg end)
-    ;;               (insert response)
-    ;;               (set-marker beg nil)
-    ;;               (set-marker end nil)
-    ;;               (message "Rewrote line. Original line saved to kill-ring."))))))))
-
+  ;; (defun gptel-handle-request-message (prompt model task-type)
+  ;;   "Send PROMPT to GPT using MODEL and display the response as a message."
+  ;;   (gptel-send-request
+  ;;    prompt
+  ;;    model
+  ;;    (lambda (response)
+  ;;      (message "GPT response: %s" response))))
 
   #+END_SRC
 
-gptel copilot functions
-
-  #+BEGIN_SRC emacs-lisp
-        ;; (defun gptel-send-current-line ()
-        ;;   "Send the current line to GPT via gptel."
-        ;;   (interactive)
-        ;;   (gptel-handle-task "Send Line" 'message))
-
-        ;; (defun gptel-write-tests ()
-        ;;   "Send the last marked region to GPT for test writing and append the response."
-        ;;   (interactive)
-        ;;   (gptel-handle-task "Write Tests" 'append))
-
-
-        ;; (defun gptel-refactor-region ()
-        ;;   "Send the last marked region to GPT for refactoring and replace it with the response."
-        ;;   (interactive)
-        ;;   (gptel-handle-task "Refactor" 'replace))
-
-
-        ;; (defun gptel-generate-doc ()
-        ;;   "Send the last marked region to GPT for documentation generation and prepend the response."
-        ;;   (interactive)
-        ;;   (gptel-handle-task "Generate Documentation" 'prepend))
-
-
-        ;; (defun gptel-translate-code ()
-        ;;   "Send the last marked region to GPT for language translation and append the response."
-        ;;   (interactive)
-        ;;   (gptel-handle-task "Translate Code" 'append))
-
-
-    (global-set-key (kbd "C-c g l") 'gptel-send-current-line)
-    (global-set-key (kbd "C-c g r") 'gptel-refactor-region)
-    (global-set-key (kbd "C-c g d") 'gptel-generate-doc)
-    (global-set-key (kbd "C-c g t") 'gptel-write-tests)
-    (global-set-key (kbd "C-c g c") 'gptel-translate-code)
-
-    ;; (defun gptel-curl--parse-response-advice (orig-fun &rest args)
-    ;;   "Advice to add detailed logging to `gptel-curl--parse-response`."
-    ;;   (condition-case err
-    ;;       (let ((response (apply orig-fun args)))
-    ;;         (message "Debug: Parsed Response: %s" response)
-    ;;         response)
-    ;;     (error
-    ;;      (message "Error in `gptel-curl--parse-response`: %s" (error-message-string err))
-    ;;      (message "%s" (with-output-to-string (backtrace)))
-    ;;      (signal (car err) (cdr err)))))
-
-    ;; (advice-add 'gptel-curl--parse-response :around #'gptel-curl--parse-response-advice)
-
-
-
-#+END_SRC
 
 ** Flycheck
 Flycheck mode (but not for org/latex).
@@ -1425,7 +1232,8 @@ Flycheck mode (but not for org/latex).
     :hook (after-init . global-flycheck-mode)
     :config
     (setq flycheck-global-modes '(not LaTeX-mode latex-mode org-mode))
-    (setq flycheck-python-flake8-executable "flake8"))
+    (setq flycheck-python-flake8-executable "flake8")
+    (setq flycheck-checker-error-threshold 1000))
 #+END_SRC
 ** Frames and buffers
 Transpose horizontal/vertical split
@@ -1436,7 +1244,7 @@ Transpose horizontal/vertical split
     :bind ("C-c t" . transpose-frame))
 #+END_SRC
 
-OLD: Always make R buffer split right & R code buffer split left, as shown [[https://lambdaland.org/posts/2022-12-27_repl_buffer_on_the_right/][here]] now
+OLD: Always make R buffer split right & R code buffer split left, as shown [[https://lambdaland.org/posts/2022-12-27_repl_buffer_on_the_right/][here]]
 
 #+BEGIN_SRC emacs-lisp
   (add-to-list 'display-buffer-alist
@@ -2104,7 +1912,7 @@ Find helper functions file in project
 ** Shell
 
 #+BEGIN_SRC emacs-lisp
-     (defvar linuxy-environment-path nil
+  (defvar linuxy-environment-path nil
     "Global variable to store the path to the latest Rtools version.")
 
   (defun find-latest-rtools-version ()
@@ -2135,8 +1943,7 @@ Find helper functions file in project
 #+END_SRC
 
 
-
-Shell-pop in linux; git's bin/bash in windows
+Shell-pop in linux; Rtools bin/zsh in windows
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
@@ -2434,4 +2241,13 @@ ivy bibtex plugin
   ;;       bibtex-completion-additional-search-fields '(keywords))
   ;; :bind
   ;; (("C-c n B" . ivy-bibtex)))
+#+END_SRC
+
+Start server on Windows
+
+#+BEGIN_SRC emacs-lisp
+  ;; (when (eq system-type 'windows-nt)
+  ;;   (progn
+  ;;     (require 'server)
+  ;;     (server-start)))
 #+END_SRC
