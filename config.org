@@ -1233,7 +1233,7 @@ Flycheck mode (but not for org/latex).
     :config
     (setq flycheck-global-modes '(not LaTeX-mode latex-mode org-mode))
     (setq flycheck-python-flake8-executable "flake8")
-    (setq flycheck-checker-error-threshold 1000))
+    (setq flycheck-checker-error-threshold 1000)))
 #+END_SRC
 ** Frames and buffers
 Transpose horizontal/vertical split
