@@ -478,7 +478,7 @@ Create (roxygenated) header for R scripts
   missingPkgs <- pkgs[!pkgs %%in%% installed.packages()]
   install.packages(missingPkgs)
   ## Load all required packages
-  lapply(pkgs, library, character.only = TRUE)
+  invisible(lapply(pkgs, library, character.only = TRUE))
 
   source(here(\"R/99_helperFunctions.R\"))
 
@@ -1222,7 +1222,6 @@ A GPT (and other LLM) co-pilot for Emacs
   ;;      (message "GPT response: %s" response))))
 
   #+END_SRC
-
 
 ** Flycheck
 Flycheck mode (but not for org/latex).
