@@ -1234,7 +1234,7 @@ Flycheck mode (but not for org/latex).
     (setq flycheck-python-flake8-executable "flake8")
     (setq flycheck-checker-error-threshold 1000))
 #+END_SRC
-** Frames and buffers
+** Buffers, Windows, and Frames
 Transpose horizontal/vertical split
 
 #+BEGIN_SRC emacs-lisp
@@ -1293,6 +1293,62 @@ Restart emacs (and emacs-daemon)
   (use-package avy
     :bind (("M-s" . avy-goto-word-1)))
 #+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/get-local-buffer-mode ()
+    (interactive)
+    (buffer-local-value 'major-mode (get-buffer (frame-parameter nil 'name))))
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/is-current-buffer-mode-inferior-ess-r-mode ()
+    (interactive)
+    (eq 'inferior-ess-r-mode (p3/get-local-buffer-mode)))
+
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+  (setq display-buffer-alist
+        '(
+          ((major-mode . inferior-ess-r-mode)
+           ;; (and (major-mode . inferior-ess-r-mode)
+           ;;      (not (p3/is-current-buffer-mode-inferior-ess-r-mode)))
+           (display-buffer-reuse-mode-window
+            display-buffer-in-direction)
+           (direction . rightmost))
+
+          ;; ((and (not (major-mode . inferior-ess-r-mode))
+          ;;       ((derived-mode-p . text-mode)))
+          ;;  (display-buffer-reuse-window))
+
+
+          ((not (major-mode . inferior-ess-r-mode))
+           ;; (and (major-mode . inferior-ess-r-mode)
+           ;;      (not (p3/is-current-buffer-mode-inferior-ess-r-mode)))
+           (display-buffer-reuse-mode-window
+            display-buffer-same-window
+            display-buffer-in-direction)
+           (direction . leftmost))
+
+          ;; ((and (major-mode . inferior-ess-r-mode)
+          ;;       (p3/is-current-buffer-mode-inferior-ess-r-mode))
+          ;;  (display-buffer-reuse-mode-window))
+           ;;  display-buffer-in-direction)
+           ;; (direction . leftmost))
+
+          ;; ((and (not (major-mode . inferior-ess-r-mode))
+          ;;       (not (p3/is-current-buffer-derived-from-inferior-ess-r-mode)))
+          ;;  (display-buffer-reuse-window))
+
+          ;; ((and (not (major-mode . inferior-ess-r-mode))
+          ;;       ((p3/is-current-buffer-derived-from-inferior-ess-r-mode)))
+          ;;  (display-buffer-in-direction)
+          ;;  (direction . leftmost))
+
+
+          ))
+#+END_SRC
+
 ** LaTeX
 
 Flyspell for LaTeX
@@ -1306,6 +1362,17 @@ Auto-fill
 #+BEGIN_SRC emacs-lisp
   (add-hook 'LaTeX-mode-hook 'turn-on-auto-fill)
 #+END_SRC
+
+Process latex pdf with bibtex [[https://tex.stackexchange.com/questions/197707/using-bibtex-from-org-mode-bbl-and-aux-files-are-incorrectly-generated][as shown here]]
+
+#+BEGIN_SRC emacs-lisp
+(setq org-latex-pdf-process
+      '("pdflatex -interaction nonstopmode -output-directory %o %f"
+"bibtex %b"
+"pdflatex -interaction nonstopmode -output-directory %o %f"
+"pdflatex -interaction nonstopmode -output-directory %o %f"))
+#+END_SRC
+
 ** Git
 
 #+BEGIN_SRC emacs-lisp
@@ -2250,3 +2317,4 @@ Start server on Windows
   ;;     (require 'server)
   ;;     (server-start)))
 #+END_SRC
+>>>>>>> origin/master
