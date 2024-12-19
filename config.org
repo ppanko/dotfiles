@@ -1221,7 +1221,7 @@ A GPT (and other LLM) co-pilot for Emacs
   ;;    (lambda (response)
   ;;      (message "GPT response: %s" response))))
 
-  #+END_SRC
+#+END_SRC
 
 ** Flycheck
 Flycheck mode (but not for org/latex).
@@ -2317,4 +2317,4 @@ Start server on Windows
   ;;     (require 'server)
   ;;     (server-start)))
 #+END_SRC
->>>>>>> origin/master
+
