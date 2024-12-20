@@ -944,6 +944,34 @@ View df using DT (assuming running R session and exwm)
   ;;         (pop-to-buffer buff))))))
 #+END_SRC
 
+Replace a write statement with a read statement in a region
+
+#+BEGIN_SRC emacs-lisp
+  (defun write-to-read-conversion-multi ()
+    "Convert all `write`-style and `save`-style calls to corresponding `read`-style calls.
+  Handles variations like `writeRDS`, `saveRDS`, `write_rds`, `write_csv`, etc."
+    (interactive)
+    (let* ((start (if (use-region-p)
+                      (region-beginning)
+                    (point-min)))
+           (end (if (use-region-p)
+                    (region-end)
+                  (point-max))))
+      (save-excursion
+        (goto-char start)
+        (while (re-search-forward
+                "\\(write\\|save\\)_?\\([a-zA-Z_]+\\)(\\([^,]+\\),\\s-*dataout(\"\\([^\"]+\\)\")"
+                end t)
+          (let* ((operation (match-string 1))    ;; "write" or "save"
+                 (format (match-string 2))       ;; "RDS", "rds", "csv", etc.
+                 (data (match-string 3))         ;; Variable being written
+                 (filename (match-string 4))     ;; Filename in `dataout`
+                 (read-operation (concat "read" (if (string-equal operation "save") "" "_") format))) ;; Handle with/without underscore
+            (replace-match (format "%s <- %s(latest(\"%s\"))"
+                                   data read-operation filename) t nil))))))
+
+#+END_SRC
+
 Archive R scripts in the current directory
 
 #+BEGIN_SRC emacs-lisp
@@ -2317,4 +2345,3 @@ Start server on Windows
   ;;     (require 'server)
   ;;     (server-start)))
 #+END_SRC
-
