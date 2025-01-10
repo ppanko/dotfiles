@@ -614,30 +614,30 @@ Move lines from [[https://www.emacswiki.org/emacs/MoveLine][emacswiki]]
 Open files using default external programs via dired as shown [[https://stackoverflow.com/questions/25109968/in-emacs-how-to-open-file-in-external-program-without-errors][here]].
 
 #+BEGIN_SRC emacs-lisp
-  (defun p3/open-in-external-app (&optional file)
-  "Open the current file or dired marked files in external app.
+    (defun p3/open-in-external-app (&optional file)
+    "Open the current file or dired marked files in external app.
 
-The app is chosen from your OS's preference."
-  (interactive)
-  (let ( doIt
-         (myFileList
-          (cond
-           ((string-equal major-mode "dired-mode") (dired-get-marked-files))
-           ((not file) (list (buffer-file-name)))
-           (file (list file)))))
+  The app is chosen from your OS's preference."
+    (interactive)
+    (let ( doIt
+           (myFileList
+            (cond
+             ((string-equal major-mode "dired-mode") (dired-get-marked-files))
+             ((not file) (list (buffer-file-name)))
+             (file (list file)))))
 
-    (setq doIt (if (<= (length myFileList) 5)
-                   t
-                 (y-or-n-p "Open more than 5 files? ") ) )
+      (setq doIt (if (<= (length myFileList) 5)
+                     t
+                   (y-or-n-p "Open more than 5 files? ") ) )
 
-    (when doIt
-      (cond
-       ((string-equal system-type "windows-nt")
-        (mapc (lambda (fPath) (w32-shell-execute "open" (replace-regexp-in-string "/" "\\" fPath t t)) ) myFileList))
-       ((string-equal system-type "darwin")
-        (mapc (lambda (fPath) (shell-command (format "open \"%s\"" fPath)) )  myFileList) )
-       ((string-equal system-type "gnu/linux")
-        (mapc (lambda (fPath) (let ((process-connection-type nil)) (start-process "" nil "xdg-open" fPath)) ) myFileList) ) ) ) ) )
+      (when doIt
+        (cond
+         ((string-equal system-type "windows-nt")
+          (mapc (lambda (fPath) (w32-shell-execute "open" (replace-regexp-in-string "/" "\\" fPath t t)) ) myFileList))
+         ((string-equal system-type "darwin")
+          (mapc (lambda (fPath) (shell-command (format "open \"%s\"" fPath)) )  myFileList) )
+         ((string-equal system-type "gnu/linux")
+          (mapc (lambda (fPath) (let ((process-connection-type nil)) (start-process "" nil "xdg-open" fPath)) ) myFileList) ) ) ) ) )
 #+END_SRC
 
 Get the curl version, just for fun
@@ -1045,6 +1045,8 @@ Archive R scripts in the current directory
           flycheck-lintr-linters "with_defaults(object_name_linter(c('snake_case','camelCase')), commented_code_linter = NULL, line_length_linter(90), single_quotes_linter=NULL)"
           ;; Attempt to prevent process timeout hang
           ess--command-default-timeout 1
+          ;; Prevent workspace save prompt
+          inferior-R-args "--no-save"
           ;; ess-can-eval-in-background nil
           ;; Font lock all ESS keywords
           ess-R-font-lock-keywords
@@ -1088,6 +1090,22 @@ Windows work-around for not being able to find R
   (add-hook 'markdown-mode-hook 'compile-rmd)
 #+END_SRC
 
+** GnuPG
+
+Prevent emacs from mangling the path to gpg on Windows, as shown [[https://emacs.stackexchange.com/questions/60278/gpg-no-public-key][here]]
+
+#+BEGIN_SRC emacs-lisp
+  (when (eq system-type 'windows-nt)
+    (defun convert-windows-to-linux-path (windows-path)
+      "Convert a Windows-style PATH (e.g., c:/foo) to Linux-style (/c/foo)."
+      (let* ((path (replace-regexp-in-string "\\\\" "/" windows-path)) ;; Replace backslashes
+             (path (replace-regexp-in-string "^\\([a-zA-Z]\\):" "/\\1" path))) ;; Add leading '/'
+        (downcase path)))
+
+    (setq package-gnupghome-dir
+          (convert-windows-to-linux-path (expand-file-name "elpa/gnupg" user-emacs-directory))))
+#+END_SRC
+
 ** GPT
 
 A GPT (and other LLM) co-pilot for Emacs
@@ -1096,17 +1114,7 @@ A GPT (and other LLM) co-pilot for Emacs
   (use-package gptel
     :config
     ;; Set the default model to use
-    (setq-default gptel-model "gpt-4o-mini"
-                  gptel-backend (gptel-make-openai "gpt"
-                                  :stream t
-                                  :key #'gptel-api-key)))
-  ;; (setq-default gptel-model "gpt-4o-mini"))
-
-  ;; Add to .emacs or init.el
-  (when (eq system-type 'windows-nt)
-    ;; BUG?? There will be problems when using gptel-request directly on Windows. It needs to be enabled when used in the buffer started by the gptel command.
-    (setq-default gptel-use-curl nil)
-    (add-hook 'gptel-mode-hook '(lambda () (setq-local gptel-use-curl t))))
+    (setq gptel-model 'gpt-4o-mini))
 
   (defun gptel-get-task-prefix (task-type)
     "Return the prompt prefix for the given TASK-TYPE."
@@ -2047,8 +2055,8 @@ Shell-pop in linux; Rtools bin/zsh in windows
               explicit-bash.exe-args '("--login"))
         (setenv "SHELL" shell-file-name)
         ;;(add-to-list 'exec-path "C:/msys64/usr/bin")
-        (global-set-key (kbd "C-x C-u") 'shell)))
-  ;; (add-hook 'comint-output-filter-functions 'comint-strip-ctrl-m)))
+        (global-set-key (kbd "C-x C-u") 'shell))
+      (add-hook 'comint-output-filter-functions 'comint-strip-ctrl-m))
   (when (eq system-type 'gnu/linux)
     (use-package shell-pop
       :bind (("C-x C-u" . shell-pop))
@@ -2143,28 +2151,31 @@ Telephone line mode-line
 Doom modeline
 
 #+BEGIN_SRC emacs-lisp
-    (use-package doom-modeline
-      :hook (after-init . doom-modeline-mode)
-      :custom
-      (doom-modeline-height 25)
-      (doom-modeline-bar-width 5)
-      (doom-modeline-icon t)
-      (doom-modeline-major-mode-icon t)
-      (doom-modeline-major-mode-color-icon t)
-      (doom-modeline-buffer-file-name-style 'truncate-upto-project)
-      (doom-modeline-buffer-state-icon t)
-      (doom-modeline-buffer-modification-icon t)
-      (doom-modeline-minor-modes nil)
-      (doom-modeline-lsp nil)
-      (doom-modeline-enable-word-count nil)
-      (doom-modeline-buffer-encoding t)
-      (doom-modeline-indent-info nil)
-      (doom-modeline-checker-simple-format t)
-      (doom-modeline-vcs-max-length 12)
-      (doom-modeline-env-version t)
-      (doom-modeline-github-timer nil)
-      (doom-modeline-gnus-timer nil))
+  (use-package doom-modeline
+    :hook (after-init . doom-modeline-mode)
+    :custom
+    (doom-modeline-height 25)
+    (doom-modeline-bar-width 5)
+    (doom-modeline-icon t)
+    (doom-modeline-major-mode-icon t)
+    (doom-modeline-major-mode-color-icon t)
+    (doom-modeline-buffer-file-name-style 'truncate-upto-project)
+    (doom-modeline-buffer-state-icon t)
+    (doom-modeline-buffer-modification-icon t)
+    (doom-modeline-minor-modes nil)
+    (doom-modeline-lsp nil)
+    (doom-modeline-enable-word-count nil)
+    (doom-modeline-buffer-encoding t)
+    (doom-modeline-indent-info nil)
+    (doom-modeline-checker-simple-format t)
+    (doom-modeline-vcs-max-length 12)
+    (doom-modeline-env-version t)
+    (doom-modeline-github-timer nil)
+    (doom-modeline-gnus-timer nil))
   (set-face-attribute 'mode-line nil :height 135 :background "#383E54")
+
+  ;; Do not update this package automatically (I don't want to download a new icon set...)
+  (put 'doom-modeline 'package-pin t)
 #+END_SRC
 
 Set border color
