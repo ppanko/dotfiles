@@ -1981,7 +1981,7 @@ Find helper functions file in project
     (if (eq system-type 'windows-nt)
         (add-hook 'python-mode-hook (lambda() (pyvenv-workon "~/python/envs/myvenv"))))
     (if (eq system-type 'gnu/linux)
-        (advice-add 'inferior-python-mode-hook :before #'autoload-venv))
+        (add-hook 'elpy-mode-hook #'autoload-venv))
         ;; (add-hook 'python-mode-hook (lambda() (pyvenv-workon "myvenv"))))
     ;; Enable elpy after loading a python buffer
     ;; as shown here: https://github.com/jorgenschaefer/elpy/issues/1566
