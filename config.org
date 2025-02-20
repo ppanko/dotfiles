@@ -1969,9 +1969,7 @@ Find helper functions file in project
     ;; Re-map "run" to S-RET because of CUA mode.
     :bind (:map elpy-mode-map
                 ("C-<return>" . nil)
-                ("S-<return>" . (lambda ()
-                                  (interactive)
-                                  (save-excursion (elpy-shell-send-statement-and-step))))
+                ("S-<return>" . elpy-shell-send-statement-and-step)
                 ("C-c C-c" . 'elpy-send-region-or-para-and-step)
                 ("C-<up>" . backward-paragraph)
                 ("C-<down>" . forward-paragraph)
