@@ -2018,8 +2018,7 @@ Find helper functions file in project
                (default-venv "myvenv")  ;; Fallback environment
                (final-venv (if (file-directory-p venv-path) venv-name default-venv)))  ;; Choose venv
 
-          (pyvenv-workon final-venv)  ;; Activate the chosen venv
-          (message "Activated virtual environment: %s" final-venv))))  ;; Display message
+          (pyvenv-workon final-venv))))  ;; Activate the chosen venv
 #+END_SRC
 
 ** Rainbow
