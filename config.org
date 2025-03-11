@@ -1164,6 +1164,7 @@ A GPT (and other LLM) co-pilot for Emacs
     "Send a request to GPT with the given PROMPT, and process the response with gptel-handle-response."
     (gptel-request
         prompt
+      ;; :stream t
       :buffer (current-buffer)
       :context (list :task task-type
                      :insert insert-type
