@@ -406,7 +406,7 @@ Insert r chunk in polymode, as shown here [[https://emacs.stackexchange.com/ques
     (forward-line -1))
 #+END_SRC
 
-Create R project directory structure
+Create R project directory structure #TODO: shiny - create app dir, pkg dev: create inst dir
 
 #+BEGIN_SRC emacs-lisp
     (defun p3/create-r-project-dir-structure (name)
