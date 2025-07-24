@@ -1079,7 +1079,7 @@ Windows work-around for not being able to find R
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
-    (setq-default inferior-R-program-name "C:\\Program Files\\R\\R-4.4.0\\bin\\x64\\Rterm.exe"))
+    (setq-default inferior-R-program-name "C:\\Program Files\\R\\R-4.5.0\\bin\\x64\\Rterm.exe"))
 #+END_SRC
 
 #+BEGIN_SRC emacs-lisp
