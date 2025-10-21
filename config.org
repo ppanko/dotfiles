@@ -62,8 +62,8 @@ Set font and size
   (when (eq system-type 'windows-nt)
     (set-face-attribute 'default nil :family "Consolas" :height 125))
   (when (eq system-type 'gnu/linux)
-    (set-face-attribute 'default nil :family "Inconsolata" :height 140)
-    (setq-default line-spacing 20))
+    (set-face-attribute 'default nil :family "Inconsolata" :height 140))
+    ;; (setq-default line-spacing 20))
 #+END_SRC
 
 Delete seleted text when typing over it.
@@ -637,7 +637,7 @@ Open files using default external programs via dired as shown [[https://stackove
          ((string-equal system-type "darwin")
           (mapc (lambda (fPath) (shell-command (format "open \"%s\"" fPath)) )  myFileList) )
          ((string-equal system-type "gnu/linux")
-          (mapc (lambda (fPath) (let ((process-connection-type nil)) (start-process "" nil "xdg-open" fPath)) ) myFileList) ) ) ) ) )
+          (mapc (lambda (fPath) (let ((process-connection-type nil)) (start-process "" nil "xdg-open" fPath)) ) myFileList))))))
 #+END_SRC
 
 Get the curl version, just for fun
@@ -972,6 +972,7 @@ Replace a write statement with a read statement in a region
 
 #+END_SRC
 
+
 Archive R scripts in the current directory
 
 #+BEGIN_SRC emacs-lisp
@@ -1271,6 +1272,7 @@ Flycheck mode (but not for org/latex).
     (setq flycheck-python-flake8-executable "flake8")
     (setq flycheck-checker-error-threshold 1000))
 #+END_SRC
+
 ** Buffers, Windows, and Frames
 Transpose horizontal/vertical split
 
@@ -1947,8 +1949,7 @@ Find helper functions file in project
     (elpy-shell-display-buffer)
     (deactivate-mark)
     (forward-paragraph)
-    (python-nav-forward-statement)
-    )
+    (python-nav-forward-statement))
 
   (defun elpy-send-region-or-para-and-step ()
     (interactive)
@@ -1959,51 +1960,64 @@ Find helper functions file in project
           (elpy-shell-display-buffer)
           (goto-char (region-end))
           (deactivate-mark)
-          (python-nav-forward-statement)
-          )
+          (python-nav-forward-statement))
       (python-para-send-and-step)))
 #+END_SRC
 
 #+BEGIN_SRC emacs-lisp
-    (use-package elpy
-      :defer t
-      ;; Re-map "run" to S-RET because of CUA mode.
-      :bind (:map elpy-mode-map
-                  ("C-<return>" . nil)
-                  ("S-<return>" . elpy-shell-send-statement-and-step)
-                  ("C-c C-c" . 'elpy-send-region-or-para-and-step)
-                  ("C-<up>" . backward-paragraph)
-                  ("C-<down>" . forward-paragraph)
-                  ("C-c C-z"  . elpy-shell-display-buffer))
-      ;; Python virtual environment setup
-      ;; :hook (python-mode lambda() (pyvenv-workon "myvenv"))
-      :init
-      (if (eq system-type 'windows-nt)
-          (add-hook 'python-mode-hook (lambda() (pyvenv-workon "~/python/envs/myvenv"))))
-      (if (eq system-type 'gnu/linux)
-          (add-hook 'python-mode-hook (lambda() (pyvenv-workon "myvenv"))))
-      ;; Enable elpy after loading a python buffer
-      ;; as shown here: https://github.com/jorgenschaefer/elpy/issues/1566
-      (defun enable-elpy-once ()
-        (with-eval-after-load 'python (elpy-enable))
-        (advice-remove 'python-mode 'enable-elpy-once))
-      (advice-add 'python-mode :before 'enable-elpy-once)
-      :config
-      ;; Do not use flymake with elpy
-      (remove-hook 'elpy-modules 'elpy-module-flymake)
-      ;; Resolve indent issues
-      (if (eq system-type 'windows-nt)
-          (setq python-shell-interpreter "C:/Users/ppanko/AppData/Local/miniconda3/python.exe"))
-        (if (eq system-type 'gnu/linux)
-          (setq python-shell-interpreter "python"))
-      (setq python-indent-guess-indent-offset t
-            python-indent-guess-indent-offset-verbose nil
-            ;; Set python3 as interpreter
-            python-shell-interpreter-args "-i"
-            ;; Remove indentation highlighting
-            elpy-modules (remq 'elpy-module-highlight-indentation elpy-modules)
-            elpy-rpc-python-command python-shell-interpreter))
+  (use-package elpy
+    :defer t
+    ;; Re-map "run" to S-RET because of CUA mode.
+    :bind (:map elpy-mode-map
+                ("C-<return>" . nil)
+                ("S-<return>" . elpy-shell-send-statement-and-step)
+                ("C-c C-c" . 'elpy-send-region-or-para-and-step)
+                ("C-<up>" . backward-paragraph)
+                ("C-<down>" . forward-paragraph)
+                ("C-c C-z"  . elpy-shell-display-buffer))
+    ;; Python virtual environment setup
+    :init
+    (if (eq system-type 'windows-nt)
+        (add-hook 'python-mode-hook (lambda() (pyvenv-workon "~/python/envs/myvenv"))))
+    (if (eq system-type 'gnu/linux)
+        (add-hook 'elpy-mode-hook #'autoload-venv))
+        ;; (add-hook 'python-mode-hook (lambda() (pyvenv-workon "myvenv"))))
+    ;; Enable elpy after loading a python buffer
+    ;; as shown here: https://github.com/jorgenschaefer/elpy/issues/1566
+    (defun enable-elpy-once ()
+      (with-eval-after-load 'python (elpy-enable))
+      (advice-remove 'python-mode 'enable-elpy-once))
+    (advice-add 'python-mode :before 'enable-elpy-once)
+    :config
+    ;; Do not use flymake with elpy
+    (remove-hook 'elpy-modules 'elpy-module-flymake)
+    ;; Resolve indent issues
+    (if (eq system-type 'windows-nt)
+        (setq python-shell-interpreter "C:/Users/ppanko/AppData/Local/miniconda3/python.exe"))
+    (if (eq system-type 'gnu/linux)
+        (setq python-shell-interpreter "python"))
+    (setq python-indent-guess-indent-offset t
+          python-indent-guess-indent-offset-verbose nil
+          ;; Set python3 as interpreter
+          python-shell-interpreter-args "-i"
+          ;; Remove indentation highlighting
+          elpy-modules (remq 'elpy-module-highlight-indentation elpy-modules)
+          elpy-rpc-python-command python-shell-interpreter))
 
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+  (defun autoload-venv ()
+    "Automatically activate a virtual environment matching the Projectile project name when starting Python.
+  If the matching venv does not exist, fall back to 'myvenv'.
+  Runs only once per Python session."
+      (when (projectile-project-p)  ;; Ensure inside a Projectile project
+        (let* ((venv-name (concat (projectile-project-name) "_env"))  ;; Construct venv name
+               (venv-path (concat "~/.virtualenvs/" venv-name))       ;; Expected path
+               (default-venv "myvenv")  ;; Fallback environment
+               (final-venv (if (file-directory-p venv-path) venv-name default-venv)))  ;; Choose venv
+
+          (pyvenv-workon final-venv))))  ;; Activate the chosen venv
 #+END_SRC
 
 ** Rainbow
@@ -2058,6 +2072,7 @@ Shell-pop in linux; Rtools bin/zsh in windows
         ;;(add-to-list 'exec-path "C:/msys64/usr/bin")
         (global-set-key (kbd "C-x C-u") 'shell))
       (add-hook 'comint-output-filter-functions 'comint-strip-ctrl-m))
+
   (when (eq system-type 'gnu/linux)
     (use-package shell-pop
       :bind (("C-x C-u" . shell-pop))
