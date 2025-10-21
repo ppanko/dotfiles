@@ -793,16 +793,16 @@ auto-complete yas snippets with company
 Inline auto-complete mode w/company.
 
 #+BEGIN_SRC emacs-lisp
-  ;;   (use-package company
-  ;;   :hook (after-init . global-company-mode)
-  ;;   :config
-  ;;   (setq company-backends (mapcar #'company-mode/backend-with-yas company-backends))
-  ;;   :init
-  ;;   (defun p3/ess-company-config ()
-  ;;     "Configuration for ESS."
-  ;;     (setq-local company-backends '(company-R-args company-R-object company-dabbrev)))
-  ;;   (add-hook 'ess-r-mode-hook #'p3/ess-company-config))
-  ;; (setq company-idle-delay nil)
+  (use-package company
+    :hook (after-init . global-company-mode)
+    :config
+    (setq company-backends (mapcar #'company-mode/backend-with-yas company-backends))
+    :init
+    (defun p3/ess-company-config ()
+      "Configuration for ESS."
+      (setq-local company-backends '(company-R-args company-R-object company-dabbrev)))
+    (add-hook 'ess-r-mode-hook #'p3/ess-company-config))
+  (setq company-idle-delay nil)
 #+END_SRC
 
 Thesaurus
