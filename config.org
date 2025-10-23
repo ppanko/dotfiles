@@ -778,31 +778,26 @@ smex completion for M-x commands
         (global-set-key (kbd "M-X") 'smex-major-mode-commands))
 #+END_SRC
 
-auto-complete yas snippets with company
-
-#+BEGIN_SRC emacs-lisp
-  ;; (defvar company-mode/enable-yas t
-  ;;   "Enable yasnippet for all backends.")
-  ;; (defun company-mode/backend-with-yas (backend)
-  ;;   (if (or (not company-mode/enable-yas) (and (listp backend) (member 'company-yasnippet backend)))
-  ;;       backend
-  ;;     (append (if (consp backend) backend (list backend))
-  ;;             '(:with company-yasnippet))))
-#+END_SRC
-
 Inline auto-complete mode w/company.
 
 #+BEGIN_SRC emacs-lisp
   (use-package company
     :hook (after-init . global-company-mode)
     :config
-    (setq company-backends (mapcar #'company-mode/backend-with-yas company-backends))
+    (setq r-company-backends '((:separate
+             ;; help
+             company-R-library company-R-args company-R-objects
+             ;; local objects
+             company-dabbrev-code
+             :with company-yasnippet)
+                               ;; filenames
+                               company-capf))
     :init
     (defun p3/ess-company-config ()
       "Configuration for ESS."
-      (setq-local company-backends '(company-R-args company-R-object company-dabbrev)))
-    (add-hook 'ess-r-mode-hook #'p3/ess-company-config))
-  (setq company-idle-delay nil)
+      (setq-local company-backends r-company-backends)))
+  ;; for debugging
+  ;; (setq company-idle-delay nil)
 #+END_SRC
 
 Thesaurus
@@ -892,6 +887,15 @@ Options for inferior ESS
       (setq-local ansi-color-for-comint-mode 'filter)
       (smartparens-mode 1))
     ;; (add-hook 'inferior-ess-mode-hook 'p3/my-inferior-ess-init)
+#+END_SRC
+
+Use project root for path completions
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/use-project-root-as-default-dir ()
+      "Set buffer-local `default-directory` to the Projectile project root if available."
+      (when-let ((root (projectile-project-root)))
+          (setq-local default-directory root)))
 #+END_SRC
 
 Set working directory to Rproj root at R startup, if it exists
@@ -1014,7 +1018,9 @@ Archive R scripts in the current directory
   (use-package ess-r-mode
     :ensure ess
     :hook ((inferior-ess-mode . p3/my-inferior-ess-init)
-           (ess-r-post-run-hook . set-projectile-wd-on-startup)
+           (ess-r-post-run-hook . p3/set-projectile-wd-on-startup)
+           (ess-r-mode-hook . p3/ess-company-config)
+           (ess-r-mode-hook . p3/use-project-root-as-default-dir)
            ;; Treat "_" as part of a word when navigating across words
            (ess-mode . (lambda () (modify-syntax-entry ?_ "w"))))
     :bind (:map ess-mode-map
@@ -1043,7 +1049,7 @@ Archive R scripts in the current directory
           ;; Turn off ess-flymake
           ess-use-flymake nil
           ;; Flycheck defaults
-          flycheck-lintr-linters "with_defaults(object_name_linter(c('snake_case','camelCase')), commented_code_linter = NULL, line_length_linter(90), single_quotes_linter=NULL)"
+          flycheck-lintr-linters "linters_with_defaults(object_name_linter(c('snake_case','camelCase')), commented_code_linter = NULL, line_length_linter(90), single_quotes_linter=NULL)"
           ;; Attempt to prevent process timeout hang
           ess--command-default-timeout 1
           ;; Prevent workspace save prompt
@@ -2091,7 +2097,7 @@ Shell-pop in linux; Rtools bin/zsh in windows
     :init
     (if (eq system-type 'windows-nt)
         (progn
-          (setenv "DICTPATH" (concat mingw64-path "/hunspell"))
+          (setenv "DICTPATH" (concat mingw64-path "/share/hunspell"))
           (setenv "DICTIONARY" "en_US")		;C:/msys64/mingw64/share/hunspell/
           (setq ispell-program-name (concat mingw64-path "/hunspell.exe"))))
     (if (eq system-type 'gnu/linux)
