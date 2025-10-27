@@ -103,6 +103,27 @@ Answer yes-or-no prompts with y/n or RET as shown [[https://emacs.stackexchange.
   (advice-add 'y-or-n-p :around #'y-or-n-p-with-return)
 #+END_SRC
 
+Make sure processes go through y-or-n-p on terminate
+
+#+BEGIN_SRC emacs-lisp
+    ;; Replace process kill prompt with y-or-n-p
+  (defun p3/process-kill-query (process)
+    "Ask using `y-or-n-p` whether to kill PROCESS."
+    (y-or-n-p (format "Kill process %s? " (process-name process))))
+
+  ;; Remove the default function that uses yes-or-no-p
+  (setq kill-buffer-query-functions
+        (remq 'process-kill-buffer-query-function
+              kill-buffer-query-functions))
+
+  ;; Add our custom function
+  (add-hook 'kill-buffer-query-functions
+            (lambda ()
+              (if (get-buffer-process (current-buffer))
+                  (p3/process-kill-query (get-buffer-process (current-buffer)))
+                t)))
+#+END_SRC
+
 Make sure process buffer reacts to input/output.
 
 #+BEGIN_SRC emacs-lisp
@@ -2074,31 +2095,18 @@ Shell-pop in linux; Rtools bin/zsh in windows
           shell-file-name "bash"
           explicit-bash.exe-args '("--login"))
     (setenv "SHELL" shell-file-name)
-    (global-set-key (kbd "C-x C-u") #'shell)
-    ;; Buffer-local fixes when shell buffers are created
-    (add-hook 'shell-mode-hook
-            (lambda ()
-              ;; Make the strip filter buffer-local
-              (add-hook 'comint-output-filter-functions
-                        #'comint-strip-ctrl-m nil t)
+    (add-hook 'comint-output-filter-functions
+              #'comint-strip-ctrl-m nil t)
+    (global-set-key (kbd "C-x C-u") #'shell))
 
-              ;; After the subprocess is actually created, set its coding.
-              ;; comint-exec-hook can receive args, so accept them but ignore.
-              (add-hook 'comint-exec-hook
-                        (lambda (&rest _args)
-                          (let ((proc (get-buffer-process (current-buffer))))
-                            (when (and proc (processp proc))
-                              (set-process-coding-system proc 'utf-8-unix 'utf-8-unix))))
-                        nil t))))
-
-    (when (eq system-type 'gnu/linux)
-      (use-package shell-pop
-        :bind (("C-x C-u" . shell-pop))
-        :config
-        (setq shell-pop-shell-type (quote ("eshell" "*eshell*" (lambda nil (ansi-term shell-pop-term-shell)))))
-        (setq shell-pop-term-shell "/bin/bash")
-        ;; need to do this manually or not picked up by `shell-pop'
-        (shell-pop--set-shell-type 'shell-pop-shell-type shell-pop-shell-type)))
+  (when (eq system-type 'gnu/linux)
+    (use-package shell-pop
+      :bind (("C-x C-u" . shell-pop))
+      :config
+      (setq shell-pop-shell-type (quote ("eshell" "*eshell*" (lambda nil (ansi-term shell-pop-term-shell)))))
+      (setq shell-pop-term-shell "/bin/bash")
+      ;; need to do this manually or not picked up by `shell-pop'
+      (shell-pop--set-shell-type 'shell-pop-shell-type shell-pop-shell-type)))
 #+END_SRC
 ** Spelling
 
@@ -2237,7 +2245,8 @@ Use utf-8 everywhere all the time
 #+BEGIN_SRC emacs-lisp
   (prefer-coding-system 'utf-8)
   (setq locale-coding-system 'utf-8)
-  (set-default-coding-systems 'utf-8)
+  (set-default-coding-systems 'utf-8-unix)
+  (setq default-process-coding-system '(utf-8-unix . utf-8-unix))
   (set-buffer-file-coding-system 'utf-8)
   (set-file-name-coding-system 'utf-8)
   (set-selection-coding-system 'utf-8)
