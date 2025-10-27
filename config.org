@@ -2070,23 +2070,35 @@ Shell-pop in linux; Rtools bin/zsh in windows
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
-      (progn
-        (setq explicit-shell-file-name (concat linuxy-environment-path "zsh.exe")
-              shell-file-name "bash";;explicit-shell-file-name
-              explicit-bash.exe-args '("--login"))
-        (setenv "SHELL" shell-file-name)
-        ;;(add-to-list 'exec-path "C:/msys64/usr/bin")
-        (global-set-key (kbd "C-x C-u") 'shell))
-      (add-hook 'comint-output-filter-functions 'comint-strip-ctrl-m))
+    (setq explicit-shell-file-name (concat linuxy-environment-path "zsh.exe")
+          shell-file-name "bash"
+          explicit-bash.exe-args '("--login"))
+    (setenv "SHELL" shell-file-name)
+    (global-set-key (kbd "C-x C-u") #'shell)
+    ;; Buffer-local fixes when shell buffers are created
+    (add-hook 'shell-mode-hook
+            (lambda ()
+              ;; Make the strip filter buffer-local
+              (add-hook 'comint-output-filter-functions
+                        #'comint-strip-ctrl-m nil t)
 
-  (when (eq system-type 'gnu/linux)
-    (use-package shell-pop
-      :bind (("C-x C-u" . shell-pop))
-      :config
-      (setq shell-pop-shell-type (quote ("eshell" "*eshell*" (lambda nil (ansi-term shell-pop-term-shell)))))
-      (setq shell-pop-term-shell "/bin/bash")
-      ;; need to do this manually or not picked up by `shell-pop'
-      (shell-pop--set-shell-type 'shell-pop-shell-type shell-pop-shell-type)))
+              ;; After the subprocess is actually created, set its coding.
+              ;; comint-exec-hook can receive args, so accept them but ignore.
+              (add-hook 'comint-exec-hook
+                        (lambda (&rest _args)
+                          (let ((proc (get-buffer-process (current-buffer))))
+                            (when (and proc (processp proc))
+                              (set-process-coding-system proc 'utf-8-unix 'utf-8-unix))))
+                        nil t))))
+
+    (when (eq system-type 'gnu/linux)
+      (use-package shell-pop
+        :bind (("C-x C-u" . shell-pop))
+        :config
+        (setq shell-pop-shell-type (quote ("eshell" "*eshell*" (lambda nil (ansi-term shell-pop-term-shell)))))
+        (setq shell-pop-term-shell "/bin/bash")
+        ;; need to do this manually or not picked up by `shell-pop'
+        (shell-pop--set-shell-type 'shell-pop-shell-type shell-pop-shell-type)))
 #+END_SRC
 ** Spelling
 
