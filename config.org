@@ -813,6 +813,7 @@ Inline auto-complete mode w/company.
              :with company-yasnippet)
                                ;; filenames
                                company-capf))
+    (setq company-dabbrev-downcase nil)
     :init
     (defun p3/ess-company-config ()
       "Configuration for ESS."
