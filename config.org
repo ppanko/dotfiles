@@ -410,11 +410,10 @@ Pipe operator in R from [[https://emacs.stackexchange.com/questions/8041/how-to-
 
 #+BEGIN_SRC emacs-lisp
   (defun p3/add-pipe-and-step ()
-    "R - %>% operator or 'then' pipe operator"
+    "Insert magrittr pipe quickly without triggering ESS reindent."
     (interactive)
     (just-one-space 1)
-    (insert "%>%")
-    (reindent-then-newline-and-indent))
+    (insert "%>%\n"))
 #+END_SRC
 
 Insert r chunk in polymode, as shown here [[https://emacs.stackexchange.com/questions/27405/insert-code-chunk-in-r-markdown-with-yasnippet-and-polymode][here.]]
@@ -930,16 +929,63 @@ Set working directory to Rproj root at R startup, if it exists
   ;;                                   :project-file ".Rproj")
 #+END_SRC
 
+Generic functions for running code in the local R processor
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/ess-run-at-point (template)
+    "Run R code in ESS using TEMPLATE, substituting the symbol at point.
+  TEMPLATE should be a string containing `%s` where the symbol name should go."
+    (interactive "sR code template (use %s for symbol): ")
+    (let ((sym (ess-symbol-at-point)))
+      (if sym
+          (ess-send-string
+           (ess-get-process ess-local-process-name)
+           (format template (symbol-name sym))
+           t)
+        (message "No valid symbol at point."))))
+
+  (defun p3/ess-run (code)
+    "Run arbitrary R CODE string in the current ESS process."
+    (interactive "sR code: ")
+    (ess-send-string
+     (ess-get-process ess-local-process-name)
+     (concat code "\n")
+     t))
+#+END_SRC
+
+targets functions!
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/tar-make ()
+    "Run targets::tar_make()"
+    (interactive)
+    (p3/ess-run "targets::tar_make()"))
+
+  (defun p3/tar-load-at-point ()
+    "Run targets::tar_load(<symbol-at-point>)"
+    (interactive)
+    (p3/ess-run-at-point "targets::tar_load(%s)"))
+
+  (defun p3/tar-make-debug ()
+    "Run targets::tar_make(debug_options)"
+    (interactive)
+    (p3/ess-run "targets::tar_make(callr_function = NULL, use_crew = FALSE, as_job = FALSE)"))
+
+#+END_SRC
+
 View df using DT (assuming running R session)
 
 #+BEGIN_SRC emacs-lisp
-  (defun p3/r-view-df-at-point ()
+  (defun p3/r-view-df-at-point()
     (interactive)
-    (let ((sym (ess-symbol-at-point)))
-      (if sym
-          (ess-send-string (ess-get-process ess-local-process-name)
-                           (concat "DT::datatable(" (symbol-name sym) ", options = list(autoWidth = TRUE), filter = list(position = 'top', clear = FALSE))\n") t)
-        (message "No valid R symbol at point"))))
+    (p3/ess-run-at-point "DT::datatable(%s, options = list(autoWidth = TRUE), filter = list(position = 'top', clear = FALSE))"))
+  ;; (defun p3/r-view-df-at-point ()
+  ;;   (interactive)
+  ;;   (let ((sym (ess-symbol-at-point)))
+  ;;     (if sym
+  ;;         (ess-send-string (ess-get-process ess-local-process-name)
+  ;;                          (concat "DT::datatable(" (symbol-name sym) ", options = list(autoWidth = TRUE), filter = list(position = 'top', clear = FALSE))\n") t)
+  ;;       (message "No valid R symbol at point"))))
 
   ;; (defun p3/r-view-df-at-point ()
   ;;   "Display R data frame objects interactively using the DT package."
@@ -1049,14 +1095,19 @@ Archive R scripts in the current directory
                 ;; Re-map ess "run" to S-RET because of CUA mode
                 ("C-<return>" . nil)
                 ("S-<return>" . ess-eval-region-or-line-visibly-and-step)
-                ;; Pipe operator
-                ("C->" . add-pipe-and-step)
+                ;; Pipe operatormultiMdsDf
+                ("C-." . p3/add-pipe-and-step)
                 ;; Run library/source commands at the top of the script
                 ("C-c i" . p3/ess-library-and-source)
                 ;; View data.frame in DT::datatable at a point
-                ("C-c v" . p3/r-view-df-at-point))
+                ("C-c v" . p3/r-view-df-at-point)
+                ("C-c m" . p3/tar-make)
+                ("C-c d" . p3/tar-make-debug)
+                ("C-c l" . p3/tar-load-at-point))
     :bind (:map inferior-ess-r-mode-map
-                ("C-c v" . p3/r-view-df-at-point))
+                ("C-c v" . p3/r-view-df-at-point)
+                ("C-c m" . p3/tar-make)
+                ("C-c d" . p3/tar-make-debug))
     ;; :hook
     ;; (ess-r-mode . (lambda () (yas-minor-mode)))
     :config
