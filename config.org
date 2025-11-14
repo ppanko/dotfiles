@@ -6,6 +6,23 @@ Start up in fullscreen
   (add-to-list 'default-frame-alist '(fullscreen . maximized))
 #+END_SRC
 
+#+BEGIN_SRC emacs-lisp
+  (use-package dashboard
+    :config
+    (dashboard-setup-startup-hook)
+    (setq dashboard-startup-banner 'official
+          dashboard-center-content t
+          dashboard-icon-type 'all-the-icons
+          dashboard-path-style 'truncate-end
+          dashboard-path-max-length 60
+          dashboard-projects-show-base 'align
+          dashboard-recentf-show-base 'align
+          dashboard-recentf-item-format "%s  %s"
+          dashboard-projects-item-format "%s  %s"
+          dashboard-icon-type 'all-the-icons)
+    dashboard-items '((recents  . 10)))
+#+END_SRC
+
 The rest of the stuff in this section was stolen from [[https://github.com/hrs/dotfiles/blob/master/emacs/.emacs.d/configuration.org][here]];
 thanks to Harry Schwartz.
 
@@ -244,12 +261,12 @@ Kill buffer and window instead of just the buffer
 #+END_SRC
 
 
-Align equal signs (nice!) as shown [[https://stackoverflow.com/questions/3633120/emacs-hotkey-to-align-equal-signs][here]], and `<-` too (very nice!).
+Align equal signs (nice!) as shown [[https://stackoverflow.com/questions/3633120/emacs-hotkey-to-align-equal-signs][here]], and ` <-` too (very nice!).
 
 #+BEGIN_SRC emacs-lisp
   (global-set-key (kbd "C-c a")
     (lambda () (interactive)
-      (align-regexp (region-beginning) (region-end) "\\(\\s-*\\)\\(<-\\|=\\)" 1 1 nil)))
+      (align-regexp (region-beginning) (region-end) "\\(\\s-*\\)\\(                                                               <-\\|=\\)" 1 1 nil)))
 #+END_SRC
 
 Put backup files neatly away.
@@ -373,7 +390,7 @@ Run a shiny app from emacs
     (inferior-ess-r-force)
     (ess-eval-linewise
      "shiny::runApp(\".\")\n" "Running app" arg
-     '("" (read-string "Arguments: " "recompile = TRUE"))))
+     '("" (read-string "Arguments: " "recompile                                                                                   = TRUE"))))
 #+END_SRC
 
 Add suffix to a region (not necessary with multiple cursors)
@@ -491,14 +508,14 @@ Create (roxygenated) header for R scripts
 
   #' ### 0. Prepare environment
 
-  #+ setup, message = FALSE, results = FALSE
+  #+ setup, message                                                                                                               = FALSE, results = FALSE
   ## Names of required packages
-  pkgs <- c(\"here\", \"readr\")
+  pkgs                                                                                                                            <- c(\"here\", \"readr\")
   ## Install packages, if they're missing
-  missingPkgs <- pkgs[!pkgs %%in%% installed.packages()]
+  missingPkgs                                                                                                                     <- pkgs[!pkgs %%in%% installed.packages()]
   install.packages(missingPkgs)
   ## Load all required packages
-  invisible(lapply(pkgs, library, character.only = TRUE))
+  invisible(lapply(pkgs, library, character.only                                                                                  = TRUE))
 
   source(here(\"R/99_helperFunctions.R\"))
 
@@ -532,23 +549,23 @@ Create roxygenated R script outputting to word via officer
   #' title: ''
   #' ---
 
-  #+ setup, message = FALSE, results = FALSE, include = FALSE
+  #+ setup, message                                                                                                               = FALSE, results = FALSE, include = FALSE
   ## Load packages and helper functions
   ## stpiR::library_or_install(here)
 
   ##source(here('R/99_helperFunctions.R'))
 
   ## Set up formatting
-  target_format <- knitr::opts_knit$get('rmarkdown.pandoc.to')
+  target_format                                                                                                                   <- knitr::opts_knit$get('rmarkdown.pandoc.to')
   if (!is.null(target_format)) {
     if (target_format %in% c('docx', 'latex')) {
-      knitr::opts_chunk$set(echo = FALSE)
+      knitr::opts_chunk$set(echo                                                                                                  = FALSE)
     }
   }
 
-  options(knitr.kable.NA = '')
+  options(knitr.kable.NA                                                                                                          = '')
 
-  #+ tables, echo = FALSE, message = FALSE"))
+  #+ tables, echo                                                                                                                 = FALSE, message = FALSE"))
 #+END_SRC
 
 Byte-compile emacs directory
@@ -646,7 +663,7 @@ Open files using default external programs via dired as shown [[https://stackove
              ((not file) (list (buffer-file-name)))
              (file (list file)))))
 
-      (setq doIt (if (<= (length myFileList) 5)
+      (setq doIt (if (<                                                                                                           = (length myFileList) 5)
                      t
                    (y-or-n-p "Open more than 5 files? ") ) )
 
@@ -969,7 +986,7 @@ targets functions!
   (defun p3/tar-make-debug ()
     "Run targets::tar_make(debug_options)"
     (interactive)
-    (p3/ess-run "targets::tar_make(callr_function = NULL, use_crew = FALSE, as_job = FALSE)"))
+    (p3/ess-run "targets::tar_make(callr_function                                                                                 = NULL, use_crew = FALSE, as_job = FALSE)"))
 
 #+END_SRC
 
@@ -981,26 +998,26 @@ DT viewer function to load in new R session
     (interactive)
     (ess-eval-linewise
      "
-  view_df <- function(
+  view_df                                                                                                                         <- function(
     x,
-    name = deparse(substitute(x)),
-    file = 'dt_viewer.html',
-    template = 'dt_title_template.html'
+    name                                                                                                                          = deparse(substitute(x)),
+    file                                                                                                                          = 'dt_viewer.html',
+    template                                                                                                                      = 'dt_title_template.html'
   ) {
 
-    widget <- DT::datatable(
+    widget                                                                                                                        <- DT::datatable(
       x,
-      options = list(autoWidth = TRUE),
-      filter  = list(position = 'top', clear = FALSE)
+      options                                                                                                                     = list(autoWidth = TRUE),
+      filter                                                                                                                      = list(position = 'top', clear = FALSE)
     )
 
     htmlwidgets::saveWidget(
       widget,
       file,
-      selfcontained = FALSE,
-      libdir = paste0(tools::file_path_sans_ext(file), '_files'),
-      title = paste('DT:', name),
-      template = template
+      selfcontained                                                                                                               = FALSE,
+      libdir                                                                                                                      = paste0(tools::file_path_sans_ext(file), '_files'),
+      title                                                                                                                       = paste('DT:', name),
+      template                                                                                                                    = template
     )
 
     browseURL(normalizePath(file))
