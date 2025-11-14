@@ -973,32 +973,48 @@ targets functions!
 
 #+END_SRC
 
+DT viewer function to load in new R session
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/load-view-df-function ()
+    "Load the view_df() R helper into the current ESS R session."
+    (interactive)
+    (ess-eval-linewise
+     "
+  view_df <- function(
+    x,
+    name = deparse(substitute(x)),
+    file = 'dt_viewer.html',
+    template = 'dt_title_template.html'
+  ) {
+
+    widget <- DT::datatable(
+      x,
+      options = list(autoWidth = TRUE),
+      filter  = list(position = 'top', clear = FALSE)
+    )
+
+    htmlwidgets::saveWidget(
+      widget,
+      file,
+      selfcontained = FALSE,
+      libdir = paste0(tools::file_path_sans_ext(file), '_files'),
+      title = paste('DT:', name),
+      template = template
+    )
+
+    browseURL(normalizePath(file))
+  }
+  "
+     nil nil nil t))
+#+END_SRC
+
 View df using DT (assuming running R session)
 
 #+BEGIN_SRC emacs-lisp
   (defun p3/r-view-df-at-point()
     (interactive)
-    (p3/ess-run-at-point "DT::datatable(%s, options = list(autoWidth = TRUE), filter = list(position = 'top', clear = FALSE))"))
-  ;; (defun p3/r-view-df-at-point ()
-  ;;   (interactive)
-  ;;   (let ((sym (ess-symbol-at-point)))
-  ;;     (if sym
-  ;;         (ess-send-string (ess-get-process ess-local-process-name)
-  ;;                          (concat "DT::datatable(" (symbol-name sym) ", options = list(autoWidth = TRUE), filter = list(position = 'top', clear = FALSE))\n") t)
-  ;;       (message "No valid R symbol at point"))))
-
-  ;; (defun p3/r-view-df-at-point ()
-  ;;   "Display R data frame objects interactively using the DT package."
-  ;;   (interactive)
-  ;;   (let* ((object-at-point (thing-at-point 'symbol))
-  ;;          (object (if (and object-at-point (stringp object-at-point))
-  ;;                      object-at-point
-  ;;                    (completing-read "Choose data frame: " (ess-get-object-list ess-current-process-name)))))
-  ;;     (ess-send-string (format "DT::datatable(%s, options = list(autoWidth = TRUE), filter = list(position = 'top', clear = FALSE))\n" object))))
-
-  ;; Bind the function to a key for easy access
-  ;; (define-key ess-mode-map (kbd "C-c v") 'my/ess-display-dt-data-frame-at-point)
-
+    (p3/ess-run-at-point "view_df(%s)"))
 #+END_SRC
 
 View df using DT (assuming running R session and exwm)
@@ -1087,6 +1103,7 @@ Archive R scripts in the current directory
     :ensure ess
     :hook ((inferior-ess-mode . p3/my-inferior-ess-init)
            (ess-r-post-run-hook . p3/set-projectile-wd-on-startup)
+           (ess-r-post-run-hook . p3/load-view-df-function)
            (ess-r-mode-hook . p3/ess-company-config)
            (ess-r-mode-hook . p3/use-project-root-as-default-dir)
            ;; Treat "_" as part of a word when navigating across words
