@@ -266,7 +266,7 @@ Align equal signs (nice!) as shown [[https://stackoverflow.com/questions/3633120
 #+BEGIN_SRC emacs-lisp
   (global-set-key (kbd "C-c a")
     (lambda () (interactive)
-      (align-regexp (region-beginning) (region-end) "\\(\\s-*\\)\\(                                                               <-\\|=\\)" 1 1 nil)))
+      (align-regexp (region-beginning) (region-end) "\\(\\s-*\\)\\(<-\\|=\\)" 1 1 nil)))
 #+END_SRC
 
 Put backup files neatly away.
@@ -390,7 +390,7 @@ Run a shiny app from emacs
     (inferior-ess-r-force)
     (ess-eval-linewise
      "shiny::runApp(\".\")\n" "Running app" arg
-     '("" (read-string "Arguments: " "recompile                                                                                   = TRUE"))))
+     '("" (read-string "Arguments: " "recompile = TRUE"))))
 #+END_SRC
 
 Add suffix to a region (not necessary with multiple cursors)
@@ -508,14 +508,14 @@ Create (roxygenated) header for R scripts
 
   #' ### 0. Prepare environment
 
-  #+ setup, message                                                                                                               = FALSE, results = FALSE
+  #+ setup, message = FALSE, results = FALSE
   ## Names of required packages
-  pkgs                                                                                                                            <- c(\"here\", \"readr\")
+  pkgs <- c(\"here\", \"readr\")
   ## Install packages, if they're missing
-  missingPkgs                                                                                                                     <- pkgs[!pkgs %%in%% installed.packages()]
+  missingPkgs <- pkgs[!pkgs %%in%% installed.packages()]
   install.packages(missingPkgs)
   ## Load all required packages
-  invisible(lapply(pkgs, library, character.only                                                                                  = TRUE))
+  invisible(lapply(pkgs, library, character.only = TRUE))
 
   source(here(\"R/99_helperFunctions.R\"))
 
@@ -549,23 +549,23 @@ Create roxygenated R script outputting to word via officer
   #' title: ''
   #' ---
 
-  #+ setup, message                                                                                                               = FALSE, results = FALSE, include = FALSE
+  #+ setup, message = FALSE, results = FALSE, include = FALSE
   ## Load packages and helper functions
   ## stpiR::library_or_install(here)
 
   ##source(here('R/99_helperFunctions.R'))
 
   ## Set up formatting
-  target_format                                                                                                                   <- knitr::opts_knit$get('rmarkdown.pandoc.to')
+  target_format <- knitr::opts_knit$get('rmarkdown.pandoc.to')
   if (!is.null(target_format)) {
     if (target_format %in% c('docx', 'latex')) {
-      knitr::opts_chunk$set(echo                                                                                                  = FALSE)
+     knitr::opts_chunk$set(echo = FALSE)
     }
   }
 
-  options(knitr.kable.NA                                                                                                          = '')
+  options(knitr.kable.NA  = '')
 
-  #+ tables, echo                                                                                                                 = FALSE, message = FALSE"))
+  #+ tables, echo = FALSE, message = FALSE"))
 #+END_SRC
 
 Byte-compile emacs directory
@@ -663,7 +663,7 @@ Open files using default external programs via dired as shown [[https://stackove
              ((not file) (list (buffer-file-name)))
              (file (list file)))))
 
-      (setq doIt (if (<                                                                                                           = (length myFileList) 5)
+      (setq doIt (if (<= (length myFileList) 5)
                      t
                    (y-or-n-p "Open more than 5 files? ") ) )
 
@@ -976,17 +976,20 @@ targets functions!
   (defun p3/tar-make ()
     "Run targets::tar_make()"
     (interactive)
+    (inferior-ess-r-force)
     (p3/ess-run "targets::tar_make()"))
 
   (defun p3/tar-load-at-point ()
     "Run targets::tar_load(<symbol-at-point>)"
     (interactive)
+    (inferior-ess-r-force)
     (p3/ess-run-at-point "targets::tar_load(%s)"))
 
   (defun p3/tar-make-debug ()
     "Run targets::tar_make(debug_options)"
     (interactive)
-    (p3/ess-run "targets::tar_make(callr_function                                                                                 = NULL, use_crew = FALSE, as_job = FALSE)"))
+    (inferior-ess-r-force)
+    (p3/ess-run "targets::tar_make(callr_function = NULL, use_crew = FALSE, as_job = FALSE)"))
 
 #+END_SRC
 
@@ -995,35 +998,31 @@ DT viewer function to load in new R session
 #+BEGIN_SRC emacs-lisp
   (defun p3/load-view-df-function ()
     "Load the view_df() R helper into the current ESS R session."
-    (interactive)
-    (ess-eval-linewise
-     "
-  view_df                                                                                                                         <- function(
-    x,
-    name                                                                                                                          = deparse(substitute(x)),
-    file                                                                                                                          = 'dt_viewer.html',
-    template                                                                                                                      = 'dt_title_template.html'
-  ) {
+    (ess-remote-eval-string
+     (ess-get-process)
+     "view_df <- function(
+        x,
+        name     = deparse(substitute(x)),
+        file     = 'dt_viewer.html'##,
+        ## template = 'dt_title_template.html'
+      ) {
+          widget <- DT::datatable(
+          x,
+          options = list(autoWidth = TRUE),
+          filter  = list(position = 'top', clear = FALSE)
+        )
 
-    widget                                                                                                                        <- DT::datatable(
-      x,
-      options                                                                                                                     = list(autoWidth = TRUE),
-      filter                                                                                                                      = list(position = 'top', clear = FALSE)
-    )
+        htmlwidgets::saveWidget(
+          widget,
+          file,
+          selfcontained = FALSE,
+          libdir        = paste0(tools::file_path_sans_ext(file), '_files'),
+          title         = paste('DT:', name)## ,
+          ## template      = template
+        )
 
-    htmlwidgets::saveWidget(
-      widget,
-      file,
-      selfcontained                                                                                                               = FALSE,
-      libdir                                                                                                                      = paste0(tools::file_path_sans_ext(file), '_files'),
-      title                                                                                                                       = paste('DT:', name),
-      template                                                                                                                    = template
-    )
-
-    browseURL(normalizePath(file))
-  }
-  "
-     nil nil nil t))
+        browseURL(normalizePath(file))
+      }"))
 #+END_SRC
 
 View df using DT (assuming running R session)
@@ -1031,6 +1030,7 @@ View df using DT (assuming running R session)
 #+BEGIN_SRC emacs-lisp
   (defun p3/r-view-df-at-point()
     (interactive)
+    (inferior-ess-r-force)
     (p3/ess-run-at-point "view_df(%s)"))
 #+END_SRC
 
@@ -1120,7 +1120,7 @@ Archive R scripts in the current directory
     :ensure ess
     :hook ((inferior-ess-mode . p3/my-inferior-ess-init)
            (ess-r-post-run-hook . p3/set-projectile-wd-on-startup)
-           (ess-r-post-run-hook . p3/load-view-df-function)
+           (ess-r-mode-hook . p3/load-view-df-function)
            (ess-r-mode-hook . p3/ess-company-config)
            (ess-r-mode-hook . p3/use-project-root-as-default-dir)
            ;; Treat "_" as part of a word when navigating across words
@@ -1141,7 +1141,8 @@ Archive R scripts in the current directory
     :bind (:map inferior-ess-r-mode-map
                 ("C-c v" . p3/r-view-df-at-point)
                 ("C-c m" . p3/tar-make)
-                ("C-c d" . p3/tar-make-debug))
+                ("C-c d" . p3/tar-make-debug)
+                ("C-c l" . p3/tar-load-at-point))
     ;; :hook
     ;; (ess-r-mode . (lambda () (yas-minor-mode)))
     :config
@@ -1174,7 +1175,7 @@ Archive R scripts in the current directory
             (ess-fl-keyword:numbers . t)
             (ess-fl-keyword:operators . t)
             (ess-fl-keyword:delimiters . t)
-            (ess-fl-keyword:                                                                                           = . t)
+            (ess-fl-keyword:= . t)
             (ess-R-fl-keyword:F&T . t)
             (ess-R-fl-keyword:%op% . t)))
           ;; Prepend directory name to R process name
