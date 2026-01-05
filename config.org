@@ -373,7 +373,7 @@ Sudo edit a file, as shown [[https://emacsredux.com/blog/2013/04/21/edit-files-a
   With a prefix ARG prompt for a file to visit.
   Will also prompt for a file to visit if current
   buffer is not visiting a file."
-         (interactive "P")
+         (interactive "p")
          (if (or arg (not buffer-file-name))
              (find-file (concat "/sudo:root@localhost:"
                                 (read-file-name "Find file(as root): ")))
@@ -446,218 +446,219 @@ Insert r chunk in polymode, as shown here [[https://emacs.stackexchange.com/ques
 Create R project directory structure #TODO: shiny - create app dir, pkg dev: create inst dir
 
 #+BEGIN_SRC emacs-lisp
-  (defconst p3/targets-r-contents
-    (concat
-     "##
-source(\"R/utils.R\")
-##
-pkgs <- installLoadPackages(
-  ## Environment management
-  \"renv\", \"targets\", \"tarchetypes\", \"here\", \"pkgload\", \"devtools\",
-  ## Data I/O
-  \"readr\", \"data.table\", \"tidypolars\", \"arrow\", \"writexl\",
-  ## Data manipulation
-  \"dplyr\", \"lubridate\", \"tidyr\", \"purrr\", ##\"stringr\",
-  ## Plotting
-  ## \"ggplot2\"
-  ## parallel processing
-  \"crew\", \"crew.cluster\"
-)
-
-##
-tar_option_set(
-  packages   = pkgs,
-  format     = \"parquet\",
-  controller = crew_controller_local(workers = 10)
-)
-
-##
-sourceTargetsScripts()
-
-##
-c(targets_01_prepareData, targets_02_computeResults)"))
-
-  (defconst p3/rproj-contents
-    (concat
-     "Version: 1.0
-
-RestoreWorkspace: No
-SaveWorkspace: No
-AlwaysSaveHistory: Default
-
-EnableCodeIndexing: Yes
-UseSpacesForTab: Yes
-NumSpacesForTab: 2
-Encoding: UTF-8
-
-RnwWeave: Sweave
-LaTeX: pdfLaTeX"))
-
-  (defconst p3/gitignore-contents
-    (concat
-     "Archive/
-      .Rhistory
-      ,*~
-      .Rproj.user/
-      notes.org"))
-
-  ;; Default R scripts and their titles
-  (defconst p3/r-script-titles
-    '(("01_prepareData.R"    . "Preprocess data")
-      ("02_computeResults.R" . "Compute results")
-      ("utils.R"             . "Helper functions")))
-
-  (defconst p3/base-directories
-    '("R" "data" "data-raw" "output" "reports" "bin" "reports/graphics"))
-
-  (defconst p3/utils-r-contents
-    (concat
-     "##
-  sourceTargetsScripts <- function() {
-    ##
-    sourceFiles <- list.files(
-      here(\"R\"), pattern = \"^[0-9]{2}\", full.names = TRUE
-    )
-    ##
-    if (length(sourceFiles)) {
-      cat(
-        \"Loading source files: \",
-        paste0(basename(sourceFiles), collapse = \", \"), \"\\n\"
-      )
-      targets::tar_source(sourceFiles)
-    }
-  }
-
+    (defconst p3/targets-r-contents
+      (concat
+       "##
+  pkgs <- installLoadPackages(
+    ## Environment management
+    \"renv\", \"targets\", \"tarchetypes\", \"here\", \"pkgload\", \"devtools\",
+    ## Data I/O
+    \"readr\", \"data.table\", \"tidypolars\", \"arrow\", \"writexl\",
+    ## Data manipulation
+    \"dplyr\", \"lubridate\", \"tidyr\", \"purrr\", ##\"stringr\",
+    ## Visualization
+    \"DT\", ## \"ggplot2\"
+    ## parallel processing
+    \"crew\", \"crew.cluster\"
+  )
 
   ##
-  installLoadPackages <- function(...) {
-    pkgs <- c(...)
-    ##
-    missingPkgs <- pkgs[!pkgs %in% installed.packages()]
-    ##tar
-    if (length(missingPkgs)) {
-      renv::install(missingPkgs, prompt = FALSE)
-    }
-    ##
-    if (!file.exists(\"renv.lock\")) {
-      renv::init(bare = TRUE)
-      ## ## Install packages, if they're missing
-      renv::snapshot()
-    } else if (!dir.exists(renv::paths$library())) {
-      renv::restore()
-    } else {
-      untrackedPkgs <- pkgs[!pkgs %in% names(renv::lockfile_read()$Packages)]
-      if (length(untrackedPkgs)) {
-        renv::record(untrackedPkgs)
+  tar_option_set(
+    packages   = pkgs,
+    format     = \"parquet\",
+    controller = crew_controller_local(workers = 10)
+  )
+
+  ##
+  sourceTargetsScripts()
+
+  ##
+  c(targets_01_prepareData, targets_02_computeResults)"))
+
+    (defconst p3/rproj-contents
+      (concat
+       "Version: 1.0
+
+  RestoreWorkspace: No
+  SaveWorkspace: No
+  AlwaysSaveHistory: Default
+
+  EnableCodeIndexing: Yes
+  UseSpacesForTab: Yes
+  NumSpacesForTab: 2
+  Encoding: UTF-8
+
+  RnwWeave: Sweave
+  LaTeX: pdfLaTeX"))
+
+    (defconst p3/gitignore-contents
+      (concat
+       "Archive/
+        .Rhistory
+        ,*~
+        .Rproj.user/
+        notes.org"))
+
+    ;; Default R scripts and their titles
+    (defconst p3/r-script-titles
+      '(("01_prepareData.R"    . "Preprocess data")
+        ("02_computeResults.R" . "Compute results")
+        ("utils.R"             . "Helper functions")))
+
+    (defconst p3/base-directories
+      '("R" "data" "data-raw" "output" "reports" "bin" "reports/graphics"))
+
+    (defconst p3/utils-r-contents
+      (concat
+       "##
+    sourceTargetsScripts <- function() {
+      ##
+      sourceFiles <- list.files(
+        here(\"R\"), pattern = \"^[0-9]{2}\", full.names = TRUE
+      )
+      ##
+      if (length(sourceFiles)) {
+        cat(
+          \"Loading source files: \",
+          paste0(basename(sourceFiles), collapse = \", \"), \"\\n\"
+        )
+        targets::tar_source(sourceFiles)
       }
     }
-    ## Load all required packages
-    suppressPackageStartupMessages(
-      invisible(lapply(pkgs, library, character.only = TRUE))
-    )
+
+
     ##
-    pkgs
-  }
+    installLoadPackages <- function(...) {
+      pkgs <- c(...)
+      ##
+      missingPkgs <- pkgs[!pkgs %in% installed.packages()]
+      ##tar
+      if (length(missingPkgs)) {
+        renv::install(missingPkgs, prompt = FALSE)
+      }
+      ##
+      if (!file.exists(\"renv.lock\")) {
+        renv::init(bare = TRUE)
+        ## ## Install packages, if they're missing
+        renv::snapshot()
+      } else if (!dir.exists(renv::paths$library())) {
+        renv::restore()
+      } else {
+        untrackedPkgs <- pkgs[!pkgs %in% names(renv::lockfile_read()$Packages)]
+        if (length(untrackedPkgs)) {
+          renv::record(untrackedPkgs)
+        }
+      }
+      ## Load all required packages
+      suppressPackageStartupMessages(
+        invisible(lapply(pkgs, library, character.only = TRUE))
+      )
+      ##
+      pkgs
+    }
 
-  ##
-  view_df <- function(x,
-                      name = deparse(substitute(x)),
-                      file = 'dt_viewer.html') {
-    widget <- DT::datatable(
-      x,
-      options = list(autoWidth = TRUE),
-      filter  = list(position = 'top', clear = FALSE)
-    )
     ##
-    htmlwidgets::saveWidget(
-      widget,
-      file,
-      selfcontained = FALSE,
-      libdir        = paste0(tools::file_path_sans_ext(file), '_files'),
-      title         = paste('DT:', name)
-    )
-    ##
-    browseURL(normalizePath(file))
-  }"))
+    view_df <- function(x,
+                        name = deparse(substitute(x)),
+                        file = 'dt_viewer.html') {
+      widget <- DT::datatable(
+        x,
+        options = list(autoWidth = TRUE),
+        filter  = list(position = 'top', clear = FALSE)
+      )
+      ##
+      htmlwidgets::saveWidget(
+        widget,
+        file,
+        selfcontained = FALSE,
+        libdir        = paste0(tools::file_path_sans_ext(file), '_files'),
+        title         = paste('DT:', name)
+      )
+      ##
+      browseURL(normalizePath(file))
+    }"))
 
-  (defun p3/generate-roxygen-header (title &optional minimal)
-    "Return a roxygen/knitr header for an R script with TITLE.
-            If MINIMAL is non-nil, only include the YAML block (title/author/date),
-            without headings or setup chunk."
-    (let ((date (format-time-string "%m/%d/%Y")))
-      (concat
-       "#' ---\n"
-       "#' title:  '" title "'\n"
-       "#' author: 'Pavel Panko'\n"
-       "#' date:   '" date "'\n"
-       "#' ---\n\n"
-       (unless minimal
-         "#' ### 0. Prepare environment\n\n#+ setup, message = FALSE, results = FALSE\n"))))
+    (defun p3/generate-roxygen-header (title &optional minimal)
+      "Return a roxygen/knitr header for an R script with TITLE.
+              If MINIMAL is non-nil, only include the YAML block (title/author/date),
+              without headings or setup chunk."
+      (let ((date (format-time-string "%m/%d/%Y")))
+        (concat
+         "#' ---\n"
+         "#' title:  '" title "'\n"
+         "#' author: 'Pavel Panko'\n"
+         "#' date:   '" date "'\n"
+         "#' ---\n\n"
+         (unless minimal
+           "#' ### 0. Prepare environment\n\n#+ setup, message = FALSE, results = FALSE\n"))))
 
-  (defun p3/--make-dirs (dirs)
-    "Create each directory listed in DIRS if it does not already exist."
-    (dolist (dir dirs)
-      (unless (file-exists-p dir)
-        (make-directory dir t))))
+    (defun p3/--make-dirs (dirs)
+      "Create each directory listed in DIRS if it does not already exist."
+      (dolist (dir dirs)
+        (unless (file-exists-p dir)
+          (make-directory dir t))))
 
-  (defun p3/--write-file (path contents project-root)
-    "Write CONTENTS to PATH using a temp buffer."
-    (with-temp-file (expand-file-name path project-root)
-      (insert contents)))
-
-
-  (defun p3/create-default-r-scripts (project-root)
-    "Create default R scripts with headers inside PROJECT-ROOT/R."
-    (let ((r-dir (expand-file-name "R" project-root)))
-      (unless (file-exists-p r-dir)
-        (make-directory r-dir t))
-      (dolist (pair p3/r-script-titles)
-        (let* ((file (car pair))
-               (title (cdr pair))
-               (path (expand-file-name file r-dir))
-               (minimal (string-equal file "utils.R")))
-          (with-temp-file path
-            (insert (p3/generate-roxygen-header title minimal))
-            (when (string-equal file "utils.R")
-              (insert p3/utils-r-contents)))))))
-
-  (defun p3/create-targets-file ()
-    "Create a _targets.R file in the project root with a full header."
-    (let ((file "_targets.R")
-          (title "_targets pipeline")
-          (path (expand-file-name "_targets.R")))
-      (with-temp-file path
-        (insert (p3/generate-roxygen-header title))
-        (insert p3/targets-r-contents))))
+    (defun p3/--write-file (path contents project-root)
+      "Write CONTENTS to PATH using a temp buffer."
+      (with-temp-file (expand-file-name path project-root)
+        (insert contents)))
 
 
-  (defun p3/create-r-project-dir-structure (name &optional include-targets)
-    "Create an R project named NAME with standard directories, R scripts, and optional targets directories."
-    (interactive "sProject name: \nP")
+    (defun p3/create-default-r-scripts (project-root)
+      "Create default R scripts with headers inside PROJECT-ROOT/R."
+      (let ((r-dir (expand-file-name "R" project-root)))
+        (unless (file-exists-p r-dir)
+          (make-directory r-dir t))
+        (dolist (pair p3/r-script-titles)
+          (let* ((file (car pair))
+                 (title (cdr pair))
+                 (path (expand-file-name file r-dir))
+                 (minimal (string-equal file "utils.R")))
+            (with-temp-file path
+              (insert (p3/generate-roxygen-header title minimal))
+              (when (string-equal file "utils.R")
+                (insert p3/utils-r-contents)))))))
 
-    (let* ((project-root (expand-file-name name))
-           (rproj-file (concat name ".Rproj")))
+    (defun p3/create-targets-file ()
+      "Create a _targets.R file in the project root with a full header."
+      (let ((file "_targets.R")
+            (title "_targets pipeline")
+            (path (expand-file-name "_targets.R")))
+        (with-temp-file path
+          (insert (p3/generate-roxygen-header title))
+          (insert p3/targets-r-contents))))
 
-      (progn
-        ;; Create root
-        (unless (file-exists-p project-root)
-          (make-directory project-root))
 
-        (let ((default-directory project-root))
+    (defun p3/create-r-project-dir-structure (&optional include-targets)
+      "Create an R project named NAME with standard directories, R scripts, and optional targets directories."
+      (interactive "p")
 
-          ;; Base directories
-          (p3/--make-dirs p3/base-directories)
+      (let* ((path (read-file-name "Create R project at: " (expand-file-name "~")))
+         (project-root (directory-file-name path))
+         (project-name (file-name-nondirectory project-root))
+         (parent-dir (file-name-directory project-root))
+         (rproj-file (concat project-name ".Rproj")))
 
-          ;; Create top-level _targets.R
-          (p3/create-targets-file))
-        ;; Default R scripts
-        (p3/create-default-r-scripts project-root)
-        ;; Project files
-        (p3/--write-file rproj-file p3/rproj-contents project-root)
-        (p3/--write-file ".projectile" "" project-root)
-        (p3/--write-file ".gitignore" p3/gitignore-contents project-root)))
+        (progn
+          ;; Create root
+          (unless (file-exists-p project-root)
+            (make-directory project-root))
 
-    (message "Created project %s" name))
+          (let ((default-directory project-root))
+
+            ;; Base directories
+            (p3/--make-dirs p3/base-directories)
+
+            ;; Create top-level _targets.R
+            (p3/create-targets-file))
+          ;; Default R scripts
+          (p3/create-default-r-scripts project-root)
+          ;; Project files
+          (p3/--write-file rproj-file p3/rproj-contents project-root)
+          (p3/--write-file ".projectile" "" project-root)
+          (p3/--write-file ".gitignore" p3/gitignore-contents project-root))
+
+      (message "Created project %s" project-name)))
 #+END_SRC
 
 .gitignore template
@@ -1975,7 +1976,7 @@ Set region to checkboxes
 
 #+BEGIN_SRC emacs-lisp
   (defun org-set-line-checkbox (arg)
-    (interactive "P")
+    (interactive "p")
     (let ((n (or arg 1)))
       (when (region-active-p)
         (setq n (count-lines (region-beginning)
@@ -2021,7 +2022,7 @@ org-agenda defaults, as shown [[https://orgmode.org/worg/org-tutorials/org-custo
         (concat "#+title: ${title}\n#+category:${title}\n#+filetags: " tag "\n#+created: %U\n#+last_modified: %U\n#"))))
 
   (defun org-roam-node-insert-immediate-with-tag (arg &rest args)
-        (interactive "P")
+        (interactive "p")
         (let ((args (cons arg args))
               (org-roam-capture-templates (list (append (car
                                                          '(("t" "tagged" plain "%?"
