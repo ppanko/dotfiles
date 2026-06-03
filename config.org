@@ -2289,7 +2289,7 @@ Find helper functions file in project
     (remove-hook 'elpy-modules 'elpy-module-flymake)
     ;; Resolve indent issues
     (if (eq system-type 'windows-nt)
-        (setq python-shell-interpreter "C:/Users/ppanko/AppData/Local/miniconda3/python.exe"))
+        (setq python-shell-interpreter "C:/Users/ppanko/AppData/Local/Programs/Python/Python312/python.exe"))
     (if (eq system-type 'gnu/linux)
         (setq python-shell-interpreter "python"))
     (setq python-indent-guess-indent-offset t
