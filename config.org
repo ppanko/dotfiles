@@ -1361,7 +1361,7 @@ Archive R scripts in the current directory
             (ess-R-fl-keyword:F&T . t)
             (ess-R-fl-keyword:%op% . t)))
           ;; Prepend directory name to R process name
-          ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:project-or-simple)
+          ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:project-or-directory)
     :custom
     (defvar ess--command-default-timeout most-positive-fixnum))
 #+END_SRC
@@ -2670,4 +2670,66 @@ Start server on Windows
   ;;   (progn
   ;;     (require 'server)
   ;;     (server-start)))
+#+END_SRC
+
+* test
+#+BEGIN_SRC emacs-lisp
+  (defvar p3/ess-project-processes
+    (make-hash-table :test #'equal)
+    "Map project roots to ESS process names.")
+
+  (defvar-local p3/ess-project-root-cache nil
+    "Cached project root for the current buffer.")
+
+  (defun p3/ess-project-root ()
+    "Return the current project root, caching the result locally."
+    (or p3/ess-project-root-cache
+        (setq p3/ess-project-root-cache
+              (if-let ((proj (project-current nil)))
+                  (expand-file-name (project-root proj))
+                (expand-file-name default-directory)))))
+
+  (defun p3/ess-process-live-p (name)
+    "Return non-nil if NAME names a live process."
+    (when-let ((proc (get-process name)))
+      (process-live-p proc)))
+
+  (defun p3/ess-project-process ()
+    "Return the live ESS process name for the current project, or nil."
+    (let* ((root (p3/ess-project-root))
+           (name (gethash root p3/ess-project-processes)))
+      (cond
+       ((null name)
+        nil)
+       ((p3/ess-process-live-p name)
+        name)
+       (t
+        (remhash root p3/ess-project-processes)
+        nil))))
+
+  (defun p3/register-current-ess-process ()
+    "Register a newly created ESS process to the current project."
+    (when (derived-mode-p 'inferior-ess-mode)
+      (puthash (p3/ess-project-root)
+               ess-local-process-name
+               p3/ess-project-processes)))
+
+  (add-hook 'inferior-ess-mode-hook #'p3/register-current-ess-process)
+
+  (defun p3/ess-ensure-project-process (&rest _)
+    "Ensure the current buffer has a project-specific ESS process."
+    (let ((process (p3/ess-project-process)))
+      (unless process
+        ;; Lazily create the R process only when evaluation is requested.
+        (save-window-excursion
+          (call-interactively #'R))
+        (setq process (p3/ess-project-process)))
+
+      (unless process
+        (user-error "Unable to create ESS process"))
+
+      ;; Bind this source buffer to the project process.
+      (setq-local ess-local-process-name process)))
+
+  (advice-add #'ess-force-buffer-current :before #'p3/ess-ensure-project-process)
 #+END_SRC
