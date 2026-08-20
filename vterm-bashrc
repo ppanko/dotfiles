@@ -1,5 +1,15 @@
 # Bash initialization used only by Emacs vterm.
 
+# ble.sh adds syntax highlighting, autosuggestions, and syntax-aware
+# completion while retaining Bash.  Attach it after the user's normal Bash and
+# vterm setup so all readline bindings and prompt hooks are available.
+P3_BLESH_DATA_HOME="${XDG_DATA_HOME:-${HOME}/.local/share}"
+P3_BLESH_FILE="${P3_BLESH_FILE:-${P3_BLESH_DATA_HOME}/blesh/ble.sh}"
+
+if [[ -r "${P3_BLESH_FILE}" ]]; then
+    source -- "${P3_BLESH_FILE}" --attach=none
+fi
+
 if [[ -r "${HOME}/.bashrc" ]]; then
     source "${HOME}/.bashrc"
 fi
@@ -8,3 +18,9 @@ if [[ -n "${EMACS_VTERM_PATH:-}" ]] &&
    [[ -r "${EMACS_VTERM_PATH}/etc/emacs-vterm-bash.sh" ]]; then
     source "${EMACS_VTERM_PATH}/etc/emacs-vterm-bash.sh"
 fi
+
+if [[ -n "${BLE_VERSION:-}" ]]; then
+    ble-attach
+fi
+
+unset P3_BLESH_DATA_HOME P3_BLESH_FILE
