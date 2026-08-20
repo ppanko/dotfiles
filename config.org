@@ -6,6 +6,23 @@ Start up in fullscreen
   (add-to-list 'default-frame-alist '(fullscreen . maximized))
 #+END_SRC
 
+#+BEGIN_SRC emacs-lisp
+  (use-package dashboard
+    :config
+    (dashboard-setup-startup-hook)
+    (setq dashboard-startup-banner 'official
+          dashboard-center-content t
+          dashboard-icon-type 'all-the-icons
+          dashboard-path-style 'truncate-end
+          dashboard-path-max-length 60
+          dashboard-projects-show-base 'align
+          dashboard-recentf-show-base 'align
+          dashboard-recentf-item-format "%s  %s"
+          dashboard-projects-item-format "%s  %s"
+          dashboard-icon-type 'all-the-icons)
+    dashboard-items '((recents  . 10)))
+#+END_SRC
+
 The rest of the stuff in this section was stolen from [[https://github.com/hrs/dotfiles/blob/master/emacs/.emacs.d/configuration.org][here]];
 thanks to Harry Schwartz.
 
@@ -244,7 +261,7 @@ Kill buffer and window instead of just the buffer
 #+END_SRC
 
 
-Align equal signs (nice!) as shown [[https://stackoverflow.com/questions/3633120/emacs-hotkey-to-align-equal-signs][here]], and `<-` too (very nice!).
+Align equal signs (nice!) as shown [[https://stackoverflow.com/questions/3633120/emacs-hotkey-to-align-equal-signs][here]], and ` <-` too (very nice!).
 
 #+BEGIN_SRC emacs-lisp
   (global-set-key (kbd "C-c a")
@@ -356,7 +373,7 @@ Sudo edit a file, as shown [[https://emacsredux.com/blog/2013/04/21/edit-files-a
   With a prefix ARG prompt for a file to visit.
   Will also prompt for a file to visit if current
   buffer is not visiting a file."
-         (interactive "P")
+         (interactive "p")
          (if (or arg (not buffer-file-name))
              (find-file (concat "/sudo:root@localhost:"
                                 (read-file-name "Find file(as root): ")))
@@ -410,11 +427,10 @@ Pipe operator in R from [[https://emacs.stackexchange.com/questions/8041/how-to-
 
 #+BEGIN_SRC emacs-lisp
   (defun p3/add-pipe-and-step ()
-    "R - %>% operator or 'then' pipe operator"
+    "Insert magrittr pipe quickly without triggering ESS reindent."
     (interactive)
     (just-one-space 1)
-    (insert "%>%")
-    (reindent-then-newline-and-indent))
+    (insert "%>%\n"))
 #+END_SRC
 
 Insert r chunk in polymode, as shown here [[https://emacs.stackexchange.com/questions/27405/insert-code-chunk-in-r-markdown-with-yasnippet-and-polymode][here.]]
@@ -430,51 +446,233 @@ Insert r chunk in polymode, as shown here [[https://emacs.stackexchange.com/ques
 Create R project directory structure #TODO: shiny - create app dir, pkg dev: create inst dir
 
 #+BEGIN_SRC emacs-lisp
-    (defun p3/create-r-project-dir-structure (name)
-      (interactive "sName: ")
-      (make-directory name)
-      (let ((pastDir default-directory))
-        (cd name)
-        (dolist (dirname '("R" "data" "data-raw" "output" "reports" "bin" "reports/graphics"))
-          (make-directory dirname))
-        (write-region "Version: 1.0
+    (defconst p3/targets-r-contents
+      (concat
+       "##
+  pkgs <- installLoadPackages(
+    ## Environment management
+    \"renv\", \"targets\", \"tarchetypes\", \"here\", \"pkgload\", \"devtools\",
+    ## Data I/O
+    \"readr\", \"data.table\", \"tidypolars\", \"arrow\", \"writexl\",
+    ## Data manipulation
+    \"dplyr\", \"lubridate\", \"tidyr\", \"purrr\", ##\"stringr\",
+    ## Visualization
+    \"DT\", ## \"ggplot2\"
+    ## parallel processing
+    \"crew\", \"crew.cluster\"
+  )
 
-RestoreWorkspace: Default
-SaveWorkspace: Default
-AlwaysSaveHistory: Default
+  ##
+  tar_option_set(
+    packages   = pkgs,
+    format     = \"parquet\",
+    controller = crew_controller_local(workers = 10)
+  )
 
-EnableCodeIndexing: Yes
-UseSpacesForTab: Yes
-NumSpacesForTab: 2
-Encoding: UTF-8
+  ##
+  sourceTargetsScripts()
 
-RnwWeave: Sweave
-LaTeX: pdfLaTeX"
-                      nil (concat name ".Rproj"))
-        (with-temp-file ".projectile"
-          (insert ""))
-        (with-temp-file ".gitignore"
-          (insert "
-  Archive/
-  .Rhistory
-  ,*~
-  .Rproj.user/
-  notes.org"))
-        (cd pastDir)))
+  ##
+  c(targets_01_prepareData, targets_02_computeResults)"))
+
+    (defconst p3/rproj-contents
+      (concat
+       "Version: 1.0
+
+  RestoreWorkspace: No
+  SaveWorkspace: No
+  AlwaysSaveHistory: Default
+
+  EnableCodeIndexing: Yes
+  UseSpacesForTab: Yes
+  NumSpacesForTab: 2
+  Encoding: UTF-8
+
+  RnwWeave: Sweave
+  LaTeX: pdfLaTeX"))
+
+    (defconst p3/gitignore-contents
+      (concat
+       "Archive/
+        .Rhistory
+        ,*~
+        .Rproj.user/
+        notes.org"))
+
+    ;; Default R scripts and their titles
+    (defconst p3/r-script-titles
+      '(("01_prepareData.R"    . "Preprocess data")
+        ("02_computeResults.R" . "Compute results")
+        ("utils.R"             . "Helper functions")))
+
+    (defconst p3/base-directories
+      '("R" "data" "data-raw" "output" "reports" "bin" "reports/graphics"))
+
+    (defconst p3/utils-r-contents
+      (concat
+       "##
+    sourceTargetsScripts <- function() {
+      ##
+      sourceFiles <- list.files(
+        here(\"R\"), pattern = \"^[0-9]{2}\", full.names = TRUE
+      )
+      ##
+      if (length(sourceFiles)) {
+        cat(
+          \"Loading source files: \",
+          paste0(basename(sourceFiles), collapse = \", \"), \"\\n\"
+        )
+        targets::tar_source(sourceFiles)
+      }
+    }
+
+
+    ##
+    installLoadPackages <- function(...) {
+      pkgs <- c(...)
+      ##
+      missingPkgs <- pkgs[!pkgs %in% installed.packages()]
+      ##tar
+      if (length(missingPkgs)) {
+        renv::install(missingPkgs, prompt = FALSE)
+      }
+      ##
+      if (!file.exists(\"renv.lock\")) {
+        renv::init(bare = TRUE)
+        ## ## Install packages, if they're missing
+        renv::snapshot()
+      } else if (!dir.exists(renv::paths$library())) {
+        renv::restore()
+      } else {
+        untrackedPkgs <- pkgs[!pkgs %in% names(renv::lockfile_read()$Packages)]
+        if (length(untrackedPkgs)) {
+          renv::record(untrackedPkgs)
+        }
+      }
+      ## Load all required packages
+      suppressPackageStartupMessages(
+        invisible(lapply(pkgs, library, character.only = TRUE))
+      )
+      ##
+      pkgs
+    }
+
+    ##
+    view_df <- function(x,
+                        name = deparse(substitute(x)),
+                        file = 'dt_viewer.html') {
+      widget <- DT::datatable(
+        x,
+        options = list(autoWidth = TRUE),
+        filter  = list(position = 'top', clear = FALSE)
+      )
+      ##
+      htmlwidgets::saveWidget(
+        widget,
+        file,
+        selfcontained = FALSE,
+        libdir        = paste0(tools::file_path_sans_ext(file), '_files'),
+        title         = paste('DT:', name)
+      )
+      ##
+      browseURL(normalizePath(file))
+    }"))
+
+    (defun p3/generate-roxygen-header (title &optional minimal)
+      "Return a roxygen/knitr header for an R script with TITLE.
+              If MINIMAL is non-nil, only include the YAML block (title/author/date),
+              without headings or setup chunk."
+      (let ((date (format-time-string "%m/%d/%Y")))
+        (concat
+         "#' ---\n"
+         "#' title:  '" title "'\n"
+         "#' author: 'Pavel Panko'\n"
+         "#' date:   '" date "'\n"
+         "#' ---\n\n"
+         (unless minimal
+           "#' ### 0. Prepare environment\n\n#+ setup, message = FALSE, results = FALSE\n"))))
+
+    (defun p3/--make-dirs (dirs)
+      "Create each directory listed in DIRS if it does not already exist."
+      (dolist (dir dirs)
+        (unless (file-exists-p dir)
+          (make-directory dir t))))
+
+    (defun p3/--write-file (path contents project-root)
+      "Write CONTENTS to PATH using a temp buffer."
+      (with-temp-file (expand-file-name path project-root)
+        (insert contents)))
+
+
+    (defun p3/create-default-r-scripts (project-root)
+      "Create default R scripts with headers inside PROJECT-ROOT/R."
+      (let ((r-dir (expand-file-name "R" project-root)))
+        (unless (file-exists-p r-dir)
+          (make-directory r-dir t))
+        (dolist (pair p3/r-script-titles)
+          (let* ((file (car pair))
+                 (title (cdr pair))
+                 (path (expand-file-name file r-dir))
+                 (minimal (string-equal file "utils.R")))
+            (with-temp-file path
+              (insert (p3/generate-roxygen-header title minimal))
+              (when (string-equal file "utils.R")
+                (insert p3/utils-r-contents)))))))
+
+    (defun p3/create-targets-file ()
+      "Create a _targets.R file in the project root with a full header."
+      (let ((file "_targets.R")
+            (title "_targets pipeline")
+            (path (expand-file-name "_targets.R")))
+        (with-temp-file path
+          (insert (p3/generate-roxygen-header title))
+          (insert p3/targets-r-contents))))
+
+
+    (defun p3/create-r-project-dir-structure (&optional include-targets)
+      "Create an R project named NAME with standard directories, R scripts, and optional targets directories."
+      (interactive "p")
+
+      (let* ((path (read-file-name "Create R project at: " (expand-file-name "~")))
+         (project-root (directory-file-name path))
+         (project-name (file-name-nondirectory project-root))
+         (parent-dir (file-name-directory project-root))
+         (rproj-file (concat project-name ".Rproj")))
+
+        (progn
+          ;; Create root
+          (unless (file-exists-p project-root)
+            (make-directory project-root))
+
+          (let ((default-directory project-root))
+
+            ;; Base directories
+            (p3/--make-dirs p3/base-directories)
+
+            ;; Create top-level _targets.R
+            (p3/create-targets-file))
+          ;; Default R scripts
+          (p3/create-default-r-scripts project-root)
+          ;; Project files
+          (p3/--write-file rproj-file p3/rproj-contents project-root)
+          (p3/--write-file ".projectile" "" project-root)
+          (p3/--write-file ".gitignore" p3/gitignore-contents project-root))
+
+      (message "Created project %s" project-name)))
 #+END_SRC
 
 .gitignore template
 
 #+BEGIN_SRC emacs-lisp
-  (defun p3/gitignore-template (dir)
-      (interactive (list (let (dir (insert-default-directory t))
-        (read-file-name "Select directory: "))))
-    (write-region "Archive/
-                   .Rhistory
-                   *~
-                   .Rproj.user/
-                   notes.org"
-                  nil (concat dir "/.gitignore")))
+  ;; (defun p3/gitignore-template (dir)
+  ;;     (interactive (list (let (dir (insert-default-directory t))
+  ;;       (read-file-name "Select directory: "))))
+  ;;   (write-region "Archive/
+  ;;                  .Rhistory
+  ;;                  *~
+  ;;                  .Rproj.user/
+  ;;                  notes.org"
+  ;;                 nil (concat dir "/.gitignore")))
 #+END_SRC
 
 Create (roxygenated) header for R scripts
@@ -543,11 +741,11 @@ Create roxygenated R script outputting to word via officer
   target_format <- knitr::opts_knit$get('rmarkdown.pandoc.to')
   if (!is.null(target_format)) {
     if (target_format %in% c('docx', 'latex')) {
-      knitr::opts_chunk$set(echo = FALSE)
+     knitr::opts_chunk$set(echo = FALSE)
     }
   }
 
-  options(knitr.kable.NA = '')
+  options(knitr.kable.NA  = '')
 
   #+ tables, echo = FALSE, message = FALSE"))
 #+END_SRC
@@ -813,6 +1011,7 @@ Inline auto-complete mode w/company.
              :with company-yasnippet)
                                ;; filenames
                                company-capf))
+    (setq company-dabbrev-downcase nil)
     :init
     (defun p3/ess-company-config ()
       "Configuration for ESS."
@@ -929,29 +1128,92 @@ Set working directory to Rproj root at R startup, if it exists
   ;;                                   :project-file ".Rproj")
 #+END_SRC
 
+Generic functions for running code in the local R processor
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/ess-run-at-point (template)
+    "Run R code in ESS using TEMPLATE, substituting the symbol at point.
+  TEMPLATE should be a string containing `%s` where the symbol name should go."
+    (interactive "sR code template (use %s for symbol): ")
+    (let ((sym (ess-symbol-at-point)))
+      (if sym
+          (ess-send-string
+           (ess-get-process ess-local-process-name)
+           (format template (symbol-name sym))
+           t)
+        (message "No valid symbol at point."))))
+
+  (defun p3/ess-run (code)
+    "Run arbitrary R CODE string in the current ESS process."
+    (interactive "sR code: ")
+    (ess-send-string
+     (ess-get-process ess-local-process-name)
+     (concat code "\n")
+     t))
+#+END_SRC
+
+targets functions!
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/tar-make ()
+    "Run targets::tar_make()"
+    (interactive)
+    (inferior-ess-r-force)
+    (p3/ess-run "targets::tar_make()"))
+
+  (defun p3/tar-load-at-point ()
+    "Run targets::tar_load(<symbol-at-point>)"
+    (interactive)
+    (inferior-ess-r-force)
+    (p3/ess-run-at-point "targets::tar_load(%s)"))
+
+  (defun p3/tar-make-debug ()
+    "Run targets::tar_make(debug_options)"
+    (interactive)
+    (inferior-ess-r-force)
+    (p3/ess-run "targets::tar_make(callr_function = NULL, use_crew = FALSE, as_job = FALSE)"))
+
+#+END_SRC
+
+DT viewer function to load in new R session
+
+#+BEGIN_SRC emacs-lisp
+  (defun p3/load-view-df-function ()
+    "Load the view_df() R helper into the current ESS R session."
+    (ess-remote-eval-string
+     (ess-get-process)
+     "view_df <- function(
+        x,
+        name     = deparse(substitute(x)),
+        file     = 'dt_viewer.html'##,
+        ## template = 'dt_title_template.html'
+      ) {
+          widget <- DT::datatable(
+          x,
+          options = list(autoWidth = TRUE),
+          filter  = list(position = 'top', clear = FALSE)
+        )
+
+        htmlwidgets::saveWidget(
+          widget,
+          file,
+          selfcontained = FALSE,
+          libdir        = paste0(tools::file_path_sans_ext(file), '_files'),
+          title         = paste('DT:', name)## ,
+          ## template      = template
+        )
+
+        browseURL(normalizePath(file))
+      }"))
+#+END_SRC
+
 View df using DT (assuming running R session)
 
 #+BEGIN_SRC emacs-lisp
-  (defun p3/r-view-df-at-point ()
+  (defun p3/r-view-df-at-point()
     (interactive)
-    (let ((sym (ess-symbol-at-point)))
-      (if sym
-          (ess-send-string (ess-get-process ess-local-process-name)
-                           (concat "DT::datatable(" (symbol-name sym) ", options = list(autoWidth = TRUE), filter = list(position = 'top', clear = FALSE))\n") t)
-        (message "No valid R symbol at point"))))
-
-  ;; (defun p3/r-view-df-at-point ()
-  ;;   "Display R data frame objects interactively using the DT package."
-  ;;   (interactive)
-  ;;   (let* ((object-at-point (thing-at-point 'symbol))
-  ;;          (object (if (and object-at-point (stringp object-at-point))
-  ;;                      object-at-point
-  ;;                    (completing-read "Choose data frame: " (ess-get-object-list ess-current-process-name)))))
-  ;;     (ess-send-string (format "DT::datatable(%s, options = list(autoWidth = TRUE), filter = list(position = 'top', clear = FALSE))\n" object))))
-
-  ;; Bind the function to a key for easy access
-  ;; (define-key ess-mode-map (kbd "C-c v") 'my/ess-display-dt-data-frame-at-point)
-
+    (inferior-ess-r-force)
+    (p3/ess-run-at-point "view_df(%s)"))
 #+END_SRC
 
 View df using DT (assuming running R session and exwm)
@@ -1040,6 +1302,7 @@ Archive R scripts in the current directory
     :ensure ess
     :hook ((inferior-ess-mode . p3/my-inferior-ess-init)
            (ess-r-post-run-hook . p3/set-projectile-wd-on-startup)
+           (ess-r-mode-hook . p3/load-view-df-function)
            (ess-r-mode-hook . p3/ess-company-config)
            (ess-r-mode-hook . p3/use-project-root-as-default-dir)
            ;; Treat "_" as part of a word when navigating across words
@@ -1048,14 +1311,20 @@ Archive R scripts in the current directory
                 ;; Re-map ess "run" to S-RET because of CUA mode
                 ("C-<return>" . nil)
                 ("S-<return>" . ess-eval-region-or-line-visibly-and-step)
-                ;; Pipe operator
-                ("C->" . add-pipe-and-step)
+                ;; Pipe operatormultiMdsDf
+                ("C-." . p3/add-pipe-and-step)
                 ;; Run library/source commands at the top of the script
                 ("C-c i" . p3/ess-library-and-source)
                 ;; View data.frame in DT::datatable at a point
-                ("C-c v" . p3/r-view-df-at-point))
+                ("C-c v" . p3/r-view-df-at-point)
+                ("C-c m" . p3/tar-make)
+                ("C-c d" . p3/tar-make-debug)
+                ("C-c l" . p3/tar-load-at-point))
     :bind (:map inferior-ess-r-mode-map
-                ("C-c v" . p3/r-view-df-at-point))
+                ("C-c v" . p3/r-view-df-at-point)
+                ("C-c m" . p3/tar-make)
+                ("C-c d" . p3/tar-make-debug)
+                ("C-c l" . p3/tar-load-at-point))
     ;; :hook
     ;; (ess-r-mode . (lambda () (yas-minor-mode)))
     :config
@@ -1088,11 +1357,11 @@ Archive R scripts in the current directory
             (ess-fl-keyword:numbers . t)
             (ess-fl-keyword:operators . t)
             (ess-fl-keyword:delimiters . t)
-            (ess-fl-keyword:                                                                                           = . t)
+            (ess-fl-keyword:= . t)
             (ess-R-fl-keyword:F&T . t)
             (ess-R-fl-keyword:%op% . t)))
           ;; Prepend directory name to R process name
-          ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:project-or-simple)
+          ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:project-or-directory)
     :custom
     (defvar ess--command-default-timeout most-positive-fixnum))
 #+END_SRC
@@ -1707,7 +1976,7 @@ Set region to checkboxes
 
 #+BEGIN_SRC emacs-lisp
   (defun org-set-line-checkbox (arg)
-    (interactive "P")
+    (interactive "p")
     (let ((n (or arg 1)))
       (when (region-active-p)
         (setq n (count-lines (region-beginning)
@@ -1753,7 +2022,7 @@ org-agenda defaults, as shown [[https://orgmode.org/worg/org-tutorials/org-custo
         (concat "#+title: ${title}\n#+category:${title}\n#+filetags: " tag "\n#+created: %U\n#+last_modified: %U\n#"))))
 
   (defun org-roam-node-insert-immediate-with-tag (arg &rest args)
-        (interactive "P")
+        (interactive "p")
         (let ((args (cons arg args))
               (org-roam-capture-templates (list (append (car
                                                          '(("t" "tagged" plain "%?"
@@ -2021,7 +2290,7 @@ Find helper functions file in project
     (remove-hook 'elpy-modules 'elpy-module-flymake)
     ;; Resolve indent issues
     (if (eq system-type 'windows-nt)
-        (setq python-shell-interpreter "C:/Users/ppanko/AppData/Local/miniconda3/python.exe"))
+        (setq python-shell-interpreter "C:/Users/ppanko/AppData/Local/Programs/Python/Python312/python.exe"))
     (if (eq system-type 'gnu/linux)
         (setq python-shell-interpreter "python"))
     (setq python-indent-guess-indent-offset t
@@ -2244,6 +2513,9 @@ Light-up matching parens.
 Use utf-8 everywhere all the time
 
 #+BEGIN_SRC emacs-lisp
+  (setenv "LANG" "en_US.UTF-8")
+  (setenv "LC_ALL" "en_US.UTF-8")
+  (set-language-environment "UTF-8")
   (prefer-coding-system 'utf-8)
   (setq locale-coding-system 'utf-8)
   (set-default-coding-systems 'utf-8-unix)
@@ -2399,4 +2671,66 @@ Start server on Windows
   ;;   (progn
   ;;     (require 'server)
   ;;     (server-start)))
+#+END_SRC
+
+* test
+#+BEGIN_SRC emacs-lisp
+  (defvar p3/ess-project-processes
+    (make-hash-table :test #'equal)
+    "Map project roots to ESS process names.")
+
+  (defvar-local p3/ess-project-root-cache nil
+    "Cached project root for the current buffer.")
+
+  (defun p3/ess-project-root ()
+    "Return the current project root, caching the result locally."
+    (or p3/ess-project-root-cache
+        (setq p3/ess-project-root-cache
+              (if-let ((proj (project-current nil)))
+                  (expand-file-name (project-root proj))
+                (expand-file-name default-directory)))))
+
+  (defun p3/ess-process-live-p (name)
+    "Return non-nil if NAME names a live process."
+    (when-let ((proc (get-process name)))
+      (process-live-p proc)))
+
+  (defun p3/ess-project-process ()
+    "Return the live ESS process name for the current project, or nil."
+    (let* ((root (p3/ess-project-root))
+           (name (gethash root p3/ess-project-processes)))
+      (cond
+       ((null name)
+        nil)
+       ((p3/ess-process-live-p name)
+        name)
+       (t
+        (remhash root p3/ess-project-processes)
+        nil))))
+
+  (defun p3/register-current-ess-process ()
+    "Register a newly created ESS process to the current project."
+    (when (derived-mode-p 'inferior-ess-mode)
+      (puthash (p3/ess-project-root)
+               ess-local-process-name
+               p3/ess-project-processes)))
+
+  (add-hook 'inferior-ess-mode-hook #'p3/register-current-ess-process)
+
+  (defun p3/ess-ensure-project-process (&rest _)
+    "Ensure the current buffer has a project-specific ESS process."
+    (let ((process (p3/ess-project-process)))
+      (unless process
+        ;; Lazily create the R process only when evaluation is requested.
+        (save-window-excursion
+          (call-interactively #'R))
+        (setq process (p3/ess-project-process)))
+
+      (unless process
+        (user-error "Unable to create ESS process"))
+
+      ;; Bind this source buffer to the project process.
+      (setq-local ess-local-process-name process)))
+
+  (advice-add #'ess-force-buffer-current :before #'p3/ess-ensure-project-process)
 #+END_SRC
