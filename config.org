@@ -34,9 +34,9 @@ Have use-package install any unavailable packages.
   (setq use-package-always-ensure t)
 #+END_SRC
 
-Update packages explicitly, so starting Emacs never changes the installed
-package set unexpectedly. Run =M-x p3/package-update= when ready to review and
-install available upgrades.
+Missing packages are installed automatically by =use-package=. Upgrades are
+never applied during startup. Run =M-x p3/package-update= to review available
+upgrades in the package menu and apply only the ones you select.
 
 #+BEGIN_SRC emacs-lisp
   (use-package package
@@ -44,9 +44,11 @@ install available upgrades.
     :commands package-upgrade-all)
 
   (defun p3/package-update ()
-    "Refresh package metadata and interactively upgrade installed packages."
+    "Open the package menu to review and selectively apply upgrades."
     (interactive)
-    (package-upgrade-all t))
+    (package-refresh-contents)
+    (package-list-packages t)
+    (message "Review upgrades with U, then execute selected actions with x."))
 #+END_SRC
 
 Always compile, and use the newest version available.
@@ -364,7 +366,7 @@ Reload config file.
    (defun p3/config-reload ()
         "Config reload."
         (interactive)
-        (org-babel-load-file (expand-file-name "~/.emacs.d/config.org")))
+        (p3/load-config))
   (global-set-key (kbd "C-c r") 'p3/config-reload)
 #+END_SRC
 
@@ -992,7 +994,8 @@ Prevent emacs from mangling the path to gpg on Windows, as shown [[https://emacs
 A GPT (and other LLM) co-pilot for Emacs
 
 #+BEGIN_SRC emacs-lisp
-  (use-package gptel
+  (comment
+    (use-package gptel
     :config
     ;; Set the default model to use
     (setq gptel-model 'gpt-4o-mini))
@@ -1138,7 +1141,208 @@ A GPT (and other LLM) co-pilot for Emacs
   ;;    model
   ;;    (lambda (response)
   ;;      (message "GPT response: %s" response))))
+    )
 
+#+END_SRC
+
+#+BEGIN_SRC emacs-lisp
+  (use-package gptel
+    :config
+    (setq gptel-model 'gpt-4o-mini
+          gptel-api-key (or (getenv "OPENAI_API_KEY")
+                            #'gptel-api-key-from-auth-source)))
+
+  (defconst p3/gptel-task-prompts
+    '(("Write Code" . "Write the requested code for the current programming language. Return only the code.")
+      ("Refactor" . "Refactor the selected code while preserving its behavior. Return only the replacement code.")
+      ("Generate Documentation" . "Add concise documentation for the selected code. Return only documentation appropriate for its language.")
+      ("Write Tests" . "Write tests for the selected code. Return only the test code.")
+      ("Translate Code" . "Translate the selected code to the requested target language. Return only the translated code.")
+      ("Send Line" . "Explain or respond to the selected line briefly."))
+    "Prompt instructions used by `p3/gptel-send-task'.")
+
+  (defun p3/gptel-task-code (task-type)
+    "Return the active region or current line for TASK-TYPE."
+    (if (equal task-type "Send Line")
+        (thing-at-point 'line t)
+      (when (use-region-p)
+        (filter-buffer-substring (region-beginning) (region-end)))))
+
+  (defun p3/gptel-sensitive-buffer-p ()
+    "Return non-nil when the current file looks like a secrets file."
+    (and buffer-file-name
+         (string-match-p
+          "\\(?:^\\|[/\\\\]\\)\\(?:secrets?\\|\\.env\\|credentials?\\)"
+          (file-name-nondirectory buffer-file-name))))
+
+  (defun p3/gptel-stream-begin (response context)
+    "Start inserting RESPONSE directly into the target described by CONTEXT."
+    (let ((buffer (plist-get context :target-buffer))
+          (start (plist-get context :start-marker))
+          (end (plist-get context :end-marker))
+          (insert-type (plist-get context :insert-type)))
+      (when (and (stringp response) (buffer-live-p buffer)
+                 (not (plist-get context :started)))
+        (with-current-buffer buffer
+          (save-excursion
+            (pcase insert-type
+              ('replace
+               (delete-region (marker-position start) (marker-position end))
+               (goto-char (marker-position start)))
+              ('append
+               (goto-char (marker-position end))
+               (setf (plist-get context :insert-start) (point))
+               (insert "\n"))
+              ('prepend
+               (goto-char (marker-position start)))
+              ('message nil))
+            (setf (plist-get context :insert-marker)
+                  (copy-marker (point) t))
+            (unless (plist-get context :insert-start)
+              (setf (plist-get context :insert-start) (point)))
+            (unless (eq insert-type 'message)
+              (insert response))))
+        (setf (plist-get context :started) t)
+        (when (eq insert-type 'message)
+          (setf (plist-get context :displayed-response) response)))))
+
+  (defun p3/gptel-stream-insert (response context)
+    "Insert one streamed RESPONSE chunk into the target buffer."
+    (when (stringp response)
+      (if (not (plist-get context :started))
+          (p3/gptel-stream-begin response context)
+        (if (eq (plist-get context :insert-type) 'message)
+          (setf (plist-get context :displayed-response)
+                  (concat (plist-get context :displayed-response) response))
+          (with-current-buffer (plist-get context :target-buffer)
+            (save-excursion
+              (goto-char (plist-get context :insert-marker))
+              (insert response)))))
+      (when (eq (plist-get context :insert-type) 'message)
+        (message "%s" (plist-get context :displayed-response)))))
+
+  (defun p3/gptel-finish-stream (context)
+    "Finish a direct-to-buffer stream described by CONTEXT."
+    (let ((buffer (plist-get context :target-buffer))
+          (insert-type (plist-get context :insert-type))
+          (insert-marker (plist-get context :insert-marker)))
+      (when (and (buffer-live-p buffer) (plist-get context :started))
+        (with-current-buffer buffer
+          (save-excursion
+            (when (eq insert-type 'prepend)
+              (goto-char insert-marker)
+              (insert "\n\n")))))
+      (p3/gptel-cleanup-context context)
+      (message "GPT task complete: %s" (plist-get context :task))))
+
+  (defun p3/gptel-abort-stream (context)
+    "Roll back a partial direct-to-buffer stream described by CONTEXT."
+    (let ((buffer (plist-get context :target-buffer))
+          (insert-type (plist-get context :insert-type))
+          (insert-start (plist-get context :insert-start))
+          (insert-marker (plist-get context :insert-marker)))
+      (when (and (buffer-live-p buffer) (plist-get context :started))
+        (with-current-buffer buffer
+          (save-excursion
+            (delete-region insert-start insert-marker)
+            (when (eq insert-type 'replace)
+              (goto-char insert-start)
+              (insert (plist-get context :original))))))
+      (p3/gptel-cleanup-context context)
+      (message "GPT task aborted: %s" (plist-get context :task))))
+
+  (defun p3/gptel-cleanup-context (context)
+    "Release markers held by a completed or aborted GPTel CONTEXT."
+    (dolist (marker (mapcar (lambda (key) (plist-get context key))
+                            '(:start-marker :end-marker :insert-marker)))
+      (when (markerp marker) (set-marker marker nil))))
+
+  (defun p3/gptel-stream-callback (response info)
+    "Handle streamed RESPONSE chunks and completion for a custom task."
+    (let ((context (plist-get info :context)))
+      (cond
+       ((stringp response) (p3/gptel-stream-insert response context))
+       ((and (consp response) (stringp (cdr response)))
+        (p3/gptel-stream-insert (cdr response) context))
+       ((eq response t)
+        (p3/gptel-finish-stream context))
+       ((eq response 'abort)
+        (p3/gptel-abort-stream context))
+       ((null response)
+        (p3/gptel-abort-stream context)
+        (message "GPT task failed: %s" (or (plist-get info :status) "unknown error"))))))
+
+  (defun p3/gptel-send-task (task-type insert-type)
+    "Stream TASK-TYPE directly into the target using INSERT-TYPE."
+    (let* ((code (p3/gptel-task-code task-type))
+           (instruction (cdr (assoc task-type p3/gptel-task-prompts))))
+      (cond
+       ((null code) (user-error "Select a region first"))
+       ((p3/gptel-sensitive-buffer-p)
+        (user-error "Refusing to send content from a sensitive-looking file"))
+       (t
+        (let* ((start-pos (if (use-region-p) (region-beginning)
+                            (line-beginning-position)))
+               (end-pos (if (use-region-p) (region-end)
+                          (line-end-position)))
+               (context (list :task task-type
+                              :insert-type insert-type
+                              :target-buffer (current-buffer)
+                              :original code
+                              :start-marker (unless (eq insert-type 'message)
+                                              (copy-marker start-pos nil))
+                              :end-marker (unless (eq insert-type 'message)
+                                            (copy-marker end-pos t))
+                              :started nil)))
+          (gptel-request
+           (format "%s\n\nLanguage/mode: %s\n\nCode:\n%s"
+                   instruction major-mode code)
+           :buffer (current-buffer)
+           :stream t
+           :context context
+           :callback #'p3/gptel-stream-callback))))))
+
+  (defvar p3/gptel-command-map
+    (let ((map (make-sparse-keymap)))
+      (define-key map (kbd "l") #'p3/gptel-send-current-line)
+      (define-key map (kbd "r") #'p3/gptel-refactor-region)
+      (define-key map (kbd "d") #'p3/gptel-generate-doc)
+      (define-key map (kbd "t") #'p3/gptel-write-tests)
+      (define-key map (kbd "c") #'p3/gptel-translate-code)
+      (define-key map (kbd "w") #'p3/gptel-write-code)
+      map)
+    "Prefix map for project-local GPTel tasks.")
+  (define-key global-map (kbd "C-c g") p3/gptel-command-map)
+
+  (defun p3/gptel-send-current-line ()
+    "Stream a response to the current line."
+    (interactive)
+    (p3/gptel-send-task "Send Line" 'message))
+
+  (defun p3/gptel-write-tests ()
+    "Stream tests for the region and append them after it."
+    (interactive)
+    (p3/gptel-send-task "Write Tests" 'append))
+
+  (defun p3/gptel-write-code ()
+    "Stream replacement code for the region."
+    (interactive)
+    (p3/gptel-send-task "Write Code" 'replace))
+
+  (defun p3/gptel-refactor-region ()
+    "Stream a refactoring and replace the region when complete."
+    (interactive)
+    (p3/gptel-send-task "Refactor" 'replace))
+
+  (defun p3/gptel-generate-doc ()
+    "Stream documentation and prepend it to the region when complete."
+    (interactive)
+    (p3/gptel-send-task "Generate Documentation" 'prepend))
+
+  (defun p3/gptel-translate-code ()
+    "Stream a translation and append it after the region."
+    (interactive)
+    (p3/gptel-send-task "Translate Code" 'append))
 #+END_SRC
 
 ** Flycheck
@@ -1327,8 +1531,27 @@ Process latex pdf with bibtex [[https://tex.stackexchange.com/questions/197707/u
 Use magit to manage git
 
 #+BEGIN_SRC emacs-lisp
+  (defvar p3/magit-command-map
+    (let ((map (make-sparse-keymap)))
+      ;; Keep the shortcuts from the personal Magit notes, with a few
+      ;; read-only/navigation commands alongside them.
+      (define-key map (kbd "s") #'magit-stage-files)
+      (define-key map (kbd "c") #'magit-commit-create)
+      (define-key map (kbd "f") #'magit-pull)
+      (define-key map (kbd "m") #'magit-merge)
+      (define-key map (kbd "P") #'magit-push-current-to-pushremote)
+      (define-key map (kbd "a") #'magit-remote-add)
+      (define-key map (kbd "g") #'magit-status)
+      (define-key map (kbd "l") #'magit-log-current)
+      (define-key map (kbd "d") #'magit-diff)
+      (define-key map (kbd "b") #'magit-blame)
+      (define-key map (kbd "q") #'close-magit-buffers)
+      map)
+    "Personal shortcuts for common Magit commands.")
+
   (use-package magit
     :defer t
+    :bind ("C-c m" . p3/magit-command-map)
     :config
     (with-eval-after-load 'magit-mode
       (add-hook 'after-save-hook 'magit-after-save-refresh-status t)))
@@ -1754,84 +1977,140 @@ Do presentations with org-present
 ** Python
 
 #+BEGIN_SRC emacs-lisp
-  (defun python-para-send-and-step ()
-    "Sends the current paragraph to the python REPL and goes to the next one"
-    (interactive)
-    (mark-paragraph)
-    (elpy-shell-get-or-create-process)
-    (python-shell-send-region (region-beginning) (region-end))
-    (elpy-shell-display-buffer)
-    (deactivate-mark)
-    (forward-paragraph)
-    (python-nav-forward-statement))
+  (require 'python)
+  (require 'project)
+  (require 'seq)
+  (require 'cl-lib)
 
-  (defun elpy-send-region-or-para-and-step ()
-    (interactive)
-    (if (use-region-p)
-        (progn
-          (elpy-shell-get-or-create-process)
-          (python-shell-send-region (region-beginning) (region-end) t)
-          (elpy-shell-display-buffer)
-          (goto-char (region-end))
-          (deactivate-mark)
-          (python-nav-forward-statement))
-      (python-para-send-and-step)))
-#+END_SRC
+  (defun p3/python-project-interpreter ()
+    "Return the project-local Python executable, when one exists."
+    (when-let* ((project (project-current))
+                (root (project-root project)))
+      (seq-some
+       (lambda (relative)
+         (let ((executable (expand-file-name relative root)))
+           (and (file-executable-p executable) executable)))
+       (if (eq system-type 'windows-nt)
+           '(".venv/Scripts/python.exe" "venv/Scripts/python.exe")
+         '(".venv/bin/python" "venv/bin/python")))))
 
-#+BEGIN_SRC emacs-lisp
-  (use-package elpy
-    :defer t
-    ;; Re-map "run" to S-RET because of CUA mode.
-    :bind (:map elpy-mode-map
+  (defun p3/python-setup-project-interpreter ()
+    "Use a project's `.venv` or `venv` interpreter for this buffer."
+    (when-let ((interpreter (p3/python-project-interpreter)))
+      (setq-local python-shell-interpreter interpreter)
+      (setq-local python-shell-virtualenv-root
+                  (file-name-directory (directory-file-name
+                                        (file-name-directory interpreter))))))
+
+  (defun p3/python-display-shell ()
+    "Start the Python shell and display it without leaving the source buffer."
+    (interactive)
+    (let ((process (python-shell-get-or-create-process)))
+      (display-buffer (process-buffer process))))
+
+  (defun p3/python-tools-path (file)
+    "Return FILE's path in the OS-specific Python tools environment."
+    (expand-file-name
+     file
+     (expand-file-name
+      (if (eq system-type 'windows-nt)
+          "python-tools/windows/"
+        "python-tools/linux/")
+      user-emacs-directory)))
+
+  (defun p3/python-ensure-language-server ()
+    "Install and return the managed basedpyright language-server executable."
+    (let* ((windows-p (eq system-type 'windows-nt))
+           (system-python (or (executable-find (if windows-p "python" "python3"))
+                              (executable-find "python")))
+           (tool-python (p3/python-tools-path
+                         (if windows-p "Scripts/python.exe" "bin/python")))
+           (server (p3/python-tools-path
+                    (if windows-p
+                        "Scripts/basedpyright-langserver.exe"
+                      "bin/basedpyright-langserver"))))
+      (when (and system-python (not (file-executable-p server)))
+        (make-directory (file-name-directory tool-python) t)
+        (unless (file-executable-p tool-python)
+          (call-process system-python nil "*p3-python-bootstrap*" nil
+                        "-m" "venv" (file-name-directory
+                                     (directory-file-name
+                                      (file-name-directory tool-python)))))
+        (when (file-executable-p tool-python)
+          (message "Installing basedpyright for Python support...")
+          (call-process tool-python nil "*p3-python-bootstrap*" nil
+                        "-m" "pip" "install" "--upgrade" "basedpyright")))
+      (and (file-executable-p server) server)))
+
+  (defun p3/python-eglot-ensure ()
+    "Start Eglot with the managed basedpyright language server."
+    (when-let ((server (p3/python-ensure-language-server)))
+      (require 'eglot)
+      (setq eglot-server-programs
+            (cons `((python-mode python-ts-mode) . (,server "--stdio"))
+                  (cl-remove-if
+                   (lambda (entry)
+                     (equal (car entry) '(python-mode python-ts-mode)))
+                   eglot-server-programs)))
+      (eglot-ensure)))
+
+  (defun p3/python-send-region-or-paragraph-and-step ()
+    "Send the region, or the current paragraph, then move to the next statement."
+    (interactive)
+    (let (beg end)
+      (if (use-region-p)
+          (setq beg (region-beginning) end (region-end))
+        (mark-paragraph)
+        (setq beg (region-beginning) end (region-end)))
+      (python-shell-send-region beg end)
+      (p3/python-display-shell)
+      (goto-char end)
+      (deactivate-mark)
+      (python-nav-forward-statement)))
+
+  (use-package python
+    :ensure nil
+    :bind (:map python-mode-map
                 ("C-<return>" . nil)
-                ("S-<return>" . elpy-shell-send-statement-and-step)
-                ("C-c C-c" . 'elpy-send-region-or-para-and-step)
+                ("S-<return>" . python-shell-send-statement)
+                ("C-c C-c" . p3/python-send-region-or-paragraph-and-step)
                 ("C-<up>" . backward-paragraph)
                 ("C-<down>" . forward-paragraph)
-                ("C-c C-z"  . elpy-shell-display-buffer))
-    ;; Python virtual environment setup
-    :init
-    (if (eq system-type 'windows-nt)
-        (add-hook 'python-mode-hook (lambda() (pyvenv-workon "~/python/envs/myvenv"))))
-    (if (eq system-type 'gnu/linux)
-        (add-hook 'elpy-mode-hook #'autoload-venv))
-        ;; (add-hook 'python-mode-hook (lambda() (pyvenv-workon "myvenv"))))
-    ;; Enable elpy after loading a python buffer
-    ;; as shown here: https://github.com/jorgenschaefer/elpy/issues/1566
-    (defun enable-elpy-once ()
-      (with-eval-after-load 'python (elpy-enable))
-      (advice-remove 'python-mode 'enable-elpy-once))
-    (advice-add 'python-mode :before 'enable-elpy-once)
-    :config
-    ;; Do not use flymake with elpy
-    (remove-hook 'elpy-modules 'elpy-module-flymake)
-    ;; Resolve indent issues
-    (if (eq system-type 'windows-nt)
-        (setq python-shell-interpreter "C:/Users/ppanko/AppData/Local/Programs/Python/Python312/python.exe"))
-    (if (eq system-type 'gnu/linux)
-        (setq python-shell-interpreter "python"))
-    (setq python-indent-guess-indent-offset t
-          python-indent-guess-indent-offset-verbose nil
-          ;; Set python3 as interpreter
-          python-shell-interpreter-args "-i"
-          ;; Remove indentation highlighting
-          elpy-modules (remq 'elpy-module-highlight-indentation elpy-modules)
-          elpy-rpc-python-command python-shell-interpreter))
+                ("C-c C-z" . p3/python-display-shell))
+    :hook ((python-mode . p3/python-setup-project-interpreter)
+           (python-mode . p3/python-eglot-ensure))
+    :custom
+    (python-indent-guess-indent-offset t)
+    (python-indent-guess-indent-offset-verbose nil)
+    (python-shell-interpreter (if (eq system-type 'windows-nt) "python" "python3"))
+    (python-shell-interpreter-args "-i"))
 
-#+END_SRC
+  ;; Emacs 29+ uses the tree-sitter mode when it is available.
+  (when (fboundp 'python-ts-mode)
+    (add-to-list 'auto-mode-alist '("\\.py\\'" . python-ts-mode))
+    (add-hook 'python-ts-mode-hook #'p3/python-setup-project-interpreter)
+    (add-hook 'python-ts-mode-hook #'p3/python-eglot-ensure)
+    (with-eval-after-load 'python
+      (define-key python-ts-mode-map (kbd "C-<return>") nil)
+      (define-key python-ts-mode-map (kbd "S-<return>") #'python-shell-send-statement)
+      (define-key python-ts-mode-map (kbd "C-c C-c") #'p3/python-send-region-or-paragraph-and-step)
+      (define-key python-ts-mode-map (kbd "C-<up>") #'backward-paragraph)
+      (define-key python-ts-mode-map (kbd "C-<down>") #'forward-paragraph)
+      (define-key python-ts-mode-map (kbd "C-c C-z") #'p3/python-display-shell)))
 
-#+BEGIN_SRC emacs-lisp
-  (defun autoload-venv ()
-    "Automatically activate a virtual environment matching the Projectile project name when starting Python.
-  If the matching venv does not exist, fall back to 'myvenv'.
-  Runs only once per Python session."
-      (when (projectile-project-p)  ;; Ensure inside a Projectile project
-        (let* ((venv-name (concat (projectile-project-name) "_env"))  ;; Construct venv name
-               (venv-path (concat "~/.virtualenvs/" venv-name))       ;; Expected path
-               (default-venv "myvenv")  ;; Fallback environment
-               (final-venv (if (file-directory-p venv-path) venv-name default-venv)))  ;; Choose venv
+  ;; Eglot reports diagnostics through Flymake; avoid duplicate Python reports.
+  (add-hook 'python-mode-hook (lambda () (when (bound-and-true-p flycheck-mode)
+                                  (flycheck-mode -1))))
+  (add-hook 'python-ts-mode-hook (lambda () (when (bound-and-true-p flycheck-mode)
+                                     (flycheck-mode -1))))
 
-          (pyvenv-workon final-venv))))  ;; Activate the chosen venv
+  (use-package eglot
+    :ensure t
+    :commands eglot-ensure
+    :bind (:map eglot-mode-map
+                ("C-c l r" . eglot-rename)
+                ("C-c l a" . eglot-code-actions)
+                ("C-c l f" . eglot-format)))
 #+END_SRC
 
 ** Rainbow
