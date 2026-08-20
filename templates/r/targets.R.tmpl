@@ -1,0 +1,33 @@
+#' ---
+#' title:  '{{title}}'
+#' author: '{{author}}'
+#' date:   '{{date}}'
+#' ---
+
+#' ### 0. Prepare environment
+
+#+ setup, message = FALSE, results = FALSE
+source(here::here("R", "utils.R"))
+
+pkgs <- installLoadPackages(
+  # Environment management
+  "renv", "targets", "tarchetypes", "here", "pkgload", "devtools",
+  # Data I/O
+  "readr", "data.table", "tidypolars", "arrow", "writexl",
+  # Data manipulation
+  "dplyr", "lubridate", "tidyr", "purrr",
+  # Visualization
+  "DT",
+  # Parallel processing
+  "crew", "crew.cluster"
+)
+
+tar_option_set(
+  packages   = pkgs,
+  format     = "parquet",
+  controller = crew_controller_local(workers = {{target-workers}})
+)
+
+sourceTargetsScripts()
+
+c(targets_01_prepareData, targets_02_computeResults)

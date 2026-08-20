@@ -1,0 +1,65 @@
+#' ---
+#' title:  '{{title}}'
+#' author: '{{author}}'
+#' date:   '{{date}}'
+#' ---
+
+sourceTargetsScripts <- function() {
+  sourceFiles <- list.files(
+    here("R"), pattern = "^[0-9]{2}", full.names = TRUE
+  )
+
+  if (length(sourceFiles)) {
+    cat(
+      "Loading source files: ",
+      paste0(basename(sourceFiles), collapse = ", "), "\n"
+    )
+    targets::tar_source(sourceFiles)
+  }
+}
+
+installLoadPackages <- function(...) {
+  pkgs <- c(...)
+  missingPkgs <- pkgs[!pkgs %in% installed.packages()]
+
+  if (length(missingPkgs)) {
+    renv::install(missingPkgs, prompt = FALSE)
+  }
+
+  if (!file.exists("renv.lock")) {
+    renv::init(bare = TRUE)
+    renv::snapshot()
+  } else if (!dir.exists(renv::paths$library())) {
+    renv::restore()
+  } else {
+    untrackedPkgs <- pkgs[!pkgs %in% names(renv::lockfile_read()$Packages)]
+    if (length(untrackedPkgs)) {
+      renv::record(untrackedPkgs)
+    }
+  }
+
+  suppressPackageStartupMessages(
+    invisible(lapply(pkgs, library, character.only = TRUE))
+  )
+  pkgs
+}
+
+view_df <- function(x,
+                    name = deparse(substitute(x)),
+                    file = "dt_viewer.html") {
+  widget <- DT::datatable(
+    x,
+    options = list(autoWidth = TRUE),
+    filter  = list(position = "top", clear = FALSE)
+  )
+
+  htmlwidgets::saveWidget(
+    widget,
+    file,
+    selfcontained = FALSE,
+    libdir        = paste0(tools::file_path_sans_ext(file), "_files"),
+    title         = paste("DT:", name)
+  )
+
+  browseURL(normalizePath(file))
+}

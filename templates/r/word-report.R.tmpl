@@ -1,0 +1,29 @@
+#' ---
+#' author: '{{author}}'
+#' date: '{{date}}'
+#' always_allow_html: yes
+#' output_dir: 'reports'
+#' output:
+#'   officedown::rdocx_document:
+#'     reference_docx: modified_styled-template.docx
+#'     df_print: kable
+#'     keep_md: FALSE
+#'   html_document:
+#'     df_print: kable
+#' params:
+#'   ic: NULL
+#'   title: ''
+#' title: ''
+#' ---
+
+#+ setup, message = FALSE, results = FALSE, include = FALSE
+# Load packages and helper functions here.
+
+target_format <- knitr::opts_knit$get('rmarkdown.pandoc.to')
+if (!is.null(target_format) && target_format %in% c('docx', 'latex')) {
+  knitr::opts_chunk$set(echo = FALSE)
+}
+
+options(knitr.kable.NA = '')
+
+#+ tables, echo = FALSE, message = FALSE

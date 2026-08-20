@@ -3,6 +3,9 @@
 (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/"))
 (package-initialize)
 
+;; Keep machine-local Custom state out of the portable configuration.
+(setq custom-file (expand-file-name "custom.el" user-emacs-directory))
+
 ;; Ensure that use-package is installed.
 ;;
 ;; If use-package isn't already installed, it's extremely likely that this is a
@@ -13,3 +16,4 @@
   (package-install 'use-package))
 
 (org-babel-load-file "~/.emacs.d/config.org")
+(load custom-file 'noerror 'nomessage)

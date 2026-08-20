@@ -3,6 +3,8 @@
 Start up in fullscreen
 
 #+BEGIN_SRC emacs-lisp
+  ;;; config.el --- Tangled Emacs configuration -*- lexical-binding: t; -*-
+
   (add-to-list 'default-frame-alist '(fullscreen . maximized))
 #+END_SRC
 
@@ -19,8 +21,7 @@ Start up in fullscreen
           dashboard-recentf-show-base 'align
           dashboard-recentf-item-format "%s  %s"
           dashboard-projects-item-format "%s  %s"
-          dashboard-icon-type 'all-the-icons)
-    dashboard-items '((recents  . 10)))
+          dashboard-items '((recents . 10))))
 #+END_SRC
 
 The rest of the stuff in this section was stolen from [[https://github.com/hrs/dotfiles/blob/master/emacs/.emacs.d/configuration.org][here]];
@@ -33,16 +34,19 @@ Have use-package install any unavailable packages.
   (setq use-package-always-ensure t)
 #+END_SRC
 
-Automatically update packages
+Update packages explicitly, so starting Emacs never changes the installed
+package set unexpectedly. Run =M-x p3/package-update= when ready to review and
+install available upgrades.
 
 #+BEGIN_SRC emacs-lisp
-  (use-package auto-package-update
-    :hook (auto-package-update-before-hook . package-refresh-contents)
-    :custom
-    (auto-package-update-delete-old-versions t)
-    (auto-package-update-hide-results t)
-    :config
-    (auto-package-update-now-async))
+  (use-package package
+    :ensure nil
+    :commands package-upgrade-all)
+
+  (defun p3/package-update ()
+    "Refresh package metadata and interactively upgrade installed packages."
+    (interactive)
+    (package-upgrade-all t))
 #+END_SRC
 
 Always compile, and use the newest version available.
@@ -60,9 +64,11 @@ Always compile, and use the newest version available.
 Load secrets if they exist
 
 #+BEGIN_SRC emacs-lisp
-  (setq secrets-file "~/.emacs.d/secrets.el")
-  (when (file-exists-p secrets-file)
-    (load-file secrets-file))
+  (defconst p3/secrets-file
+    (expand-file-name "secrets.el" user-emacs-directory)
+    "Private configuration file loaded outside version control.")
+  (when (file-exists-p p3/secrets-file)
+    (load-file p3/secrets-file))
 #+END_SRC
 
 * General
@@ -81,6 +87,8 @@ Set font and size
   (when (eq system-type 'gnu/linux)
     (set-face-attribute 'default nil :family "Inconsolata" :height 140))
     ;; (setq-default line-spacing 20))
+
+  (setq-default cursor-type 'bar)
 #+END_SRC
 
 Delete seleted text when typing over it.
@@ -317,10 +325,6 @@ Graphical icons?
       (all-the-icons-install-fonts t))
     (setq all-the-icons-scale-factor 1))
 
-  (use-package all-the-icons-ivy
-    :after all-the-icons
-    :init (add-hook 'after-init-hook 'all-the-icons-ivy-setup))
-
   (use-package all-the-icons-dired
     :after all-the-icons)
 #+END_SRC
@@ -380,17 +384,19 @@ Sudo edit a file, as shown [[https://emacsredux.com/blog/2013/04/21/edit-files-a
            (find-alternate-file (concat "/sudo:root@localhost:" buffer-file-name))))
 #+END_SRC
 
-Run a shiny app from emacs
+Load the personal R workflow module. Its project templates live under
+=templates/r/=, its insertion snippets under =snippets/=, and =C-c R= opens
+the complete R command prefix.
 
 #+BEGIN_SRC emacs-lisp
-  (defun p3/ess-r-shiny-run-app (&optional arg)
-    "Interface for `shiny::runApp()'.
-  With prefix ARG ask for extra args."
-    (interactive)
-    (inferior-ess-r-force)
-    (ess-eval-linewise
-     "shiny::runApp(\".\")\n" "Running app" arg
-     '("" (read-string "Arguments: " "recompile = TRUE"))))
+  (eval-and-compile
+    (add-to-list 'load-path (expand-file-name "lisp" user-emacs-directory)))
+
+  (use-package p3-r-tools
+    :ensure nil
+    :demand t
+    :config
+    (keymap-global-set "C-c R" p3-r-command-map))
 #+END_SRC
 
 Add suffix to a region (not necessary with multiple cursors)
@@ -423,333 +429,6 @@ Put quotes around each word (work-in-progress)
     (global-set-key (kbd "C-c q") 'p3/force-quotes)
 #+END_SRC
 
-Pipe operator in R from [[https://emacs.stackexchange.com/questions/8041/how-to-implement-the-piping-operator-in-ess-mode][here.]]
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/add-pipe-and-step ()
-    "Insert magrittr pipe quickly without triggering ESS reindent."
-    (interactive)
-    (just-one-space 1)
-    (insert "%>%\n"))
-#+END_SRC
-
-Insert r chunk in polymode, as shown here [[https://emacs.stackexchange.com/questions/27405/insert-code-chunk-in-r-markdown-with-yasnippet-and-polymode][here.]]
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/insert-r-chunk (header)
-    "Insert an r-chunk in markdown mode."
-    (interactive "sHeader: ")
-    (insert (concat "```{r " header "}\n\n```"))
-    (forward-line -1))
-#+END_SRC
-
-Create R project directory structure #TODO: shiny - create app dir, pkg dev: create inst dir
-
-#+BEGIN_SRC emacs-lisp
-    (defconst p3/targets-r-contents
-      (concat
-       "##
-  pkgs <- installLoadPackages(
-    ## Environment management
-    \"renv\", \"targets\", \"tarchetypes\", \"here\", \"pkgload\", \"devtools\",
-    ## Data I/O
-    \"readr\", \"data.table\", \"tidypolars\", \"arrow\", \"writexl\",
-    ## Data manipulation
-    \"dplyr\", \"lubridate\", \"tidyr\", \"purrr\", ##\"stringr\",
-    ## Visualization
-    \"DT\", ## \"ggplot2\"
-    ## parallel processing
-    \"crew\", \"crew.cluster\"
-  )
-
-  ##
-  tar_option_set(
-    packages   = pkgs,
-    format     = \"parquet\",
-    controller = crew_controller_local(workers = 10)
-  )
-
-  ##
-  sourceTargetsScripts()
-
-  ##
-  c(targets_01_prepareData, targets_02_computeResults)"))
-
-    (defconst p3/rproj-contents
-      (concat
-       "Version: 1.0
-
-  RestoreWorkspace: No
-  SaveWorkspace: No
-  AlwaysSaveHistory: Default
-
-  EnableCodeIndexing: Yes
-  UseSpacesForTab: Yes
-  NumSpacesForTab: 2
-  Encoding: UTF-8
-
-  RnwWeave: Sweave
-  LaTeX: pdfLaTeX"))
-
-    (defconst p3/gitignore-contents
-      (concat
-       "Archive/
-        .Rhistory
-        ,*~
-        .Rproj.user/
-        notes.org"))
-
-    ;; Default R scripts and their titles
-    (defconst p3/r-script-titles
-      '(("01_prepareData.R"    . "Preprocess data")
-        ("02_computeResults.R" . "Compute results")
-        ("utils.R"             . "Helper functions")))
-
-    (defconst p3/base-directories
-      '("R" "data" "data-raw" "output" "reports" "bin" "reports/graphics"))
-
-    (defconst p3/utils-r-contents
-      (concat
-       "##
-    sourceTargetsScripts <- function() {
-      ##
-      sourceFiles <- list.files(
-        here(\"R\"), pattern = \"^[0-9]{2}\", full.names = TRUE
-      )
-      ##
-      if (length(sourceFiles)) {
-        cat(
-          \"Loading source files: \",
-          paste0(basename(sourceFiles), collapse = \", \"), \"\\n\"
-        )
-        targets::tar_source(sourceFiles)
-      }
-    }
-
-
-    ##
-    installLoadPackages <- function(...) {
-      pkgs <- c(...)
-      ##
-      missingPkgs <- pkgs[!pkgs %in% installed.packages()]
-      ##tar
-      if (length(missingPkgs)) {
-        renv::install(missingPkgs, prompt = FALSE)
-      }
-      ##
-      if (!file.exists(\"renv.lock\")) {
-        renv::init(bare = TRUE)
-        ## ## Install packages, if they're missing
-        renv::snapshot()
-      } else if (!dir.exists(renv::paths$library())) {
-        renv::restore()
-      } else {
-        untrackedPkgs <- pkgs[!pkgs %in% names(renv::lockfile_read()$Packages)]
-        if (length(untrackedPkgs)) {
-          renv::record(untrackedPkgs)
-        }
-      }
-      ## Load all required packages
-      suppressPackageStartupMessages(
-        invisible(lapply(pkgs, library, character.only = TRUE))
-      )
-      ##
-      pkgs
-    }
-
-    ##
-    view_df <- function(x,
-                        name = deparse(substitute(x)),
-                        file = 'dt_viewer.html') {
-      widget <- DT::datatable(
-        x,
-        options = list(autoWidth = TRUE),
-        filter  = list(position = 'top', clear = FALSE)
-      )
-      ##
-      htmlwidgets::saveWidget(
-        widget,
-        file,
-        selfcontained = FALSE,
-        libdir        = paste0(tools::file_path_sans_ext(file), '_files'),
-        title         = paste('DT:', name)
-      )
-      ##
-      browseURL(normalizePath(file))
-    }"))
-
-    (defun p3/generate-roxygen-header (title &optional minimal)
-      "Return a roxygen/knitr header for an R script with TITLE.
-              If MINIMAL is non-nil, only include the YAML block (title/author/date),
-              without headings or setup chunk."
-      (let ((date (format-time-string "%m/%d/%Y")))
-        (concat
-         "#' ---\n"
-         "#' title:  '" title "'\n"
-         "#' author: 'Pavel Panko'\n"
-         "#' date:   '" date "'\n"
-         "#' ---\n\n"
-         (unless minimal
-           "#' ### 0. Prepare environment\n\n#+ setup, message = FALSE, results = FALSE\n"))))
-
-    (defun p3/--make-dirs (dirs)
-      "Create each directory listed in DIRS if it does not already exist."
-      (dolist (dir dirs)
-        (unless (file-exists-p dir)
-          (make-directory dir t))))
-
-    (defun p3/--write-file (path contents project-root)
-      "Write CONTENTS to PATH using a temp buffer."
-      (with-temp-file (expand-file-name path project-root)
-        (insert contents)))
-
-
-    (defun p3/create-default-r-scripts (project-root)
-      "Create default R scripts with headers inside PROJECT-ROOT/R."
-      (let ((r-dir (expand-file-name "R" project-root)))
-        (unless (file-exists-p r-dir)
-          (make-directory r-dir t))
-        (dolist (pair p3/r-script-titles)
-          (let* ((file (car pair))
-                 (title (cdr pair))
-                 (path (expand-file-name file r-dir))
-                 (minimal (string-equal file "utils.R")))
-            (with-temp-file path
-              (insert (p3/generate-roxygen-header title minimal))
-              (when (string-equal file "utils.R")
-                (insert p3/utils-r-contents)))))))
-
-    (defun p3/create-targets-file ()
-      "Create a _targets.R file in the project root with a full header."
-      (let ((file "_targets.R")
-            (title "_targets pipeline")
-            (path (expand-file-name "_targets.R")))
-        (with-temp-file path
-          (insert (p3/generate-roxygen-header title))
-          (insert p3/targets-r-contents))))
-
-
-    (defun p3/create-r-project-dir-structure (&optional include-targets)
-      "Create an R project named NAME with standard directories, R scripts, and optional targets directories."
-      (interactive "p")
-
-      (let* ((path (read-file-name "Create R project at: " (expand-file-name "~")))
-         (project-root (directory-file-name path))
-         (project-name (file-name-nondirectory project-root))
-         (parent-dir (file-name-directory project-root))
-         (rproj-file (concat project-name ".Rproj")))
-
-        (progn
-          ;; Create root
-          (unless (file-exists-p project-root)
-            (make-directory project-root))
-
-          (let ((default-directory project-root))
-
-            ;; Base directories
-            (p3/--make-dirs p3/base-directories)
-
-            ;; Create top-level _targets.R
-            (p3/create-targets-file))
-          ;; Default R scripts
-          (p3/create-default-r-scripts project-root)
-          ;; Project files
-          (p3/--write-file rproj-file p3/rproj-contents project-root)
-          (p3/--write-file ".projectile" "" project-root)
-          (p3/--write-file ".gitignore" p3/gitignore-contents project-root))
-
-      (message "Created project %s" project-name)))
-#+END_SRC
-
-.gitignore template
-
-#+BEGIN_SRC emacs-lisp
-  ;; (defun p3/gitignore-template (dir)
-  ;;     (interactive (list (let (dir (insert-default-directory t))
-  ;;       (read-file-name "Select directory: "))))
-  ;;   (write-region "Archive/
-  ;;                  .Rhistory
-  ;;                  *~
-  ;;                  .Rproj.user/
-  ;;                  notes.org"
-  ;;                 nil (concat dir "/.gitignore")))
-#+END_SRC
-
-Create (roxygenated) header for R scripts
-
-#+BEGIN_SRC emacs-lisp
-    (defun p3/insert-roxygenated-header (title)
-      "Set up a knitable header for R docs"
-      (interactive "sTitle: ")
-      (let ((date (format-time-string "%m/%d/%Y")))
-        (insert (format "#' ---
-  #' title:  '%s'
-  #' author: 'Pavel Panko'
-  #' date:   '%s'
-  #' ---
-
-  #' ### 0. Prepare environment
-
-  #+ setup, message = FALSE, results = FALSE
-  ## Names of required packages
-  pkgs <- c(\"here\", \"readr\")
-  ## Install packages, if they're missing
-  missingPkgs <- pkgs[!pkgs %%in%% installed.packages()]
-  install.packages(missingPkgs)
-  ## Load all required packages
-  invisible(lapply(pkgs, library, character.only = TRUE))
-
-  source(here(\"R/99_helperFunctions.R\"))
-
-  #' ### 1. Read in data
-
-  #+ read
-    " title date))))
-#+END_SRC
-
-Create roxygenated R script outputting to word via officer
-
-#+BEGIN_SRC emacs-lisp
-      (defun p3/insert-word-roxygenated-header ()
-        "Set up a knitable header for R docs"
-        (interactive)
-          (insert "#' ---
-  #' author: ''
-  #' date: ''
-  #' always_allow_html: yes
-  #' output_dir: 'reports'
-  #' output:
-  #'   officedown::rdocx_document:
-  #'     reference_docx: modified_styled-template.docx
-  #'     df_print: kable
-  #'     keep_md: FALSE
-  #'   html_document:
-  #'     df_print: kable
-  #' params:
-  #'   ic: NULL
-  #'   title: ''
-  #' title: ''
-  #' ---
-
-  #+ setup, message = FALSE, results = FALSE, include = FALSE
-  ## Load packages and helper functions
-  ## stpiR::library_or_install(here)
-
-  ##source(here('R/99_helperFunctions.R'))
-
-  ## Set up formatting
-  target_format <- knitr::opts_knit$get('rmarkdown.pandoc.to')
-  if (!is.null(target_format)) {
-    if (target_format %in% c('docx', 'latex')) {
-     knitr::opts_chunk$set(echo = FALSE)
-    }
-  }
-
-  options(knitr.kable.NA  = '')
-
-  #+ tables, echo = FALSE, message = FALSE"))
-#+END_SRC
-
 Byte-compile emacs directory
 
 #+BEGIN_SRC emacs-lisp
@@ -779,55 +458,34 @@ Open Windows shell when using Windows
     (global-set-key (kbd "C-x C-i") #'windows-shell)))
 #+END_SRC
 
-Highlight library/source region and run
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/ess-library-and-source()
-    (interactive)
-    (save-excursion
-      (let ( (right-paren (save-excursion ; using save-excursion because
-                                        ; we don't want to move the
-                                        ; point.
-                          (re-search-backward "#' ### 1." nil t))) ; bound nil
-                                                          ; no-error t
-           (left-paren (save-excursion (re-search-backward "#' ### 0." nil t))))
-    (when (and right-paren left-paren)
-      ;; this is actually a way to activate a mark
-      ;; you have to move your point to one side
-      (push-mark right-paren)
-      (goto-char left-paren)
-      (activate-mark)
-      (ess-eval-region-or-function-or-paragraph)))))
-#+END_SRC
-
 Move lines from [[https://www.emacswiki.org/emacs/MoveLine][emacswiki]]
 
 #+BEGIN_SRC emacs-lisp
   (defun move-line (n)
-  "Move the current line up or down by N lines."
-  (interactive "p")
-  (setq col (current-column))
-  (beginning-of-line) (setq start (point))
-  (end-of-line) (forward-char) (setq end (point))
-  (let ((line-text (delete-and-extract-region start end)))
-    (forward-line n)
-    (insert line-text)
-    ;; restore point to original column in moved line
-    (forward-line -1)
-    (forward-char col)))
+    "Move the current line up or down by N lines."
+    (interactive "p")
+    (let ((column (current-column))
+          (start (line-beginning-position))
+          (end (line-beginning-position 2)))
+      (let ((line-text (delete-and-extract-region start end)))
+        (forward-line n)
+        (insert line-text)
+        ;; Restore point to its original column in the moved line.
+        (forward-line -1)
+        (move-to-column column))))
 
-(defun move-line-up (n)
-  "Move the current line up by N lines."
-  (interactive "p")
-  (move-line (if (null n) -1 (- n))))
+  (defun move-line-up (n)
+    "Move the current line up by N lines."
+    (interactive "p")
+    (move-line (if (null n) -1 (- n))))
 
-(defun move-line-down (n)
-  "Move the current line down by N lines."
-  (interactive "p")
-  (move-line (if (null n) 1 n)))
+  (defun move-line-down (n)
+    "Move the current line down by N lines."
+    (interactive "p")
+    (move-line (if (null n) 1 n)))
 
-(global-set-key (kbd "M-<up>") 'move-line-up)
-(global-set-key (kbd "M-<down>") 'move-line-down)
+  (global-set-key (kbd "M-<up>") #'move-line-up)
+  (global-set-key (kbd "M-<down>") #'move-line-down)
 #+END_SRC
 
 Open files using default external programs via dired as shown [[https://stackoverflow.com/questions/25109968/in-emacs-how-to-open-file-in-external-program-without-errors][here]].
@@ -952,49 +610,82 @@ Set reftex format as shown [[https://stackoverflow.com/questions/13607156/autoco
 
 ** Completion-related
 
-ivy completion
+Use the standard Emacs completion API with an Ivy-like interface. Vertico
+provides the vertical candidate list, Orderless provides flexible matching,
+Consult replaces Counsel and Swiper commands, and Embark adds contextual
+actions. Command history keeps frequently used =M-x= entries near the top.
 
 #+BEGIN_SRC emacs-lisp
-  (use-package counsel
-    :after ivy
-    :config (counsel-mode))
-
-  (use-package ivy
-    :defer 0.1
-    :diminish
-    :bind (("C-c C-r" . ivy-resume)
-           ("C-x B" . ivy-switch-buffer-other-window))
+  (use-package savehist
+    :ensure nil
     :custom
-    (ivy-count-format "(%d/%d) ")
-    (ivy-use-virtual-buffers t)
-    :config (ivy-mode))
+    (history-length 100)
+    :init
+    (savehist-mode 1))
 
-  (use-package ivy-rich
-      :after (:all ivy counsel)
-      :init (setq ivy-rich-path-style 'abbrev
-                ivy-virtual-abbreviate 'full)
-      :config (ivy-rich-mode))
+  (use-package vertico
+    :custom
+    (vertico-cycle t)
+    (vertico-sort-function #'vertico-sort-history-length-alpha)
+    :init
+    (vertico-mode 1)
+    :config
+    (require 'vertico-repeat)
+    (add-hook 'minibuffer-setup-hook #'vertico-repeat-save))
 
-  (use-package swiper
-    :after ivy
-    :bind (("C-r" . swiper-all)
-           ("C-s" . swiper)
-           ("C-c h" . swiper-r-doc-chapter-search)))
+  (use-package orderless
+    :custom
+    (completion-styles '(orderless basic))
+    (completion-category-defaults nil)
+    (completion-category-overrides
+     '((file (styles partial-completion)))))
 
-  (defun swiper-r-doc-chapter-search ()
+  (use-package marginalia
+    :bind (:map minibuffer-local-map
+                ("M-A" . marginalia-cycle))
+    :init
+    (marginalia-mode 1))
+
+  (declare-function consult-line "consult" (&optional initial start))
+  (declare-function consult-line-multi "consult" (query &optional initial))
+  (declare-function consult-ripgrep "consult" (&optional directory initial))
+
+  (defun p3/consult-r-doc-chapter-search ()
+    "Search the current buffer for an R documentation chapter marker."
     (interactive)
-    (swiper-isearch "#' ### [0-9]+\."))
-#+END_SRC
+    (consult-line "#' ### [0-9]+\\."))
 
-smex completion for M-x commands
+  (defun p3/consult-line-all ()
+    "Search for a matching line across all live buffers."
+    (interactive)
+    (consult-line-multi t))
 
-#+BEGIN_SRC emacs-lisp
-  (use-package smex
-        :custom (smex-prompt-string "Command: ")
-        :init
-        (smex-initialize)
-        (global-set-key (kbd "M-x") 'smex)
-        (global-set-key (kbd "M-X") 'smex-major-mode-commands))
+  (use-package consult
+    :bind (("M-x" . execute-extended-command)
+           ("M-X" . execute-extended-command-for-buffer)
+           ("C-s" . consult-line)
+           ("C-r" . p3/consult-line-all)
+           ("C-c C-r" . vertico-repeat)
+           ("C-c h" . p3/consult-r-doc-chapter-search)
+           ("C-x b" . consult-buffer)
+           ("C-x B" . consult-buffer-other-window)
+           ("M-y" . consult-yank-pop))
+    :init
+    (setq register-preview-delay 0.5
+          register-preview-function #'consult-register-format
+          xref-show-xrefs-function #'consult-xref
+          xref-show-definitions-function #'consult-xref))
+
+  (use-package embark
+    :bind (("C-." . embark-act)
+           ("C-;" . embark-dwim)
+           ("C-h B" . embark-bindings))
+    :init
+    (setq prefix-help-command #'embark-prefix-help-command))
+
+  (use-package embark-consult
+    :after (embark consult)
+    :hook (embark-collect-mode . consult-preview-at-point-mode))
 #+END_SRC
 
 Inline auto-complete mode w/company.
@@ -1002,20 +693,23 @@ Inline auto-complete mode w/company.
 #+BEGIN_SRC emacs-lisp
   (use-package company
     :hook (after-init . global-company-mode)
-    :config
-    (setq r-company-backends '((:separate
-             ;; help
-             company-R-library company-R-args company-R-objects
-             ;; local objects
-             company-dabbrev-code
-             :with company-yasnippet)
-                               ;; filenames
-                               company-capf))
-    (setq company-dabbrev-downcase nil)
     :init
+    (defvar p3/r-company-backends
+      '((:separate
+         ;; Help and objects.
+         company-R-library company-R-args company-R-objects
+         company-dabbrev-code
+         :with company-yasnippet)
+        ;; Filenames and other completion-at-point providers.
+        company-capf)
+      "Company completion backends used in ESS R buffers.")
+    (defvaralias 'r-company-backends 'p3/r-company-backends)
+
     (defun p3/ess-company-config ()
       "Configuration for ESS."
-      (setq-local company-backends r-company-backends)))
+      (setq-local company-backends p3/r-company-backends))
+    :config
+    (setq company-dabbrev-downcase nil))
   ;; for debugging
   ;; (setq company-idle-delay nil)
 #+END_SRC
@@ -1037,15 +731,6 @@ Code snippets
     (yas-global-mode 1)
     :config
     (add-to-list 'yas-snippet-dirs "~/.emacs.d/snippets"))
-#+END_SRC
-
-Save minibuffer history
-
-#+BEGIN_SRC emacs-lisp
-(use-package savehist
-  :config
-  (setq history-length 25)
-  (savehist-mode 1))
 #+END_SRC
 
 ** C++
@@ -1112,219 +797,52 @@ Options for inferior ESS
 Use project root for path completions
 
 #+BEGIN_SRC emacs-lisp
+  (defun p3/project-root ()
+    "Return the current Projectile or built-in project root, if any."
+    (or (and (fboundp 'projectile-project-root)
+             (ignore-errors (projectile-project-root)))
+        (when-let ((project (project-current nil)))
+          (project-root project))))
+
   (defun p3/use-project-root-as-default-dir ()
-      "Set buffer-local `default-directory` to the Projectile project root if available."
-      (when-let ((root (projectile-project-root)))
-          (setq-local default-directory root)))
+    "Use the current project root as the buffer's default directory."
+    (when-let ((root (p3/project-root)))
+      (setq-local default-directory root)))
 #+END_SRC
 
-Set working directory to Rproj root at R startup, if it exists
+ESS automatically starts R in the current built-in project root, falling back
+to =default-directory= when the buffer is not in a project.
 
-#+BEGIN_SRC emacs-lisp
-  (defun p3/set-projectile-wd-on-startup ()
-    (cond ((f-exists-p ((projectile-project-root)))
-           (setq ess-startup-directory 'projectile-project-root))))
-  ;; (projectile-register-project-type 'r '(".r" ".R" ".Rproj")
-  ;;                                   :project-file ".Rproj")
-#+END_SRC
-
-Generic functions for running code in the local R processor
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/ess-run-at-point (template)
-    "Run R code in ESS using TEMPLATE, substituting the symbol at point.
-  TEMPLATE should be a string containing `%s` where the symbol name should go."
-    (interactive "sR code template (use %s for symbol): ")
-    (let ((sym (ess-symbol-at-point)))
-      (if sym
-          (ess-send-string
-           (ess-get-process ess-local-process-name)
-           (format template (symbol-name sym))
-           t)
-        (message "No valid symbol at point."))))
-
-  (defun p3/ess-run (code)
-    "Run arbitrary R CODE string in the current ESS process."
-    (interactive "sR code: ")
-    (ess-send-string
-     (ess-get-process ess-local-process-name)
-     (concat code "\n")
-     t))
-#+END_SRC
-
-targets functions!
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/tar-make ()
-    "Run targets::tar_make()"
-    (interactive)
-    (inferior-ess-r-force)
-    (p3/ess-run "targets::tar_make()"))
-
-  (defun p3/tar-load-at-point ()
-    "Run targets::tar_load(<symbol-at-point>)"
-    (interactive)
-    (inferior-ess-r-force)
-    (p3/ess-run-at-point "targets::tar_load(%s)"))
-
-  (defun p3/tar-make-debug ()
-    "Run targets::tar_make(debug_options)"
-    (interactive)
-    (inferior-ess-r-force)
-    (p3/ess-run "targets::tar_make(callr_function = NULL, use_crew = FALSE, as_job = FALSE)"))
-
-#+END_SRC
-
-DT viewer function to load in new R session
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/load-view-df-function ()
-    "Load the view_df() R helper into the current ESS R session."
-    (ess-remote-eval-string
-     (ess-get-process)
-     "view_df <- function(
-        x,
-        name     = deparse(substitute(x)),
-        file     = 'dt_viewer.html'##,
-        ## template = 'dt_title_template.html'
-      ) {
-          widget <- DT::datatable(
-          x,
-          options = list(autoWidth = TRUE),
-          filter  = list(position = 'top', clear = FALSE)
-        )
-
-        htmlwidgets::saveWidget(
-          widget,
-          file,
-          selfcontained = FALSE,
-          libdir        = paste0(tools::file_path_sans_ext(file), '_files'),
-          title         = paste('DT:', name)## ,
-          ## template      = template
-        )
-
-        browseURL(normalizePath(file))
-      }"))
-#+END_SRC
-
-View df using DT (assuming running R session)
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/r-view-df-at-point()
-    (interactive)
-    (inferior-ess-r-force)
-    (p3/ess-run-at-point "view_df(%s)"))
-#+END_SRC
-
-View df using DT (assuming running R session and exwm)
-
-#+BEGIN_SRC emacs-lisp
-  ;; (defun r-view-df-at-point ()
-  ;;   (interactive)
-  ;;   (let ((sym (ess-symbol-at-point)))
-  ;;     (when sym
-  ;;       (let* ((buff (generate-new-buffer "*r-output*"))
-  ;;             (proc (ess-get-process ess-local-process-name))
-  ;;             (command (concat "DT::datatable(" (symbol-name sym) ")\n")))
-  ;;       (ess-command command buff 'sleep nil nil proc)
-  ;;       (with-current-buffer buff
-  ;;         (pop-to-buffer buff))))))
-#+END_SRC
-
-Replace a write statement with a read statement in a region
-
-#+BEGIN_SRC emacs-lisp
-  (defun write-to-read-conversion-multi ()
-    "Convert all `write`-style and `save`-style calls to corresponding `read`-style calls.
-  Handles variations like `writeRDS`, `saveRDS`, `write_rds`, `write_csv`, etc."
-    (interactive)
-    (let* ((start (if (use-region-p)
-                      (region-beginning)
-                    (point-min)))
-           (end (if (use-region-p)
-                    (region-end)
-                  (point-max))))
-      (save-excursion
-        (goto-char start)
-        (while (re-search-forward
-                "\\(write\\|save\\)_?\\([a-zA-Z_]+\\)(\\([^,]+\\),\\s-*dataout(\"\\([^\"]+\\)\")"
-                end t)
-          (let* ((operation (match-string 1))    ;; "write" or "save"
-                 (format (match-string 2))       ;; "RDS", "rds", "csv", etc.
-                 (data (match-string 3))         ;; Variable being written
-                 (filename (match-string 4))     ;; Filename in `dataout`
-                 (read-operation (concat "read" (if (string-equal operation "save") "" "_") format))) ;; Handle with/without underscore
-            (replace-match (format "%s <- %s(latest(\"%s\"))"
-                                   data read-operation filename) t nil))))))
-
-#+END_SRC
-
-
-Archive R scripts in the current directory
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/archive-r-scripts ()
-    (interactive)
-    (let* ((current-dir (file-name-directory (buffer-file-name)))
-           (project-root (projectile-project-root))
-           (archive-dir (expand-file-name "Archive" project-root))
-           (current-date (format-time-string "%Y-%m-%d"))
-           (date-dir (expand-file-name current-date archive-dir))
-           (current-time (format-time-string "%H-%M-%S"))
-           (time-dir (expand-file-name current-time date-dir))
-           (dir-name (file-name-nondirectory (directory-file-name current-dir))))
-      (if (and (member dir-name '("R" "src"))
-               project-root)
-          (progn
-            (unless (file-directory-p archive-dir)
-              (make-directory archive-dir))
-            (if (file-directory-p date-dir)
-                (progn
-                  (unless (file-directory-p time-dir)
-                    (make-directory time-dir))
-                  (p3/copy-r-files current-dir time-dir))
-              (make-directory date-dir)
-              (p3/copy-r-files current-dir date-dir))
-            (message "Archived R scripts successfully."))
-        (message "Current directory is not 'R' or 'src' or not associated with a project."))))
-
-  (defun p3/copy-r-files (source-dir target-dir)
-    "Copy all *.R and *.[Rr]md files from SOURCE-DIR to TARGET-DIR."
-    (dolist (file (directory-files source-dir t "\\.\\(R\\|r\\|Rmd\\|rmd\\)$"))
-      (copy-file file target-dir t)))
-
-  ;; ;; Bind the function to a key for easy access
-  ;; (global-set-key (kbd "C-c a") 'p3/archive-r-scripts)
-#+END_SRC
+Project scaffolding, templates, Targets commands, data-frame viewing, and script
+archiving are provided by =p3-r-tools=.
 
 #+BEGIN_SRC emacs-lisp
   (use-package ess-r-mode
     :ensure ess
     :hook ((inferior-ess-mode . p3/my-inferior-ess-init)
-           (ess-r-post-run-hook . p3/set-projectile-wd-on-startup)
-           (ess-r-mode-hook . p3/load-view-df-function)
-           (ess-r-mode-hook . p3/ess-company-config)
-           (ess-r-mode-hook . p3/use-project-root-as-default-dir)
+           (ess-r-post-run . p3-r-load-view-data-frame)
+           (ess-r-mode . p3/ess-company-config)
+           (ess-r-mode . p3/use-project-root-as-default-dir)
            ;; Treat "_" as part of a word when navigating across words
            (ess-mode . (lambda () (modify-syntax-entry ?_ "w"))))
     :bind (:map ess-mode-map
                 ;; Re-map ess "run" to S-RET because of CUA mode
                 ("C-<return>" . nil)
                 ("S-<return>" . ess-eval-region-or-line-visibly-and-step)
-                ;; Pipe operatormultiMdsDf
-                ("C-." . p3/add-pipe-and-step)
+                ;; Pipe operator
+                ("C-." . p3-r-insert-pipe)
                 ;; Run library/source commands at the top of the script
-                ("C-c i" . p3/ess-library-and-source)
+                ("C-c i" . p3-r-evaluate-library-section)
                 ;; View data.frame in DT::datatable at a point
-                ("C-c v" . p3/r-view-df-at-point)
-                ("C-c m" . p3/tar-make)
-                ("C-c d" . p3/tar-make-debug)
-                ("C-c l" . p3/tar-load-at-point))
-    :bind (:map inferior-ess-r-mode-map
-                ("C-c v" . p3/r-view-df-at-point)
-                ("C-c m" . p3/tar-make)
-                ("C-c d" . p3/tar-make-debug)
-                ("C-c l" . p3/tar-load-at-point))
+                ("C-c v" . p3-r-view-data-frame-at-point)
+                ("C-c m" . p3-r-targets-make)
+                ("C-c d" . p3-r-targets-make-debug)
+                ("C-c l" . p3-r-targets-load-at-point)
+           :map inferior-ess-r-mode-map
+                ("C-c v" . p3-r-view-data-frame-at-point)
+                ("C-c m" . p3-r-targets-make)
+                ("C-c d" . p3-r-targets-make-debug)
+                ("C-c l" . p3-r-targets-load-at-point))
     ;; :hook
     ;; (ess-r-mode . (lambda () (yas-minor-mode)))
     :config
@@ -1361,9 +879,7 @@ Archive R scripts in the current directory
             (ess-R-fl-keyword:F&T . t)
             (ess-R-fl-keyword:%op% . t)))
           ;; Prepend directory name to R process name
-          ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:project-or-directory)
-    :custom
-    (defvar ess--command-default-timeout most-positive-fixnum))
+          ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:project-or-directory))
 #+END_SRC
 
 Windows work-around for not being able to find R
@@ -1385,6 +901,74 @@ Windows work-around for not being able to find R
          (concat "R -e \"rmarkdown::render('" buffer-file-name "')\"")))
   (add-hook 'ess-mode-hook 'compile-rmd)
   (add-hook 'markdown-mode-hook 'compile-rmd)
+#+END_SRC
+
+Keep one ESS process per project and connect each source buffer to the matching
+process when evaluation begins.
+
+#+BEGIN_SRC emacs-lisp
+  (defvar p3/ess-project-processes
+    (make-hash-table :test #'equal)
+    "Map project roots to ESS process names.")
+
+  (defvar-local p3/ess-project-root-cache nil
+    "Cached project root for the current buffer.")
+
+  (defun p3/ess-project-root ()
+    "Return the current project root, caching the result locally."
+    (or p3/ess-project-root-cache
+        (setq p3/ess-project-root-cache
+              (if-let ((project (project-current nil)))
+                  (expand-file-name (project-root project))
+                (expand-file-name default-directory)))))
+
+  (defun p3/ess-process-live-p (name)
+    "Return non-nil if NAME names a live process."
+    (when-let ((process (get-process name)))
+      (process-live-p process)))
+
+  (defun p3/ess-project-process ()
+    "Return the live ESS process name for the current project, or nil."
+    (let* ((root (p3/ess-project-root))
+           (name (gethash root p3/ess-project-processes)))
+      (cond
+       ((null name)
+        nil)
+       ((p3/ess-process-live-p name)
+        name)
+       (t
+        (remhash root p3/ess-project-processes)
+        nil))))
+
+  (defun p3/register-current-ess-process ()
+    "Register a newly created ESS process to the current project."
+    (when (derived-mode-p 'inferior-ess-mode)
+      (puthash (p3/ess-project-root)
+               ess-local-process-name
+               p3/ess-project-processes)))
+
+  (add-hook 'inferior-ess-mode-hook #'p3/register-current-ess-process)
+
+  (defun p3/ess-ensure-project-process (&rest _)
+    "Ensure the current buffer has a project-specific ESS process."
+    (let ((process (p3/ess-project-process)))
+      (unless process
+        ;; Lazily create the R process only when evaluation is requested.
+        (save-window-excursion
+          (call-interactively #'R))
+        (setq process (p3/ess-project-process)))
+
+      (unless process
+        (user-error "Unable to create ESS process"))
+
+      ;; Bind this source buffer to the project process.
+      (setq-local ess-local-process-name process)))
+
+  (with-eval-after-load 'ess-inf
+    (unless (advice-member-p #'p3/ess-ensure-project-process
+                             #'ess-force-buffer-current)
+      (advice-add #'ess-force-buffer-current :before
+                  #'p3/ess-ensure-project-process)))
 #+END_SRC
 
 ** GnuPG
@@ -1578,28 +1162,19 @@ Transpose horizontal/vertical split
     :bind ("C-c t" . transpose-frame))
 #+END_SRC
 
-OLD: Always make R buffer split right & R code buffer split left, as shown [[https://lambdaland.org/posts/2022-12-27_repl_buffer_on_the_right/][here]]
+Display R process buffers in a reusable side window on the right, as shown
+[[https://lambdaland.org/posts/2022-12-27_repl_buffer_on_the_right/][here]].
 
 #+BEGIN_SRC emacs-lisp
-  (add-to-list 'display-buffer-alist
-             '("\\*R\\*"
-               (display-buffer-reuse-window
-                display-buffer-in-side-window)
-               (side . right)
-               (slot . 1)
-               (window-width . 0.5)
-               (reusable-frames . visible)))
-  ;; (setq display-buffer-alist
-  ;;       '(((major-mode . inferior-ess-r-mode)
-  ;;          (display-buffer-reuse-mode-window
-  ;;           display-buffer-in-direction)
-  ;;          (direction . rightmost))
-
-  ;;         ((not (major-mode . inferior-ess-r-mode))
-  ;;          (display-buffer-reuse-mode-window
-  ;;           display-buffer-same-window
-  ;;           display-buffer-in-direction)
-  ;;          (direction . leftmost))))
+  (add-to-list
+   'display-buffer-alist
+   '((major-mode . inferior-ess-r-mode)
+     (display-buffer-reuse-mode-window
+      display-buffer-in-side-window)
+     (side . right)
+     (slot . 1)
+     (window-width . 0.5)
+     (reusable-frames . visible)))
 #+END_SRC
 
 Set ace-window shortcut
@@ -1642,48 +1217,6 @@ Restart emacs (and emacs-daemon)
 
 #+END_SRC
 
-#+BEGIN_SRC emacs-lisp
-  (setq display-buffer-alist
-        '(
-          ((major-mode . inferior-ess-r-mode)
-           ;; (and (major-mode . inferior-ess-r-mode)
-           ;;      (not (p3/is-current-buffer-mode-inferior-ess-r-mode)))
-           (display-buffer-reuse-mode-window
-            display-buffer-in-direction)
-           (direction . rightmost))
-
-          ;; ((and (not (major-mode . inferior-ess-r-mode))
-          ;;       ((derived-mode-p . text-mode)))
-          ;;  (display-buffer-reuse-window))
-
-
-          ((not (major-mode . inferior-ess-r-mode))
-           ;; (and (major-mode . inferior-ess-r-mode)
-           ;;      (not (p3/is-current-buffer-mode-inferior-ess-r-mode)))
-           (display-buffer-reuse-mode-window
-            display-buffer-same-window
-            display-buffer-in-direction)
-           (direction . leftmost))
-
-          ;; ((and (major-mode . inferior-ess-r-mode)
-          ;;       (p3/is-current-buffer-mode-inferior-ess-r-mode))
-          ;;  (display-buffer-reuse-mode-window))
-           ;;  display-buffer-in-direction)
-           ;; (direction . leftmost))
-
-          ;; ((and (not (major-mode . inferior-ess-r-mode))
-          ;;       (not (p3/is-current-buffer-derived-from-inferior-ess-r-mode)))
-          ;;  (display-buffer-reuse-window))
-
-          ;; ((and (not (major-mode . inferior-ess-r-mode))
-          ;;       ((p3/is-current-buffer-derived-from-inferior-ess-r-mode)))
-          ;;  (display-buffer-in-direction)
-          ;;  (direction . leftmost))
-
-
-          ))
-#+END_SRC
-
 ** LaTeX
 
 Flyspell for LaTeX
@@ -1711,6 +1244,8 @@ Process latex pdf with bibtex [[https://tex.stackexchange.com/questions/197707/u
 ** Git
 
 #+BEGIN_SRC emacs-lisp
+  (require 'subr-x)
+
   (defun p3/check-git-installed ()
     "Check if Git is installed."
     (unless (executable-find "git")
@@ -1723,41 +1258,67 @@ Process latex pdf with bibtex [[https://tex.stackexchange.com/questions/197707/u
           (format "Update: %s" (format-time-string "%Y-%m-%d %H:%M:%S"))
         commit-message)))
 
-  (defun p3/construct-git-commands (config-file final-message notes-dir)
-    "Construct the git commands for the config file and notes directory."
-    (let ((config-commands (format "cd %s && git add %s && git commit -m \"%s\" && git push"
-                                   (file-name-directory config-file) config-file final-message))
-          (notes-commands (format "cd %s && git add -u && git commit -m \"%s\" && git push"
-                                  notes-dir final-message)))
-      (list config-commands notes-commands)))
+  (defun p3/git-call (directory &rest arguments)
+    "Run Git with ARGUMENTS in DIRECTORY and return (STATUS . OUTPUT)."
+    (with-temp-buffer
+      (let ((default-directory (file-name-as-directory directory)))
+        (cons (apply #'process-file "git" nil (current-buffer) nil arguments)
+              (buffer-string)))))
 
-  (defun p3/execute-git-commands (commands)
-    "Execute the git commands and return the results."
-    (let ((config-result (shell-command (nth 0 commands)))
-          (notes-result (shell-command (nth 1 commands))))
-      (list config-result notes-result)))
+  (defun p3/git-run (directory &rest arguments)
+    "Run Git with ARGUMENTS in DIRECTORY, signaling an error on failure."
+    (pcase-let ((`(,status . ,output)
+                 (apply #'p3/git-call directory arguments)))
+      (unless (zerop status)
+        (user-error "Git %s failed in %s: %s"
+                    (string-join arguments " ")
+                    directory
+                    (string-trim output)))
+      output))
+
+  (defun p3/git-commit-and-push-repository
+      (directory add-arguments commit-message)
+    "Stage ADD-ARGUMENTS, commit changes, and push DIRECTORY safely."
+    (apply #'p3/git-run directory "add" add-arguments)
+    (pcase-let ((`(,status . ,output)
+                 (p3/git-call directory "diff" "--cached" "--quiet" "--exit-code")))
+      (cond
+       ((zerop status)
+        (message "No staged changes in %s" directory))
+       ((= status 1)
+        (p3/git-run directory "commit" "-m" commit-message))
+       (t
+        (user-error "Could not inspect staged changes in %s: %s"
+                    directory (string-trim output)))))
+    (p3/git-run directory "push" "--set-upstream" "origin" "HEAD"))
 
   (defun p3/git-commit-and-push-emacs-config (&optional commit-message)
     "Automatically add, commit, and push changes in the Emacs config file and org notes directory.
   If COMMIT-MESSAGE is provided, use it; otherwise, use the current date and time as the commit message."
     (interactive
-     (p3/check-git-installed)
-     (list (p3/get-commit-message)))
+     (progn
+       (p3/check-git-installed)
+       (list (p3/get-commit-message))))
     (let* ((config-file (expand-file-name "~/.emacs.d/config.org"))
            (notes-dir (expand-file-name "~/org/notes"))
-           (final-message (if (string= commit-message "") (p3/get-commit-message) commit-message))
-           (commands (p3/construct-git-commands config-file final-message notes-dir)))
+           (final-message
+            (if (and commit-message (not (string= commit-message "")))
+                commit-message
+              (p3/get-commit-message))))
       (cond
        ((not (file-exists-p config-file))
         (message "The config file %s does not exist." config-file))
        ((not (file-directory-p notes-dir))
         (message "The notes directory %s does not exist." notes-dir))
        (t
-        (let ((results (p3/execute-git-commands commands)))
-          (if (and (zerop (nth 0 results)) (zerop (nth 1 results)))
-              (message "Committed and pushed changes to config file and notes directory.")
-            (message "Failed to commit and push changes. Config result: %d, Notes result: %d"
-                     (nth 0 results) (nth 1 results))))))))
+        (p3/check-git-installed)
+        (p3/git-commit-and-push-repository
+         (file-name-directory config-file)
+         (list "--" config-file)
+         final-message)
+        (p3/git-commit-and-push-repository
+         notes-dir '("-u") final-message)
+        (message "Committed and pushed changes to config and notes repositories.")))))
 
   ;; Bind the function to a key for easy access
   (global-set-key (kbd "C-c C-g") 'p3/git-commit-and-push-emacs-config)
@@ -1796,37 +1357,6 @@ Git changes in the fringe
   (setq-default right-fringe-width 20)
 #+END_SRC
 
-** Minibuffer
-
-Save minibuffer history
-
-#+BEGIN_SRC emacs-lisp
-(use-package savehist
-  :config
-  (setq history-length 25)
-  (savehist-mode 1))
-#+END_SRC
-
-Include additional information in minibuffer
-
-#+BEGIN_SRC emacs-lisp
-  (use-package marginalia
-  ;; Bind `marginalia-cycle' locally in the minibuffer.  To make the binding
-  ;; available in the *Completions* buffer, add it to the
-  ;; `completion-list-mode-map'.
-  :bind (:map minibuffer-local-map
-         ("M-A" . marginalia-cycle))
-  :init (marginalia-mode))
-#+END_SRC
-
-Fancy minibuffer completion and display
-
-#+BEGIN_SRC emacs-lisp
-  (use-package vertico
-    :init
-    (vertico-mode))
-#+END_SRC
-
 ** Multiple cursors
 
 #+BEGIN_SRC emacs-lisp
@@ -1847,7 +1377,6 @@ Setup default connections, as seen [[https://truongtx.me/2014/08/23/setup-emacs-
     ;; Make sure MySQL know where the plugins directory is
     (setq sql-mysql-options
           '("--plugin-dir=/usr/lib/mysql/plugin" "--binary-mode"))
-    :custom
     ;; Try to catch the stupid MySQL prompt using a better regex
     (sql-set-product-feature 'mysql :prompt-regexp "^\\(?:mysql\\|mariadb\\).*> "))
 #+END_SRC
@@ -1902,8 +1431,8 @@ Update last modified as shown [[https://org-roam.discourse.group/t/update-a-fiel
          (latex . t)
          (shell . t)))
       :config
-      ;; Evaluate code blocks without confirmation
-      (setq org-confirm-babel-evaluate nil
+      ;; Treat every code block as executable and confirm before running it.
+      (setq org-confirm-babel-evaluate t
             ;; Native font coloring
             org-src-fontify-natively t
             org-src-tab-acts-natively t
@@ -2039,7 +1568,7 @@ org-agenda defaults, as shown [[https://orgmode.org/worg/org-tutorials/org-custo
   (defun org-roam-rg-search ()
     "Search org-roam directory using consult-ripgrep. With live-preview."
     (interactive)
-    (counsel-rg nil org-roam-directory nil nil))
+    (consult-ripgrep org-roam-directory))
 #+END_SRC
 
 [[https://systemcrafters.net/build-a-second-brain-in-emacs/5-org-roam-hacks/#build-your-org-agenda-from-org-roam-notes][org-roam with org-agenda]]
@@ -2208,12 +1737,9 @@ Do presentations with org-present
 
 ** Projectile
 #+BEGIN_SRC emacs-lisp
-  (defun p3/projectile-r-project-file-p ()
-    (or (projectile-verify-file-wildcard "?*.r")
-        (projectile-verify-file-wildcard "?*.R")))
-
-  (defun p3/projectile-r-project-p ()
-    (projectile-verify-file-wildcard "?*.Rproj"))
+  (defun p3/projectile-r-project-file-p (&optional directory)
+    (or (projectile-verify-file-wildcard "?*.r" directory)
+        (projectile-verify-file-wildcard "?*.R" directory)))
 
   (use-package projectile
     :bind (:map projectile-mode-map
@@ -2221,17 +1747,8 @@ Do presentations with org-present
                 ("C-c p" . projectile-command-map))
     :init
     (projectile-mode +1)
-    :custom
-    (projectile-register-project-type 'r #'p3/projectile-r-project-file-p
-                                      :project-file #'p3/projectile-r-project-p))
-#+END_SRC
-
-Find helper functions file in project
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/projectile-open-r-helper-functions-file ()
-    (interactive)
-    (projectile--find-file . "R/99_helperFunctions.R"))
+    :config
+    (projectile-register-project-type 'r #'p3/projectile-r-project-file-p))
 #+END_SRC
 
 ** Python
@@ -2357,7 +1874,7 @@ Find helper functions file in project
 #+END_SRC
 
 
-Shell-pop in linux; Rtools bin/zsh in windows
+Use the regular shell on Windows and a project-aware vterm interface on Linux.
 
 #+BEGIN_SRC emacs-lisp
   (when (eq system-type 'windows-nt)
@@ -2369,14 +1886,136 @@ Shell-pop in linux; Rtools bin/zsh in windows
               #'comint-strip-ctrl-m nil t)
     (global-set-key (kbd "C-x C-u") #'shell))
 
+  (require 'seq)
+  (declare-function vterm-mode "vterm")
+
+  (defgroup p3/terminal nil
+    "Project-aware terminal sessions."
+    :group 'applications)
+
+  (defcustom p3/vterm-window-height 0.35
+    "Height of the project terminal side window."
+    :type 'number
+    :group 'p3/terminal)
+
+  (defun p3/vterm-root ()
+    "Return the project root or current directory for a terminal."
+    (file-name-as-directory
+     (expand-file-name (or (p3/project-root) default-directory))))
+
+  (defun p3/vterm-buffer-name (root)
+    "Return a stable terminal buffer name for ROOT."
+    (format "*vterm:%s:%s*"
+            (file-name-nondirectory (directory-file-name root))
+            (substring (secure-hash 'sha1 root) 0 6)))
+
+  (defun p3/vterm-buffer (&optional new-session)
+    "Return the project terminal, creating a NEW-SESSION when requested."
+    (require 'vterm)
+    (let* ((root (p3/vterm-root))
+           (name (p3/vterm-buffer-name root))
+           (buffer (if new-session
+                       (generate-new-buffer name)
+                     (get-buffer-create name))))
+      (with-current-buffer buffer
+        (unless (derived-mode-p 'vterm-mode)
+          (setq default-directory root)
+          (vterm-mode)))
+      buffer))
+
+  (defun p3/vterm-display (buffer)
+    "Display BUFFER in the terminal side window and select it."
+    (let ((window
+           (display-buffer
+            buffer
+            `((display-buffer-reuse-window
+               display-buffer-in-side-window)
+              (side . bottom)
+              (slot . 0)
+              (window-height . ,p3/vterm-window-height)))))
+      (unless (window-live-p window)
+        (user-error "Unable to display terminal buffer"))
+      (select-window window)
+      (goto-char (point-max))
+      buffer))
+
+  (defun p3/vterm-toggle (&optional new-session)
+    "Toggle the project terminal; with a prefix, create a NEW-SESSION."
+    (interactive "P")
+    (let* ((buffer (cond
+                    (new-session (p3/vterm-buffer t))
+                    ((derived-mode-p 'vterm-mode) (current-buffer))
+                    (t (p3/vterm-buffer))))
+           (window (get-buffer-window buffer (selected-frame))))
+      (if window
+          (quit-window nil window)
+        (p3/vterm-display buffer))))
+
+  (defun p3/vterm-new ()
+    "Create and display another terminal for the current project."
+    (interactive)
+    (p3/vterm-display (p3/vterm-buffer t)))
+
+  (defun p3/vterm-buffers ()
+    "Return all live vterm buffers."
+    (seq-filter
+     (lambda (buffer)
+       (with-current-buffer buffer
+         (derived-mode-p 'vterm-mode)))
+     (buffer-list)))
+
+  (defun p3/vterm-read-buffer ()
+    "Prompt for and return a live vterm buffer."
+    (let ((buffers (p3/vterm-buffers)))
+      (unless buffers
+        (user-error "There are no live terminal sessions"))
+      (get-buffer
+       (completing-read "Terminal: " (mapcar #'buffer-name buffers)
+                        nil t))))
+
+  (defun p3/vterm-switch ()
+    "Select and display an existing terminal session."
+    (interactive)
+    (p3/vterm-display (p3/vterm-read-buffer)))
+
+  (defun p3/vterm-open-here (&optional new-session)
+    "Open the project terminal in the current window.
+With a prefix argument, create a NEW-SESSION."
+    (interactive "P")
+    (pop-to-buffer-same-window (p3/vterm-buffer new-session)))
+
+  (defun p3/vterm-kill ()
+    "Kill the current terminal, or prompt for one to kill."
+    (interactive)
+    (kill-buffer
+     (if (derived-mode-p 'vterm-mode)
+         (current-buffer)
+       (p3/vterm-read-buffer))))
+
+  (defvar-keymap p3/vterm-command-map
+    :doc "Commands for project-aware terminal sessions."
+    "t" #'p3/vterm-toggle
+    "n" #'p3/vterm-new
+    "s" #'p3/vterm-switch
+    "o" #'p3/vterm-open-here
+    "k" #'p3/vterm-kill)
+
   (when (eq system-type 'gnu/linux)
-    (use-package shell-pop
-      :bind (("C-x C-u" . shell-pop))
-      :config
-      (setq shell-pop-shell-type (quote ("eshell" "*eshell*" (lambda nil (ansi-term shell-pop-term-shell)))))
-      (setq shell-pop-term-shell "/bin/bash")
-      ;; need to do this manually or not picked up by `shell-pop'
-      (shell-pop--set-shell-type 'shell-pop-shell-type shell-pop-shell-type)))
+    (keymap-global-set "C-c T" p3/vterm-command-map)
+
+    (use-package vterm
+      :commands (vterm vterm-other-window)
+      :bind (("C-x C-u" . p3/vterm-toggle))
+      :custom
+      (vterm-max-scrollback 10000)
+      (vterm-kill-buffer-on-exit t)
+      :init
+      (setq vterm-shell
+            (format "%s --noprofile --rcfile %s -i"
+                    (shell-quote-argument "/usr/bin/bash")
+                    (shell-quote-argument
+                     (expand-file-name "vterm-bashrc"
+                                       user-emacs-directory))))))
 #+END_SRC
 ** Spelling
 
@@ -2564,12 +2203,6 @@ Make sure flymake doesn't include the legacy garbage.
 ;;  (remove-hook 'flymake-diagnostic-functions 'flymake-proc-legacy-flymake)
 #+END_SRC
 
-Set cursor type as a "bar"
-
-#+BEGIN_SRC emacs-lisp
-  (setq-default cursor-type 'bar)
-#+END_SRC
-
 (Not in use) Auto-fill mode?
 
 #+BEGIN_SRC emacs-lisp
@@ -2671,66 +2304,4 @@ Start server on Windows
   ;;   (progn
   ;;     (require 'server)
   ;;     (server-start)))
-#+END_SRC
-
-* test
-#+BEGIN_SRC emacs-lisp
-  (defvar p3/ess-project-processes
-    (make-hash-table :test #'equal)
-    "Map project roots to ESS process names.")
-
-  (defvar-local p3/ess-project-root-cache nil
-    "Cached project root for the current buffer.")
-
-  (defun p3/ess-project-root ()
-    "Return the current project root, caching the result locally."
-    (or p3/ess-project-root-cache
-        (setq p3/ess-project-root-cache
-              (if-let ((proj (project-current nil)))
-                  (expand-file-name (project-root proj))
-                (expand-file-name default-directory)))))
-
-  (defun p3/ess-process-live-p (name)
-    "Return non-nil if NAME names a live process."
-    (when-let ((proc (get-process name)))
-      (process-live-p proc)))
-
-  (defun p3/ess-project-process ()
-    "Return the live ESS process name for the current project, or nil."
-    (let* ((root (p3/ess-project-root))
-           (name (gethash root p3/ess-project-processes)))
-      (cond
-       ((null name)
-        nil)
-       ((p3/ess-process-live-p name)
-        name)
-       (t
-        (remhash root p3/ess-project-processes)
-        nil))))
-
-  (defun p3/register-current-ess-process ()
-    "Register a newly created ESS process to the current project."
-    (when (derived-mode-p 'inferior-ess-mode)
-      (puthash (p3/ess-project-root)
-               ess-local-process-name
-               p3/ess-project-processes)))
-
-  (add-hook 'inferior-ess-mode-hook #'p3/register-current-ess-process)
-
-  (defun p3/ess-ensure-project-process (&rest _)
-    "Ensure the current buffer has a project-specific ESS process."
-    (let ((process (p3/ess-project-process)))
-      (unless process
-        ;; Lazily create the R process only when evaluation is requested.
-        (save-window-excursion
-          (call-interactively #'R))
-        (setq process (p3/ess-project-process)))
-
-      (unless process
-        (user-error "Unable to create ESS process"))
-
-      ;; Bind this source buffer to the project process.
-      (setq-local ess-local-process-name process)))
-
-  (advice-add #'ess-force-buffer-current :before #'p3/ess-ensure-project-process)
 #+END_SRC

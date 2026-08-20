@@ -1,0 +1,14 @@
+# -*- mode: snippet -*-
+# name: knitr script header
+# key: header
+# --
+#' ---
+#' title:  '${1:Title}'
+#' author: '`(if (boundp 'p3-r-author) p3-r-author user-full-name)`'
+#' date:   '`(format-time-string "%m/%d/%Y")`'
+#' ---
+
+#' ### 0. Prepare environment
+
+#+ setup, message = FALSE, results = FALSE
+$0

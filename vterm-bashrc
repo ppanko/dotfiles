@@ -1,0 +1,10 @@
+# Bash initialization used only by Emacs vterm.
+
+if [[ -r "${HOME}/.bashrc" ]]; then
+    source "${HOME}/.bashrc"
+fi
+
+if [[ -n "${EMACS_VTERM_PATH:-}" ]] &&
+   [[ -r "${EMACS_VTERM_PATH}/etc/emacs-vterm-bash.sh" ]]; then
+    source "${EMACS_VTERM_PATH}/etc/emacs-vterm-bash.sh"
+fi

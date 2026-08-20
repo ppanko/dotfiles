@@ -1,6 +1,19 @@
+# Ignore machine-local and generated files by default.  Explicitly retain the
+# portable configuration and its source assets.
 *
-!config.org
-init.el
-!snippets/
-secrets.el
-init.el
+!/.gitignore
+!/init.el
+!/config.org
+!/vterm-bashrc
+!/lisp/
+!/lisp/**
+!/templates/
+!/templates/**
+!/test/
+!/test/**
+!/snippets/
+!/snippets/**
+
+*.elc
+/custom.el
+/secrets.el
