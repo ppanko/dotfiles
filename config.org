@@ -1889,9 +1889,10 @@ into a dedicated side window.
               #'comint-strip-ctrl-m nil t)
     (global-set-key (kbd "C-x C-u") #'shell))
 
-  (require 'seq)
-  (declare-function vterm-mode "vterm")
-  (declare-function vterm-copy-mode "vterm")
+  (when (eq system-type 'gnu/linux)
+    (require 'seq)
+    (declare-function vterm-mode "vterm")
+    (declare-function vterm-copy-mode "vterm")
 
   (defgroup p3/terminal nil
     "Project-aware terminal sessions."
@@ -2128,7 +2129,6 @@ commands still use the normal Emacs kill ring and system clipboard."
     "c" #'p3/vterm-enter-copy-mode
     "k" #'p3/vterm-kill)
 
-  (when (eq system-type 'gnu/linux)
     (keymap-global-set "C-c T" p3/vterm-command-map)
 
     (use-package vterm
