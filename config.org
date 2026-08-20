@@ -1807,6 +1807,7 @@ See [[https://earvingad.github.io/posts/org_roam_windows/][the following]] for a
     :hook
     (after-init . org-roam-mode)
     :custom
+    (org-roam-database-connector 'sqlite-builtin)
     (org-roam-directory "~/org/notes/roam/")
     (org-roam-completion-everywhere t)
     (org-roam-completion-system 'default)
