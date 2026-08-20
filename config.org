@@ -34,6 +34,146 @@ Have use-package install any unavailable packages.
   (setq use-package-always-ensure t)
 #+END_SRC
 
+#+BEGIN_SRC emacs-lisp
+  (use-package which-key
+    :diminish which-key-mode
+    :init
+    (which-key-mode 1)
+    :custom
+    (which-key-idle-delay 0.5)
+    (which-key-sort-order 'which-key-key-order-alpha)
+    :bind ("C-c ?" . p3/keybinding-atlas)
+    :config
+    (which-key-add-key-based-replacements
+     "C-c ?" "show keybindings"
+     "C-c a" "align region"
+     "C-c e" "visit config"
+     "C-c g" "GPTel tasks"
+     "C-c h" "R documentation search"
+     "C-c k" "kill buffer and window"
+     "C-c m" "Magit commands"
+     "C-c n" "Org-roam"
+     "C-c q" "force quotes"
+     "C-c r" "reload config"
+     "C-c R" "R commands"
+     "C-c s" "region suffix"
+     "C-c t" "transpose frame"
+     "C-c C-g" "commit and push config"
+     "C-c C-SPC" "insert newline after comma"
+     "C-c g l" "send current line"
+     "C-c g r" "refactor region"
+     "C-c g d" "generate documentation"
+     "C-c g t" "write tests"
+     "C-c g c" "translate code"
+     "C-c g w" "write code"
+     "C-c m s" "stage files"
+     "C-c m c" "commit"
+     "C-c m f" "pull"
+     "C-c m m" "merge"
+     "C-c m P" "push"
+     "C-c m a" "add remote"
+     "C-c m g" "status"
+     "C-c m l" "log"
+     "C-c m d" "diff"
+     "C-c m b" "blame"
+     "C-c m q" "close Magit buffers"
+     "C-c n l" "Org-roam buffer"
+     "C-c n f" "find node"
+     "C-c n g" "graph"
+     "C-c n i" "insert node"
+     "C-c n c" "capture node"
+     "C-c R p" "new R project"
+     "C-c R h" "R script header"
+     "C-c R w" "Word report header"
+     "C-c R c" "insert R chunk"
+     "C-c R i" "insert pipe"
+     "C-c R m" "targets make"
+     "C-c R v" "view data frame"))
+
+  (defconst p3/keybinding-sections
+    '(("Global"
+       ("C-s / C-r" . "search forward/backward"
+        ) ("M-x" . "run a command")
+       ("C-x b" . "switch buffer")
+       ("C-c e" . "visit config")
+       ("C-c r" . "reload config")
+       ("C-c ?" . "open this atlas")
+       ("C-h B" . "show context-sensitive bindings")
+       ("M-o" . "select window"))
+      ("R / ESS"
+       ("C-c R" . "R project, templates, and tools")
+       ("C-c i" . "evaluate library section")
+       ("C-c v" . "view data frame")
+       ("C-c m" . "run targets make")
+       ("C-c d" . "debug targets make")
+       ("C-c l" . "load targets object")
+       ("S-RET" . "evaluate and step"))
+      ("Org"
+       ("C-c b" . "insert citation")
+       ("C-c s" . "insert source block")
+       ("C-c C-o" . "export to Office")
+       ("C-c C-x C-o" . "sort TODO entries")
+       ("C-c P" . "start presentation"))
+      ("Presentation"
+       ("SPC / right" . "next slide")
+       ("DEL / left" . "previous slide")
+       ("n / p" . "next/previous slide")
+       ("f" . "toggle fullscreen")
+       ("q" . "quit presentation"))
+      ("Python"
+       ("S-RET" . "send statement")
+       ("C-c C-c" . "send region/paragraph")
+       ("C-c C-z" . "show Python shell")
+       ("C-c l r" . "rename symbol")
+       ("C-c l a" . "code actions")
+       ("C-c l f" . "format buffer"))
+      ("GPTel"
+       ("C-c g l" . "send current line")
+       ("C-c g r" . "refactor region")
+       ("C-c g d" . "generate documentation")
+       ("C-c g t" . "write tests")
+       ("C-c g c" . "translate code")
+       ("C-c g w" . "write code"))
+      ("Magit"
+       ("C-c m g" . "status")
+       ("C-c m s" . "stage files")
+       ("C-c m c" . "commit")
+       ("C-c m f" . "pull")
+       ("C-c m P" . "push")
+       ("C-c m d" . "diff")
+       ("C-c m l" . "log")
+       ("C-c m b" . "blame"))
+      ("Org-roam"
+       ("C-c n l" . "toggle roam buffer")
+       ("C-c n f" . "find node")
+       ("C-c n g" . "graph")
+       ("C-c n i" . "insert node")
+       ("C-c n c" . "capture node")
+       ("C-c n d" . "daily note"))
+      ("Terminal"
+       ("C-c T" . "terminal commands")
+       ("C-x C-u" . "open vterm")
+       ("C-S-c" . "copy from vterm")))
+    "Sections shown by `p3/keybinding-atlas'.")
+
+  (defun p3/keybinding-atlas ()
+    "Display the personal keybinding guide, organized by workflow."
+    (interactive)
+    (with-help-window "*P3 Keybinding Atlas*"
+      (princ "P3 KEYBINDING ATLAS\n")
+      (princ "=====================\n\n")
+      (princ "These are the workflow bindings worth remembering.\n")
+      (princ "For every binding active in the current buffer, use C-h b.\n")
+      (princ "For prefix hints, press the prefix and wait for which-key.\n")
+      (dolist (section p3/keybinding-sections)
+        (princ (format "\n%s\n%s\n"
+                       (car section)
+                       (make-string (length (car section)) ?-)))
+        (dolist (binding (cdr section))
+          (princ (format "  %-16s %s\n"
+                         (car binding) (cdr binding)))))))
+#+END_SRC
+
 Missing packages are installed automatically by =use-package=. Upgrades are
 never applied during startup. Run =M-x p3/package-update= to review available
 upgrades in the package menu and apply only the ones you select.
