@@ -1,22 +1,72 @@
 ;; Configure package.el.  Missing packages are bootstrapped automatically;
 ;; upgrades are deliberately handled through the package menu.
 (require 'package)
-(add-to-list 'package-archives '("gnu" . "https://elpa.gnu.org/packages/") t)
-(add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/"))
+(setq package-archives
+      '(("gnu" . "https://elpa.gnu.org/packages/")
+        ("nongnu" . "https://elpa.nongnu.org/nongnu/")
+        ("melpa" . "https://melpa.org/packages/"))
+      package-archive-priorities
+      '(("gnu" . 30)
+        ("nongnu" . 20)
+        ("melpa" . 10)))
 (package-initialize)
+
+(defvar p3/package-refresh-attempted nil
+  "Non-nil after this Emacs session has attempted an automatic archive refresh.")
+
+(defun p3/package-refresh-once ()
+  "Refresh package metadata at most once automatically per Emacs session."
+  (unless p3/package-refresh-attempted
+    (setq p3/package-refresh-attempted t)
+    (package-refresh-contents)))
+
+(defun p3/package-prepare-pinned-package (package)
+  "Reload archive metadata needed for pinned PACKAGE, if any."
+  (when (assoc package (bound-and-true-p package-pinned-packages))
+    (package-read-all-archive-contents)))
+
+(defun p3/package-install-resilient (package)
+  "Install PACKAGE, refreshing stale archive metadata once on failure."
+  (unless (package-installed-p package)
+    (p3/package-prepare-pinned-package package)
+    (condition-case _first-error
+        (package-install package)
+      (error
+       (p3/package-refresh-once)
+       (p3/package-prepare-pinned-package package)
+       (package-install package)))))
+
+;; Bootstrap use-package itself before loading the literate configuration.
+(p3/package-install-resilient 'use-package)
+(require 'use-package)
+(require 'use-package-ensure)
+
+(defun p3/use-package-ensure (name args _state)
+  "Ensure packages requested by use-package NAME with normalized ARGS."
+  (dolist (ensure args)
+    (let ((package (if (eq ensure t)
+                       (use-package-as-symbol name)
+                     ensure)))
+      (when package
+        (when (consp package)
+          (use-package-pin-package (car package) (cdr package))
+          (setq package (car package)))
+        (condition-case err
+            (p3/package-install-resilient package)
+          (error
+           (display-warning
+            'use-package
+            (format "Failed to install %s: %s"
+                    package
+                    (error-message-string err))
+            :error)))))
+  t)
+
+(setq use-package-ensure-function #'p3/use-package-ensure
+      use-package-always-ensure t)
 
 ;; Keep machine-local Custom state out of the portable configuration.
 (setq custom-file (expand-file-name "custom.el" user-emacs-directory))
-
-;; Ensure that use-package is installed.
-;;
-;; If use-package isn't already installed, it's extremely likely that this is a
-;; fresh installation! So we'll want to update the package repository and
-;; install use-package before loading the literate configuration.
-(unless (package-installed-p 'use-package)
-  (unless package-archive-contents
-    (package-refresh-contents))
-  (package-install 'use-package))
 
 ;; Keep the generated file as a cache, never as an independent source of
 ;; truth.  Tangling on every startup prevents config.el from drifting from
