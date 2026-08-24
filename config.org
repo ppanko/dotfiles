@@ -3,8 +3,6 @@
 Start up in fullscreen
 
 #+BEGIN_SRC emacs-lisp
-  ;;; config.el --- Tangled Emacs configuration -*- lexical-binding: t; -*-
-
   (add-to-list 'default-frame-alist '(fullscreen . maximized))
 #+END_SRC
 
@@ -33,6 +31,8 @@ Have use-package install any unavailable packages.
   (require 'use-package-ensure)
   (setq use-package-always-ensure t)
 #+END_SRC
+
+Look up keybinds in relevant mode buffers
 
 #+BEGIN_SRC emacs-lisp
   (use-package which-key
@@ -152,7 +152,7 @@ Have use-package install any unavailable packages.
        ("C-c n d" . "daily note"))
       ("Terminal"
        ("C-c T" . "terminal commands")
-       ("C-x C-u" . "open vterm")
+       ("C-x C-u" . "open shell")
        ("C-S-c" . "copy from vterm")))
     "Sections shown by `p3/keybinding-atlas'.")
 
@@ -280,7 +280,7 @@ When DIRECTORY-P is non-nil, require a directory; otherwise require a file."
     "Prepend DIRECTORY to both `exec-path' and the PATH inherited by children."
     (let* ((directory (file-name-as-directory (expand-file-name directory)))
            (path-directory (directory-file-name directory))
-           (separator (char-to-string path-separator))
+           (separator path-separator)
            (paths (split-string (or (getenv "PATH") "")
                                 (regexp-quote separator) t)))
       (setq exec-path (cons directory (delete directory exec-path)))
