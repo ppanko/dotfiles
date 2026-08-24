@@ -25,12 +25,8 @@ Start up in fullscreen
 The rest of the stuff in this section was stolen from [[https://github.com/hrs/dotfiles/blob/master/emacs/.emacs.d/configuration.org][here]];
 thanks to Harry Schwartz.
 
-Have use-package install any unavailable packages.
-
-#+BEGIN_SRC emacs-lisp
-  (require 'use-package-ensure)
-  (setq use-package-always-ensure t)
-#+END_SRC
+Package bootstrap and dependency recovery are handled in =init.el= before this
+literate configuration is loaded.
 
 Look up keybinds in relevant mode buffers
 
@@ -187,6 +183,7 @@ upgrades in the package menu and apply only the ones you select.
     "Open the package menu to review and selectively apply upgrades."
     (interactive)
     (package-refresh-contents)
+    (setq p3/package-refresh-attempted t)
     (package-list-packages t)
     (message "Review upgrades with U, then execute selected actions with x."))
 #+END_SRC
@@ -964,7 +961,6 @@ Inline auto-complete mode w/company.
         ;; Filenames and other completion-at-point providers.
         company-capf)
       "Company completion backends used in ESS R buffers.")
-    (defvaralias 'r-company-backends 'p3/r-company-backends)
 
     (defun p3/ess-company-config ()
       "Configuration for ESS."
