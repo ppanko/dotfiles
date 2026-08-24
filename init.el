@@ -1,3 +1,7 @@
+;; Keep machine-local Custom state out of the portable configuration.
+;; Establish this before package.el can persist any Custom/package state.
+(setq custom-file (expand-file-name "custom.el" user-emacs-directory))
+
 ;; Configure package.el.  Missing packages are bootstrapped automatically;
 ;; upgrades are deliberately handled through the package menu.
 (require 'package)
@@ -30,11 +34,11 @@
   (unless (package-installed-p package)
     (p3/package-prepare-pinned-package package)
     (condition-case _first-error
-        (package-install package)
+        (package-install package t)
       (error
        (p3/package-refresh-once)
        (p3/package-prepare-pinned-package package)
-       (package-install package)))))
+       (package-install package t)))))
 
 ;; Bootstrap use-package itself before loading the literate configuration.
 (p3/package-install-resilient 'use-package)
@@ -64,9 +68,6 @@
 
 (setq use-package-ensure-function #'p3/use-package-ensure
       use-package-always-ensure t)
-
-;; Keep machine-local Custom state out of the portable configuration.
-(setq custom-file (expand-file-name "custom.el" user-emacs-directory))
 
 ;; Keep the generated file as a cache, never as an independent source of
 ;; truth.  Tangling on every startup prevents config.el from drifting from
