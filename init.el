@@ -85,4 +85,15 @@
   (unless quiet
     (message "Loaded %s" p3/config-source)))
 (p3/load-config t)
+
+(defun p3/recentf-record-current-buffer (&rest _)
+  "Treat a completed Consult buffer switch as recent file access."
+  (when buffer-file-name
+    (require 'recentf)
+    (recentf-add-file buffer-file-name)))
+
+(with-eval-after-load 'consult
+  (unless (advice-member-p #'p3/recentf-record-current-buffer #'consult-buffer)
+    (advice-add #'consult-buffer :after #'p3/recentf-record-current-buffer)))
+
 (load custom-file 'noerror 'nomessage)
