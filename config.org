@@ -2343,8 +2343,10 @@ into a dedicated side window.
 
 #+BEGIN_SRC emacs-lisp
   (defun p3/windows-shell-mode-setup ()
-    "Apply MSYS2-specific Comint cleanup to Windows shell buffers."
-    (add-hook 'comint-output-filter-functions #'comint-strip-ctrl-m nil t))
+    "Configure Comint for an Rtools/MSYS2 shell on Windows."
+    (add-hook 'comint-output-filter-functions #'comint-strip-ctrl-m nil t)
+    (when-let ((process (get-buffer-process (current-buffer))))
+      (set-process-coding-system process 'utf-8-unix 'utf-8-unix)))
 
   (when (eq system-type 'windows-nt)
     (if (not linuxy-environment-path)
