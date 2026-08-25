@@ -8,9 +8,9 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'project)
 (require 'seq)
 (require 'subr-x)
+(require 'p3-core)
 
 (declare-function ess-eval-linewise "ess-inf")
 (declare-function ess-eval-region-or-function-or-paragraph "ess-mode")
@@ -354,13 +354,6 @@ Use the active region when available; otherwise process the entire buffer."
            t nil))))
     (set-marker finish nil)))
 
-(defun p3-r--project-root ()
-  "Return the current Projectile or built-in project root."
-  (or (and (fboundp 'projectile-project-root)
-           (ignore-errors (projectile-project-root)))
-      (when-let ((project (project-current nil)))
-        (project-root project))))
-
 (defun p3-r--copy-source-files (source-dir target-directory)
   "Copy R and R Markdown files from SOURCE-DIR to TARGET-DIRECTORY."
   (dolist (file (directory-files
@@ -374,7 +367,7 @@ Use the active region when available; otherwise process the entire buffer."
   (unless buffer-file-name
     (user-error "Current buffer is not visiting an R file"))
   (let* ((source-directory (file-name-directory buffer-file-name))
-         (project-root (p3-r--project-root))
+         (project-root (p3/project-root))
          (directory-name
           (file-name-nondirectory (directory-file-name source-directory))))
     (unless project-root
@@ -393,7 +386,7 @@ Use the active region when available; otherwise process the entire buffer."
 (defun p3-r-open-helper-file ()
   "Open the first existing configured R helper file in the current project."
   (interactive)
-  (let ((root (p3-r--project-root)))
+  (let ((root (p3/project-root)))
     (unless root
       (user-error "Current buffer is not in a project"))
     (if-let ((path
