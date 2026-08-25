@@ -35,7 +35,7 @@ A project can override this variable with directory-local settings."
      :label "Markdown (.md, GFM)"
      :extension "md"
      :format "gfm"
-     :arguments ("--wrap=none"))
+     :arguments ("--standalone" "--wrap=none"))
     (pptx
      :label "PowerPoint (.pptx)"
      :extension "pptx"
@@ -129,8 +129,9 @@ REFERENCE-DOCUMENT overrides the profile's configured default when non-nil."
   (when (buffer-modified-p)
     (save-buffer))
   (let* ((profile-id (p3-org-export--profile-id profile))
-         (_spec (p3-org-export--profile profile-id))
-         (pandoc (p3-org-export--pandoc-executable))
+         (pandoc (progn
+                   (p3-org-export--profile profile-id)
+                   (p3-org-export--pandoc-executable)))
          (source (expand-file-name buffer-file-name))
          (output (p3-org-export--output-file profile-id))
          (reference
@@ -169,7 +170,7 @@ for a reference document when the selected profile supports one."
 
 (defun p3/org-export-to-office (output-format &optional template-file)
   "Compatibility wrapper for the former Office-only exporter.
-OUTPUT-FORMAT must be "docx" or "pptx".  TEMPLATE-FILE, when non-nil,
+OUTPUT-FORMAT must be either `docx' or `pptx'.  TEMPLATE-FILE, when non-nil,
 overrides the configured reference document.  Interactively, a prefix
 argument prompts for a one-off reference document."
   (interactive
