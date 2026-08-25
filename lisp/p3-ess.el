@@ -13,7 +13,7 @@
 (declare-function smartparens-mode "smartparens" (&optional arg))
 
 (defvar ansi-color-for-comint-mode)
-(defvar ess-local-process-name)
+(defvar ess-local-process-name nil)
 
 (defvar p3/ess-project-processes
   (make-hash-table :test #'equal)
