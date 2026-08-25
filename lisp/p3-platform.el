@@ -9,8 +9,9 @@
 ;;; Code:
 
 (require 'seq)
-(require 'shell)
 (require 'subr-x)
+
+(declare-function comint-strip-ctrl-m "comint" (string))
 
 (defvar explicit-bash.exe-args)
 (defvar inferior-R-program-name)
