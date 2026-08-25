@@ -3,7 +3,6 @@ name: Windows platform tests
 on:
   pull_request:
     paths:
-      - "config.org"
       - "lisp/p3-platform.el"
       - "test/p3-platform-test.el"
       - ".github/workflows/windows-platform-tests.yml"
