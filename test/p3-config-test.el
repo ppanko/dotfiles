@@ -45,19 +45,21 @@
           (p3-config-test--assert-readable-elisp target))
       (delete-file target))))
 
-(ert-deftest p3-init-loads-org-export-after-generated-config ()
+(ert-deftest p3-config-org-owns-org-export-integration ()
+  (with-temp-buffer
+    (insert-file-contents (expand-file-name "config.org" p3-config-test--root))
+    (should (search-forward "(use-package p3-org-export" nil t))
+    (goto-char (point-min))
+    (should-not (search-forward "(defun p3/org-export-to-office" nil t))
+    (goto-char (point-min))
+    (should (search-forward "(\"C-c C-o\" . \"open link at point\")" nil t))
+    (goto-char (point-min))
+    (should (search-forward "(\"C-c E\" . \"export Org file\")" nil t))))
+
+(ert-deftest p3-init-does-not-special-case-org-export ()
   (with-temp-buffer
     (insert-file-contents (expand-file-name "init.el" p3-config-test--root))
-    (goto-char (point-min))
-    (let ((config-load
-           (search-forward "(load-file p3/config-generated)" nil t))
-          (export-load
-           (progn
-             (goto-char (point-min))
-             (search-forward "(load \"p3-org-export\"" nil t))))
-      (should config-load)
-      (should export-load)
-      (should (< config-load export-load)))))
+    (should-not (search-forward "(load \"p3-org-export\"" nil t))))
 
 (provide 'p3-config-test)
 

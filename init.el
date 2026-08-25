@@ -86,9 +86,6 @@
   "Tangle and load the literate configuration from `p3/config-source'."
   (org-babel-tangle-file p3/config-source p3/config-generated)
   (load-file p3/config-generated)
-  ;; Keep standalone workflow modules authoritative after config.org reloads.
-  (load "p3-org-export" nil 'nomessage)
-  (p3-org-export-setup)
   (unless quiet
     (message "Loaded %s" p3/config-source)))
 (p3/load-config t)

@@ -218,34 +218,10 @@ argument prompts for a one-off reference document."
     (user-error "Unsupported Office output format: %s" output-format))
   (p3-org-export-run output-format template-file))
 
-(defun p3-org-export--update-keybinding-atlas ()
-  "Update the runtime keybinding atlas for the Org export workflow."
-  (when (boundp 'p3/keybinding-sections)
-    (let* ((sections (copy-tree (symbol-value 'p3/keybinding-sections)))
-           (org-section (assoc "Org" sections)))
-      (when org-section
-        (let (bindings)
-          (dolist (entry (cdr org-section))
-            (setq bindings
-                  (append
-                   bindings
-                   (cond
-                    ((equal (car entry) "C-c C-o")
-                     '(("C-c C-o" . "open link at point")
-                       ("C-c E" . "export Org file")))
-                    ((equal (car entry) "C-c E") nil)
-                    (t (list entry))))))
-          (setcdr org-section bindings)))
-      (set 'p3/keybinding-sections sections))))
-
 (defun p3-org-export-setup ()
   "Install the Org export command and restore standard Org link opening."
   (define-key org-mode-map (kbd "C-c C-o") #'org-open-at-point)
-  (define-key org-mode-map (kbd "C-c E") #'p3/org-export)
-  (p3-org-export--update-keybinding-atlas)
-  (when (fboundp 'which-key-add-key-based-replacements)
-    (which-key-add-key-based-replacements
-     "C-c E" "export Org file")))
+  (define-key org-mode-map (kbd "C-c E") #'p3/org-export))
 
 (provide 'p3-org-export)
 

@@ -2,7 +2,6 @@
 
 (require 'ert)
 (require 'org)
-(require 'seq)
 
 (defconst p3-org-export-test--config-directory
   (file-name-directory
@@ -14,9 +13,6 @@
              (expand-file-name "lisp" p3-org-export-test--config-directory))
 
 (require 'p3-org-export)
-
-(defvar p3/keybinding-sections nil
-  "Keybinding atlas state used by exporter setup tests.")
 
 (defmacro p3-org-export-test--with-temp-directory (binding &rest body)
   "Bind BINDING to a temporary directory while evaluating BODY."
@@ -153,23 +149,6 @@
               #'org-open-at-point))
   (should (eq (lookup-key org-mode-map (kbd "C-c E"))
               #'p3/org-export)))
-
-(ert-deftest p3-org-export-updates-keybinding-atlas-without-duplicates ()
-  (let ((p3/keybinding-sections
-         '(("Org"
-            ("C-c b" . "insert citation")
-            ("C-c C-o" . "export to Office")
-            ("C-c E" . "stale export entry")
-            ("C-c P" . "start presentation")))))
-    (p3-org-export--update-keybinding-atlas)
-    (let* ((org-section (cdr (assoc "Org" p3/keybinding-sections)))
-           (open-entry (assoc "C-c C-o" org-section))
-           (export-entries
-            (seq-filter (lambda (entry) (equal (car entry) "C-c E"))
-                        org-section)))
-      (should (equal (cdr open-entry) "open link at point"))
-      (should (= (length export-entries) 1))
-      (should (equal (cdar export-entries) "export Org file")))))
 
 (ert-deftest p3-org-export-gfm-runs-through-pandoc-when-available ()
   (skip-unless (executable-find "pandoc"))
