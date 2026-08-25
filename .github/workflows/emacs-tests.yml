@@ -39,8 +39,10 @@ jobs:
             -L lisp \
             -l test/p3-config-test.el \
             -l test/p3-core-test.el \
+            -l test/p3-platform-test.el \
             -l test/p3-python-test.el \
             -l test/p3-terminal-test.el \
+            -l test/p3-ess-test.el \
             -l test/p3-gptel-test.el \
             -l test/p3-r-tools-test.el \
             -l test/p3-org-export-test.el \
