@@ -5,6 +5,8 @@
 (require 'seq)
 (require 'p3-core)
 
+(defvar eglot-server-programs)
+
 (defun p3/python-project-interpreter ()
   "Return the project-local Python executable, when one exists."
   (when-let ((root (p3/project-root)))
