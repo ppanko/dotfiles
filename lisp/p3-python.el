@@ -28,7 +28,10 @@
 (defun p3/python-display-shell ()
   "Start the Python shell and display it without leaving the source buffer."
   (interactive)
-  (let ((process (python-shell-get-or-create-process)))
+  (let ((process
+         (or (python-shell-get-process)
+             (save-window-excursion
+               (run-python (python-shell-calculate-command) nil nil)))))
     (display-buffer (process-buffer process))))
 
 (defun p3/python-tools-path (file)
