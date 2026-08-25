@@ -1,6 +1,7 @@
 ;;; p3-terminal.el --- Project-aware terminal helpers -*- lexical-binding: t; -*-
 
 (require 'seq)
+(require 'shell)
 (require 'subr-x)
 (require 'p3-core)
 
