@@ -95,20 +95,23 @@
          (old-shell-environment (getenv "SHELL"))
          (bash-args-was-bound (boundp 'explicit-bash.exe-args))
          (old-bash-args (and bash-args-was-bound
-                             (symbol-value 'explicit-bash.exe-args))))
+                             (symbol-value 'explicit-bash.exe-args)))
+         (explicit-shell-was-bound (boundp 'explicit-shell-file-name))
+         (old-explicit-shell (and explicit-shell-was-bound
+                                  (symbol-value 'explicit-shell-file-name))))
     (unwind-protect
         (progn
           (with-temp-file bash)
           (with-temp-file zsh)
           (set 'explicit-bash.exe-args nil)
+          (set 'explicit-shell-file-name nil)
           (let ((global-map (copy-keymap global-map))
-                (shell-file-name "old-shell")
-                (explicit-shell-file-name nil))
+                (shell-file-name "old-shell"))
             (define-key global-map (kbd "C-x C-u") #'ignore)
             (cl-letf (((symbol-function 'p3/windows-p) (lambda () t)))
               (p3/windows-configure-shell))
             (should (equal shell-file-name bash))
-            (should (equal explicit-shell-file-name zsh))
+            (should (equal (symbol-value 'explicit-shell-file-name) zsh))
             (should (equal (symbol-value 'explicit-bash.exe-args)
                            '("--login")))
             (should (equal (getenv "SHELL") bash))
@@ -117,6 +120,9 @@
       (if bash-args-was-bound
           (set 'explicit-bash.exe-args old-bash-args)
         (makunbound 'explicit-bash.exe-args))
+      (if explicit-shell-was-bound
+          (set 'explicit-shell-file-name old-explicit-shell)
+        (makunbound 'explicit-shell-file-name))
       (delete-directory root t))))
 
 (ert-deftest p3-platform-windows-shell-strips-carriage-returns ()
