@@ -1,43 +1,11 @@
 ;;; p3-terminal.el --- Project-aware terminal helpers -*- lexical-binding: t; -*-
 
 (require 'seq)
-(require 'shell)
 (require 'subr-x)
 (require 'p3-core)
 
 (declare-function vterm-mode "vterm")
 (declare-function vterm-copy-mode "vterm")
-
-(defvar explicit-bash.exe-args)
-(defvar linuxy-environment-path nil
-  "Rtools/MSYS2 usr/bin directory selected by the Windows bootstrap.")
-
-(defun p3/windows-shell-mode-setup ()
-  "Configure Comint for an Rtools/MSYS2 shell on Windows."
-  (add-hook 'comint-output-filter-functions #'comint-strip-ctrl-m nil t)
-  (when-let ((process (get-buffer-process (current-buffer))))
-    (set-process-coding-system process 'utf-8-unix 'utf-8-unix)))
-
-(defun p3/terminal-configure-windows-shell ()
-  "Configure the regular Emacs shell from the selected Rtools environment."
-  (when (eq system-type 'windows-nt)
-    (if (not linuxy-environment-path)
-        (display-warning
-         'p3/windows
-         "Rtools/MSYS2 is unavailable; leaving the default Emacs shell unchanged"
-         :warning)
-      (let ((bash (expand-file-name "bash.exe" linuxy-environment-path))
-            (zsh (expand-file-name "zsh.exe" linuxy-environment-path)))
-        (setq shell-file-name (if (file-regular-p bash) bash "bash")
-              explicit-shell-file-name
-              (cond
-               ((file-regular-p zsh) zsh)
-               ((file-regular-p bash) bash)
-               (t shell-file-name))
-              explicit-bash.exe-args '("--login"))
-        (setenv "SHELL" shell-file-name)
-        (add-hook 'shell-mode-hook #'p3/windows-shell-mode-setup)
-        (global-set-key (kbd "C-x C-u") #'shell)))))
 
 (defgroup p3/terminal nil
   "Project-aware terminal sessions."

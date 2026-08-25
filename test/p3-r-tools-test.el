@@ -1,6 +1,7 @@
 ;;; p3-r-tools-test.el --- Tests for p3-r-tools -*- lexical-binding: t; -*-
 
 (require 'ert)
+(require 'cl-lib)
 
 (defconst p3-r-test--config-directory
   (file-name-directory
@@ -128,6 +129,19 @@
                (lambda (&optional _name) 'fake-process)))
       (p3-r-load-view-data-frame)
       (should (equal sent-code "view_df <- function(x) x")))))
+
+(ert-deftest p3-r-open-helper-file-uses-shared-project-root ()
+  (p3-r-test--with-temp-directory root
+    (let* ((helper (expand-file-name "R/utils.R" root))
+           opened)
+      (make-directory (file-name-directory helper) t)
+      (with-temp-file helper)
+      (cl-letf (((symbol-function 'p3/project-root)
+                 (lambda () (file-name-as-directory root)))
+                ((symbol-function 'find-file)
+                 (lambda (path) (setq opened path))))
+        (p3-r-open-helper-file)
+        (should (equal opened helper))))))
 
 (ert-deftest p3-r-command-map-exposes-workflow ()
   (dolist (key '("p" "h" "w" "c" "s" "a" "m" "d" "l" "v" "r" "f"))

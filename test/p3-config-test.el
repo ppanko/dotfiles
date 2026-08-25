@@ -59,20 +59,68 @@
 (ert-deftest p3-config-org-delegates-custom-subsystems-to-modules ()
   (with-temp-buffer
     (insert-file-contents (expand-file-name "config.org" p3-config-test--root))
-    (dolist (module '("p3-core" "p3-python" "p3-terminal" "p3-gptel"))
+    (dolist (module '("p3-platform" "p3-core" "p3-python" "p3-terminal"
+                      "p3-ess" "p3-gptel"))
       (goto-char (point-min))
       (should (search-forward (format "(use-package %s" module) nil t)))
     ;; Package declarations and wiring stay visible in the literate config.
-    (dolist (package '("python" "eglot" "vterm" "gptel"))
+    (dolist (package '("python" "eglot" "ess-r-mode" "vterm" "gptel"))
       (goto-char (point-min))
       (should (search-forward (format "(use-package %s" package) nil t)))
     ;; Subsystem implementations belong to independently testable libraries.
-    (dolist (implementation '("(defun p3/project-root"
+    (dolist (implementation '("(defun p3/windows-rtools-version"
+                               "(defun p3/windows-latest-r-program"
+                               "(defun p3/project-root"
                                "(defun p3/python-project-interpreter"
                                "(defun p3/vterm-buffer"
+                               "(defun p3/ess-project-root"
+                               "(defun p3/ess-ensure-project-process"
                                "(defun p3/gptel-send-task"))
       (goto-char (point-min))
       (should-not (search-forward implementation nil t)))))
+
+(ert-deftest p3-config-platform-setup-preserves-subsystem-timing ()
+  (with-temp-buffer
+    (insert-file-contents (expand-file-name "config.org" p3-config-test--root))
+    (goto-char (point-min))
+    (should-not (search-forward "(p3/platform-setup)" nil t))
+    (goto-char (point-min))
+    (let ((rtools-position
+           (progn
+             (should (search-forward "(p3/windows-configure-rtools)" nil t))
+             (point)))
+          ess-position
+          r-position
+          terminal-position
+          shell-position
+          shell-binding-position)
+      (setq ess-position
+            (progn
+              (should (search-forward "(use-package ess-r-mode" nil t))
+              (point)))
+      (setq r-position
+            (progn
+              (should (search-forward "(p3/windows-configure-r-program)" nil t))
+              (point)))
+      (setq terminal-position
+            (progn
+              (should (search-forward "(use-package p3-terminal" nil t))
+              (point)))
+      (setq shell-position
+            (progn
+              (should (search-forward "(p3/windows-configure-shell)" nil t))
+              (point)))
+      (setq shell-binding-position
+            (progn
+              (should
+               (search-forward
+                "(global-set-key (kbd \"C-x C-u\") #'shell)" nil t))
+              (point)))
+      (should (< rtools-position ess-position))
+      (should (< ess-position r-position))
+      (should (< r-position terminal-position))
+      (should (< terminal-position shell-position))
+      (should (< shell-position shell-binding-position)))))
 
 (ert-deftest p3-init-does-not-special-case-org-export ()
   (with-temp-buffer
