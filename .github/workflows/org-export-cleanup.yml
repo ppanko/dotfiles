@@ -1,0 +1,167 @@
+name: One-shot Org export cleanup
+
+on:
+  push:
+    branches:
+      - feature/org-pandoc-export
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v5
+        with:
+          ref: feature/org-pandoc-export
+          fetch-depth: 0
+
+      - name: Apply source-of-truth cleanup
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new, label):
+              text = path.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, found {count}")
+              path.write_text(text.replace(old, new, 1))
+
+          config = Path("config.org")
+          text = config.read_text()
+
+          old = '     "C-c e" "visit config"\n     "C-c g" "GPTel tasks"'
+          new = '     "C-c e" "visit config"\n     "C-c E" "export Org file"\n     "C-c g" "GPTel tasks"'
+          if text.count(old) != 1:
+              raise SystemExit(f"which-key entry: expected exactly one match, found {text.count(old)}")
+          text = text.replace(old, new, 1)
+
+          old = '       ("C-c C-o" . "export to Office")\n       ("C-c C-x C-o" . "sort TODO entries")'
+          new = '       ("C-c C-o" . "open link at point")\n       ("C-c E" . "export Org file")\n       ("C-c C-x C-o" . "sort TODO entries")'
+          if text.count(old) != 1:
+              raise SystemExit(f"Org atlas entry: expected exactly one match, found {text.count(old)}")
+          text = text.replace(old, new, 1)
+
+          start_marker = 'Export org to ms-office files!\n\n#+BEGIN_SRC emacs-lisp\n'
+          end_marker = '  (define-key org-mode-map (kbd "C-c C-o") #\'p3/org-export-to-office)\n#+END_SRC'
+          if text.count(start_marker) != 1 or text.count(end_marker) != 1:
+              raise SystemExit("legacy Org exporter block markers are not unique")
+          start = text.index(start_marker)
+          end = text.index(end_marker, start) + len(end_marker)
+          replacement = '''Load the Pandoc-backed Org export workflow from =lisp/p3-org-export.el=.
+This keeps the literate config responsible for enabling the workflow while the
+implementation remains independently testable.
+
+#+BEGIN_SRC emacs-lisp
+  (use-package p3-org-export
+    :ensure nil
+    :demand t
+    :config
+    (p3-org-export-setup))
+#+END_SRC'''
+          text = text[:start] + replacement + text[end:]
+          config.write_text(text)
+
+          replace_once(
+              Path("init.el"),
+              '  ;; Keep standalone workflow modules authoritative after config.org reloads.\n  (load "p3-org-export" nil \'nomessage)\n  (p3-org-export-setup)\n',
+              '',
+              'init exporter special-case')
+
+          module = Path("lisp/p3-org-export.el")
+          text = module.read_text()
+          atlas_start = '\n(defun p3-org-export--update-keybinding-atlas ()\n'
+          setup_start = '\n(defun p3-org-export-setup ()\n'
+          if text.count(atlas_start) != 1 or text.count(setup_start) != 1:
+              raise SystemExit("exporter setup markers are not unique")
+          a = text.index(atlas_start)
+          b = text.index(setup_start, a)
+          text = text[:a] + text[b:]
+          setup_pos = text.index('(defun p3-org-export-setup ()')
+          provide_pos = text.index("\n\n(provide 'p3-org-export)", setup_pos)
+          new_setup = '''(defun p3-org-export-setup ()
+  "Install the Org export command and restore standard Org link opening."
+  (define-key org-mode-map (kbd "C-c C-o") #'org-open-at-point)
+  (define-key org-mode-map (kbd "C-c E") #'p3/org-export))'''
+          text = text[:setup_pos] + new_setup + text[provide_pos:]
+          module.write_text(text)
+
+          export_test = Path("test/p3-org-export-test.el")
+          text = export_test.read_text()
+          if text.count("(require 'seq)\n") != 1:
+              raise SystemExit("seq require was not unique")
+          text = text.replace("(require 'seq)\n", '', 1)
+          defvar = '''(defvar p3/keybinding-sections nil
+  "Keybinding atlas state used by exporter setup tests.")
+
+'''
+          if text.count(defvar) != 1:
+              raise SystemExit("atlas test variable was not unique")
+          text = text.replace(defvar, '', 1)
+          test_start = '(ert-deftest p3-org-export-updates-keybinding-atlas-without-duplicates ()\n'
+          next_test = '(ert-deftest p3-org-export-gfm-runs-through-pandoc-when-available ()\n'
+          if text.count(test_start) != 1 or text.count(next_test) != 1:
+              raise SystemExit("atlas test markers are not unique")
+          a = text.index(test_start)
+          b = text.index(next_test, a)
+          text = text[:a] + text[b:]
+          export_test.write_text(text)
+
+          config_test = Path("test/p3-config-test.el")
+          text = config_test.read_text()
+          old_test = '(ert-deftest p3-init-loads-org-export-after-generated-config ()\n'
+          provide = "(provide 'p3-config-test)"
+          if text.count(old_test) != 1 or text.count(provide) != 1:
+              raise SystemExit("config integration test markers are not unique")
+          a = text.index(old_test)
+          b = text.index(provide, a)
+          new_tests = '''(ert-deftest p3-config-org-owns-org-export-integration ()
+  (with-temp-buffer
+    (insert-file-contents (expand-file-name "config.org" p3-config-test--root))
+    (should (search-forward "(use-package p3-org-export" nil t))
+    (goto-char (point-min))
+    (should-not (search-forward "(defun p3/org-export-to-office" nil t))
+    (goto-char (point-min))
+    (should (search-forward "(\\\"C-c C-o\\\" . \\\"open link at point\\\")" nil t))
+    (goto-char (point-min))
+    (should (search-forward "(\\\"C-c E\\\" . \\\"export Org file\\\")" nil t))))
+
+(ert-deftest p3-init-does-not-special-case-org-export ()
+  (with-temp-buffer
+    (insert-file-contents (expand-file-name "init.el" p3-config-test--root))
+    (should-not (search-forward "(load \\\"p3-org-export\\\"" nil t))))
+
+'''
+          text = text[:a] + new_tests + text[b:]
+          config_test.write_text(text)
+
+          Path('.github/workflows/org-export-cleanup.yml').unlink()
+          PY
+
+      - name: Install Emacs and Pandoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emacs-nox pandoc
+
+      - name: Run full Emacs test suite
+        run: |
+          emacs -Q --batch \
+            -L lisp \
+            -l test/p3-config-test.el \
+            -l test/p3-r-tools-test.el \
+            -l test/p3-org-export-test.el \
+            -f ert-run-tests-batch-and-exit
+
+      - name: Commit verified cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git status --short
+          git commit -m "Make config.org authoritative for Org export"
+          git push origin HEAD:feature/org-pandoc-export
