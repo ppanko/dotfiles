@@ -14,6 +14,7 @@
 (declare-function comint-strip-ctrl-m "comint" (string))
 
 (defvar explicit-bash.exe-args)
+(defvar explicit-shell-file-name)
 (defvar inferior-R-program-name)
 
 (defgroup p3/platform nil
