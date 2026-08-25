@@ -78,10 +78,17 @@
   (expand-file-name "config.org" user-emacs-directory))
 (defconst p3/config-generated
   (expand-file-name "config.el" user-emacs-directory))
+(defconst p3/lisp-directory
+  (expand-file-name "lisp" user-emacs-directory))
+(add-to-list 'load-path p3/lisp-directory)
+
 (defun p3/load-config (&optional quiet)
   "Tangle and load the literate configuration from `p3/config-source'."
   (org-babel-tangle-file p3/config-source p3/config-generated)
   (load-file p3/config-generated)
+  ;; Keep standalone workflow modules authoritative after config.org reloads.
+  (load "p3-org-export" nil 'nomessage)
+  (p3-org-export-setup)
   (unless quiet
     (message "Loaded %s" p3/config-source)))
 (p3/load-config t)
