@@ -2,6 +2,8 @@
 # portable configuration and its source assets.
 *
 !/.gitignore
+!/.github/
+!/.github/**
 !/init.el
 !/config.org
 !/vterm-bashrc
