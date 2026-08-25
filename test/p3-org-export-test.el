@@ -110,13 +110,22 @@
                   (list "--citeproc"
                         (concat "--bibliography=" bibliography)))))))))
 
-(ert-deftest p3-org-export-local-bibliography-takes-precedence ()
-  (with-temp-buffer
-    (insert "#+BIBLIOGRAPHY: local.bib\n\nA claim [cite:@doe2020].\n")
-    (org-mode)
-    (let ((org-cite-global-bibliography '("/tmp/global.bib")))
-      (should (equal (p3-org-export--citation-arguments)
-                     '("--citeproc"))))))
+(ert-deftest p3-org-export-local-and-global-bibliographies-are-combined ()
+  (p3-org-export-test--with-temp-directory directory
+    (let ((local (expand-file-name "local.bib" directory))
+          (global (expand-file-name "global.bib" directory)))
+      (p3-org-export-test--write-bibliography local)
+      (p3-org-export-test--write-bibliography global)
+      (with-temp-buffer
+        (setq default-directory directory)
+        (insert "#+BIBLIOGRAPHY: local.bib\n\nA claim [cite:@doe2020].\n")
+        (org-mode)
+        (let ((org-cite-global-bibliography (list global)))
+          (should
+           (equal (p3-org-export--citation-arguments)
+                  (list "--citeproc"
+                        (concat "--bibliography=" local)
+                        (concat "--bibliography=" global)))))))))
 
 (ert-deftest p3-org-export-citations-require-a-bibliography ()
   (with-temp-buffer
