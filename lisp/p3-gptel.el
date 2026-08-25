@@ -27,6 +27,15 @@
         "\\(?:^\\|[/\\\\]\\)\\(?:secrets?\\|\\.env\\|credentials?\\)"
         (file-name-nondirectory buffer-file-name))))
 
+(defun p3/gptel-context-set (context property value)
+  "Set PROPERTY to VALUE in CONTEXT in place and return VALUE.
+CONTEXT is passed through GPTel callbacks by reference, so updates must mutate
+its existing list rather than replace a local plist binding."
+  (if-let ((tail (memq property context)))
+      (setcar (cdr tail) value)
+    (setcdr (last context) (list property value)))
+  value)
+
 (defun p3/gptel-stream-begin (response context)
   "Start inserting RESPONSE directly into the target described by CONTEXT."
   (let ((buffer (plist-get context :target-buffer))
@@ -44,20 +53,20 @@
              (goto-char (marker-position start)))
             ('append
              (goto-char (marker-position end))
-             (setf (plist-get context :insert-start) (point))
+             (p3/gptel-context-set context :insert-start (point))
              (insert "\n"))
             ('prepend
              (goto-char (marker-position start)))
             ('message nil))
-          (setf (plist-get context :insert-marker)
-                (copy-marker (point) t))
+          (p3/gptel-context-set context :insert-marker
+                                (copy-marker (point) t))
           (unless (plist-get context :insert-start)
-            (setf (plist-get context :insert-start) (point)))
+            (p3/gptel-context-set context :insert-start (point)))
           (unless (eq insert-type 'message)
             (insert response))))
-      (setf (plist-get context :started) t)
+      (p3/gptel-context-set context :started t)
       (when (eq insert-type 'message)
-        (setf (plist-get context :displayed-response) response)))))
+        (p3/gptel-context-set context :displayed-response response)))))
 
 (defun p3/gptel-stream-insert (response context)
   "Insert one streamed RESPONSE chunk into the target buffer."
@@ -65,8 +74,9 @@
     (if (not (plist-get context :started))
         (p3/gptel-stream-begin response context)
       (if (eq (plist-get context :insert-type) 'message)
-          (setf (plist-get context :displayed-response)
-                (concat (plist-get context :displayed-response) response))
+          (p3/gptel-context-set
+           context :displayed-response
+           (concat (plist-get context :displayed-response) response))
         (with-current-buffer (plist-get context :target-buffer)
           (save-excursion
             (goto-char (plist-get context :insert-marker))
@@ -154,6 +164,9 @@
                             :end-marker
                             (unless (eq insert-type 'message)
                               (copy-marker end-pos t))
+                            :insert-start nil
+                            :insert-marker nil
+                            :displayed-response nil
                             :started nil)))
         (gptel-request
          (format "%s\n\nLanguage/mode: %s\n\nCode:\n%s"
