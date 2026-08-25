@@ -212,11 +212,10 @@ Load secrets if they exist
     (load-file p3/secrets-file))
 #+END_SRC
 
-Platform-specific discovery and process configuration live in
-=lisp/p3-platform.el=. On Windows this selects the newest usable Rtools/MSYS2
-environment and R installation unless overridden in =secrets.el=, then exposes
-the resulting shell, Git/Unix-tool, and Hunspell paths before other packages
-need them.
+Platform-specific discovery lives in =lisp/p3-platform.el=. On Windows, select
+the Rtools/MSYS2 environment here so Git and other subprocess-using packages
+see its Unix tools early in startup. R and shell configuration remain in their
+original subsystem sections below.
 
 #+BEGIN_SRC emacs-lisp
   (eval-and-compile
@@ -226,7 +225,7 @@ need them.
     :ensure nil
     :demand t
     :config
-    (p3/platform-setup))
+    (p3/windows-configure-rtools))
 #+END_SRC
 
 * General
@@ -1000,6 +999,13 @@ commands, data-frame viewing, and script archiving remain in =p3-r-tools=.
           ess-gen-proc-buffer-name-function 'ess-gen-proc-buffer-name:project-or-directory))
 #+END_SRC
 
+On Windows, select the R executable here, matching the startup point used by
+the previous inline configuration.
+
+#+BEGIN_SRC emacs-lisp
+  (p3/windows-configure-r-program)
+#+END_SRC
+
 #+BEGIN_SRC emacs-lisp
   (defun compile-rmd ()
     (set (make-local-variable 'compile-command)
@@ -1755,14 +1761,19 @@ how Python support is enabled.
 #+END_SRC
 ** Shell
 
-Platform-specific Windows shell setup is handled by =p3-platform= near startup.
-Project-aware vterm behavior remains in =lisp/p3-terminal.el=; package wiring
-stays here.
+Windows shell implementation lives in =p3-platform=, but setup remains here to
+preserve its original startup timing. Project-aware vterm behavior remains in
+=lisp/p3-terminal.el=.
 
 #+BEGIN_SRC emacs-lisp
   (use-package p3-terminal
     :ensure nil
     :demand t)
+
+  (p3/windows-configure-shell)
+
+  (when (eq system-type 'windows-nt)
+    (global-set-key (kbd "C-x C-u") #'shell))
 
   (when (eq system-type 'gnu/linux)
     (keymap-global-set "C-c T" p3/vterm-command-map)

@@ -33,6 +33,7 @@ jobs:
             lisp/p3-python.el \
             lisp/p3-terminal.el \
             lisp/p3-ess.el \
+            lisp/p3-r-tools.el \
             lisp/p3-gptel.el
 
       - name: Run ERT test suite

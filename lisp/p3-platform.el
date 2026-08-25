@@ -4,7 +4,7 @@
 ;; Keep operating-system discovery and environment mutation in one place.
 ;; Windows uses the MSYS2 environment bundled with Rtools for Unix command-line
 ;; tools and discovers the newest installed R when no machine-local override is
-;; configured.
+;; configured.  The literate config decides when each setup stage runs.
 
 ;;; Code:
 
@@ -19,15 +19,13 @@
   "Platform-specific behavior for the personal Emacs configuration."
   :group 'environment)
 
-(defcustom p3/windows-rtools-override nil
-  "Optional Rtools installation directory to use on Windows."
-  :type '(choice (const :tag "Auto-detect" nil) directory)
-  :group 'p3/platform)
+(defvar p3/windows-rtools-override nil
+  "Optional Rtools installation directory to use on Windows.
+Set this in secrets.el when a machine should not use auto-detection.")
 
-(defcustom p3/windows-r-program-override nil
-  "Optional absolute path to Rterm.exe on Windows."
-  :type '(choice (const :tag "Auto-detect" nil) file)
-  :group 'p3/platform)
+(defvar p3/windows-r-program-override nil
+  "Optional absolute path to Rterm.exe on Windows.
+Set this in secrets.el when a machine should not use auto-detection.")
 
 (defvar rtools-path nil
   "Selected Rtools installation directory on Windows.")
@@ -47,6 +45,10 @@
 (defvar p3/windows-hunspell-dictionary-directory nil
   "Hunspell dictionary directory found in the selected Rtools installation.")
 
+(defun p3/windows-p ()
+  "Return non-nil when Emacs is running natively on Windows."
+  (eq system-type 'windows-nt))
+
 (defun p3/windows-rtools-version (directory)
   "Return the numeric version suffix from an rtoolsNN DIRECTORY."
   (let ((name (downcase
@@ -61,7 +63,7 @@
 
 (defun p3/windows-latest-rtools ()
   "Return the newest usable C:/rtoolsNN installation."
-  (when (and (eq system-type 'windows-nt)
+  (when (and (p3/windows-p)
              (file-directory-p "C:/"))
     (car
      (sort
@@ -113,7 +115,7 @@ When DIRECTORY-P is non-nil, require a directory; otherwise require a file."
 
 (defun p3/windows-configure-rtools ()
   "Discover Rtools and expose its MSYS2 tools to Emacs on Windows."
-  (when (eq system-type 'windows-nt)
+  (when (p3/windows-p)
     (if-let ((selected (p3/windows-select-rtools)))
         (progn
           (setq rtools-path (directory-file-name selected)
@@ -159,7 +161,7 @@ When DIRECTORY-P is non-nil, require a directory; otherwise require a file."
 
 (defun p3/windows-configure-shell ()
   "Configure the regular Emacs shell from the selected Rtools environment."
-  (when (eq system-type 'windows-nt)
+  (when (p3/windows-p)
     (if (not linuxy-environment-path)
         (display-warning
          'p3/windows
@@ -175,8 +177,7 @@ When DIRECTORY-P is non-nil, require a directory; otherwise require a file."
                (t shell-file-name))
               explicit-bash.exe-args '("--login"))
         (setenv "SHELL" shell-file-name)
-        (add-hook 'shell-mode-hook #'p3/windows-shell-mode-setup)
-        (global-set-key (kbd "C-x C-u") #'shell)))))
+        (add-hook 'shell-mode-hook #'p3/windows-shell-mode-setup)))))
 
 (defun p3/windows-r-version (directory)
   "Return the version string encoded by an R installation DIRECTORY."
@@ -195,7 +196,7 @@ When DIRECTORY-P is non-nil, require a directory; otherwise require a file."
 (defun p3/windows-latest-r-program ()
   "Return Rterm.exe from the newest installed R on Windows."
   (let ((root "C:/Program Files/R"))
-    (when (and (eq system-type 'windows-nt)
+    (when (and (p3/windows-p)
                (file-directory-p root))
       (catch 'found
         (dolist
@@ -221,23 +222,13 @@ When DIRECTORY-P is non-nil, require a directory; otherwise require a file."
 
 (defun p3/windows-configure-r-program ()
   "Configure ESS to use the selected Windows R executable."
-  (when (eq system-type 'windows-nt)
+  (when (p3/windows-p)
     (if-let ((program (p3/windows-select-r-program)))
         (setq-default inferior-R-program-name program)
       (display-warning
        'p3/windows
        "No Rterm.exe found under C:/Program Files/R"
        :warning))))
-
-(defun p3/platform-setup ()
-  "Apply platform-specific process and executable configuration."
-  (when (eq system-type 'windows-nt)
-    (p3/windows-configure-rtools)
-    (p3/windows-configure-r-program)
-    (p3/windows-configure-shell)))
-
-;; Compatibility command retained while callers migrate to the platform name.
-(defalias 'p3/terminal-configure-windows-shell #'p3/windows-configure-shell)
 
 (provide 'p3-platform)
 

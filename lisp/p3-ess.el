@@ -92,9 +92,6 @@
     (with-eval-after-load 'ess-inf
       (p3/ess-install-process-advice))))
 
-;; Compatibility name retained for existing references in older config code.
-(defalias 'p3/register-current-ess-process #'p3/ess-register-current-process)
-
 (provide 'p3-ess)
 
 ;;; p3-ess.el ends here
