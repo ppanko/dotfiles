@@ -32,22 +32,40 @@
     (forward-line 1)
     (should (equal (p3/gptel-task-code "Send Line") "second\n"))))
 
+(defun p3-gptel-test--replace-context ()
+  "Return a replacement-stream context for OLD in the current test buffer."
+  (let ((start (copy-marker 8 nil))
+        (end (copy-marker 11 t)))
+    (list :task "Refactor"
+          :insert-type 'replace
+          :target-buffer (current-buffer)
+          :original "OLD"
+          :start-marker start
+          :end-marker end
+          :insert-start nil
+          :insert-marker nil
+          :displayed-response nil
+          :started nil)))
+
 (ert-deftest p3-gptel-abort-stream-restores-replaced-text ()
   (with-temp-buffer
     (insert "before OLD after")
-    (let* ((start (copy-marker 8 nil))
-           (end (copy-marker 11 t))
-           (context (list :task "Refactor"
-                          :insert-type 'replace
-                          :target-buffer (current-buffer)
-                          :original "OLD"
-                          :start-marker start
-                          :end-marker end
-                          :started nil)))
+    (let ((context (p3-gptel-test--replace-context)))
       (p3/gptel-stream-begin "NEW" context)
       (should (equal (buffer-string) "before NEW after"))
       (p3/gptel-abort-stream context)
       (should (equal (buffer-string) "before OLD after")))))
+
+(ert-deftest p3-gptel-abort-stream-preserves-edits-before-target ()
+  "Rollback must track the streamed region while the user keeps editing."
+  (with-temp-buffer
+    (insert "before OLD after")
+    (let ((context (p3-gptel-test--replace-context)))
+      (p3/gptel-stream-begin "NEW" context)
+      (goto-char (point-min))
+      (insert "X")
+      (p3/gptel-abort-stream context)
+      (should (equal (buffer-string) "Xbefore OLD after")))))
 
 (ert-deftest p3-gptel-command-map-exposes-task-workflow ()
   (dolist (key '("l" "r" "d" "t" "c" "w"))
