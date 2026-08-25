@@ -129,9 +129,8 @@ REFERENCE-DOCUMENT overrides the profile's configured default when non-nil."
   (when (buffer-modified-p)
     (save-buffer))
   (let* ((profile-id (p3-org-export--profile-id profile))
-         (pandoc (progn
-                   (p3-org-export--profile profile-id)
-                   (p3-org-export--pandoc-executable)))
+         (_profile (p3-org-export--profile profile-id))
+         (pandoc (p3-org-export--pandoc-executable))
          (source (expand-file-name buffer-file-name))
          (output (p3-org-export--output-file profile-id))
          (reference
