@@ -605,6 +605,20 @@ Input method configuration.
 
 * Functions
 
+Shared project and configuration commands live in =lisp/p3-core.el=.  Keep the
+literate file responsible for loading the module and exposing its bindings.
+
+#+BEGIN_SRC emacs-lisp
+  (eval-and-compile
+    (add-to-list 'load-path (expand-file-name "lisp" user-emacs-directory)))
+
+  (use-package p3-core
+    :ensure nil
+    :demand t
+    :bind (("C-c e" . p3/config-visit)
+           ("C-c r" . p3/config-reload)))
+#+END_SRC
+
 Save and kill all buffers (for emacs daemon).
 
 #+BEGIN_SRC emacs-lisp
@@ -614,26 +628,6 @@ Save and kill all buffers (for emacs daemon).
         (save-some-buffers)
         (mapc 'kill-buffer (buffer-list)))
   (global-set-key (kbd "C-x C-k") 'p3/save-kill-other-buffers)
-#+END_SRC
-
-Visit config file.
-
-#+BEGIN_SRC emacs-lisp
-   (defun p3/config-visit ()
-        "Config edit."
-        (interactive)
-        (find-file "~/.emacs.d/config.org"))
-  (global-set-key (kbd "C-c e") 'p3/config-visit)
-#+END_SRC
-
-Reload config file.
-
-#+BEGIN_SRC emacs-lisp
-   (defun p3/config-reload ()
-        "Config reload."
-        (interactive)
-        (p3/load-config))
-  (global-set-key (kbd "C-c r") 'p3/config-reload)
 #+END_SRC
 
 Sudo edit a file, as shown [[https://emacsredux.com/blog/2013/04/21/edit-files-as-root/][here]]!
@@ -657,9 +651,6 @@ Load the personal R workflow module. Its project templates live under
 the complete R command prefix.
 
 #+BEGIN_SRC emacs-lisp
-  (eval-and-compile
-    (add-to-list 'load-path (expand-file-name "lisp" user-emacs-directory)))
-
   (use-package p3-r-tools
     :ensure nil
     :demand t
@@ -1053,21 +1044,8 @@ Options for inferior ESS
     ;; (add-hook 'inferior-ess-mode-hook 'p3/my-inferior-ess-init)
 #+END_SRC
 
-Use project root for path completions
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/project-root ()
-    "Return the current Projectile or built-in project root, if any."
-    (or (and (fboundp 'projectile-project-root)
-             (ignore-errors (projectile-project-root)))
-        (when-let ((project (project-current nil)))
-          (project-root project))))
-
-  (defun p3/use-project-root-as-default-dir ()
-    "Use the current project root as the buffer's default directory."
-    (when-let ((root (p3/project-root)))
-      (setq-local default-directory root)))
-#+END_SRC
+Project-root helpers are provided by =p3-core= and reused by ESS, Python, and
+terminal workflows.
 
 ESS automatically starts R in the current built-in project root, falling back
 to =default-directory= when the buffer is not in a project.
@@ -1295,10 +1273,9 @@ Prevent emacs from mangling the path to gpg on Windows, as shown [[https://emacs
 
 ** GPT
 
-A GPT (and other LLM) co-pilot for Emacs
-
-#+BEGIN_SRC emacs-lisp
-#+END_SRC
+A GPT (and other LLM) co-pilot for Emacs.  The package declaration stays here;
+the task prompts, streaming/rollback behavior, and task command map live in
+=lisp/p3-gptel.el=.
 
 #+BEGIN_SRC emacs-lisp
   (use-package gptel
@@ -1307,197 +1284,12 @@ A GPT (and other LLM) co-pilot for Emacs
           gptel-api-key (or (getenv "OPENAI_API_KEY")
                             #'gptel-api-key-from-auth-source)))
 
-  (defconst p3/gptel-task-prompts
-    '(("Write Code" . "Write the requested code for the current programming language. Return only the code.")
-      ("Refactor" . "Refactor the selected code while preserving its behavior. Return only the replacement code.")
-      ("Generate Documentation" . "Add concise documentation for the selected code. Return only documentation appropriate for its language.")
-      ("Write Tests" . "Write tests for the selected code. Return only the test code.")
-      ("Translate Code" . "Translate the selected code to the requested target language. Return only the translated code.")
-      ("Send Line" . "Explain or respond to the selected line briefly."))
-    "Prompt instructions used by `p3/gptel-send-task'.")
-
-  (defun p3/gptel-task-code (task-type)
-    "Return the active region or current line for TASK-TYPE."
-    (if (equal task-type "Send Line")
-        (thing-at-point 'line t)
-      (when (use-region-p)
-        (filter-buffer-substring (region-beginning) (region-end)))))
-
-  (defun p3/gptel-sensitive-buffer-p ()
-    "Return non-nil when the current file looks like a secrets file."
-    (and buffer-file-name
-         (string-match-p
-          "\\(?:^\\|[/\\\\]\\)\\(?:secrets?\\|\\.env\\|credentials?\\)"
-          (file-name-nondirectory buffer-file-name))))
-
-  (defun p3/gptel-stream-begin (response context)
-    "Start inserting RESPONSE directly into the target described by CONTEXT."
-    (let ((buffer (plist-get context :target-buffer))
-          (start (plist-get context :start-marker))
-          (end (plist-get context :end-marker))
-          (insert-type (plist-get context :insert-type)))
-      (when (and (stringp response) (buffer-live-p buffer)
-                 (not (plist-get context :started)))
-        (with-current-buffer buffer
-          (save-excursion
-            (pcase insert-type
-              ('replace
-               (delete-region (marker-position start) (marker-position end))
-               (goto-char (marker-position start)))
-              ('append
-               (goto-char (marker-position end))
-               (setf (plist-get context :insert-start) (point))
-               (insert "\n"))
-              ('prepend
-               (goto-char (marker-position start)))
-              ('message nil))
-            (setf (plist-get context :insert-marker)
-                  (copy-marker (point) t))
-            (unless (plist-get context :insert-start)
-              (setf (plist-get context :insert-start) (point)))
-            (unless (eq insert-type 'message)
-              (insert response))))
-        (setf (plist-get context :started) t)
-        (when (eq insert-type 'message)
-          (setf (plist-get context :displayed-response) response)))))
-
-  (defun p3/gptel-stream-insert (response context)
-    "Insert one streamed RESPONSE chunk into the target buffer."
-    (when (stringp response)
-      (if (not (plist-get context :started))
-          (p3/gptel-stream-begin response context)
-        (if (eq (plist-get context :insert-type) 'message)
-          (setf (plist-get context :displayed-response)
-                  (concat (plist-get context :displayed-response) response))
-          (with-current-buffer (plist-get context :target-buffer)
-            (save-excursion
-              (goto-char (plist-get context :insert-marker))
-              (insert response)))))
-      (when (eq (plist-get context :insert-type) 'message)
-        (message "%s" (plist-get context :displayed-response)))))
-
-  (defun p3/gptel-finish-stream (context)
-    "Finish a direct-to-buffer stream described by CONTEXT."
-    (let ((buffer (plist-get context :target-buffer))
-          (insert-type (plist-get context :insert-type))
-          (insert-marker (plist-get context :insert-marker)))
-      (when (and (buffer-live-p buffer) (plist-get context :started))
-        (with-current-buffer buffer
-          (save-excursion
-            (when (eq insert-type 'prepend)
-              (goto-char insert-marker)
-              (insert "\n\n")))))
-      (p3/gptel-cleanup-context context)
-      (message "GPT task complete: %s" (plist-get context :task))))
-
-  (defun p3/gptel-abort-stream (context)
-    "Roll back a partial direct-to-buffer stream described by CONTEXT."
-    (let ((buffer (plist-get context :target-buffer))
-          (insert-type (plist-get context :insert-type))
-          (insert-start (plist-get context :insert-start))
-          (insert-marker (plist-get context :insert-marker)))
-      (when (and (buffer-live-p buffer) (plist-get context :started))
-        (with-current-buffer buffer
-          (save-excursion
-            (delete-region insert-start insert-marker)
-            (when (eq insert-type 'replace)
-              (goto-char insert-start)
-              (insert (plist-get context :original))))))
-      (p3/gptel-cleanup-context context)
-      (message "GPT task aborted: %s" (plist-get context :task))))
-
-  (defun p3/gptel-cleanup-context (context)
-    "Release markers held by a completed or aborted GPTel CONTEXT."
-    (dolist (marker (mapcar (lambda (key) (plist-get context key))
-                            '(:start-marker :end-marker :insert-marker)))
-      (when (markerp marker) (set-marker marker nil))))
-
-  (defun p3/gptel-stream-callback (response info)
-    "Handle streamed RESPONSE chunks and completion for a custom task."
-    (let ((context (plist-get info :context)))
-      (cond
-       ((stringp response) (p3/gptel-stream-insert response context))
-       ((and (consp response) (stringp (cdr response)))
-        (p3/gptel-stream-insert (cdr response) context))
-       ((eq response t)
-        (p3/gptel-finish-stream context))
-       ((eq response 'abort)
-        (p3/gptel-abort-stream context))
-       ((null response)
-        (p3/gptel-abort-stream context)
-        (message "GPT task failed: %s" (or (plist-get info :status) "unknown error"))))))
-
-  (defun p3/gptel-send-task (task-type insert-type)
-    "Stream TASK-TYPE directly into the target using INSERT-TYPE."
-    (let* ((code (p3/gptel-task-code task-type))
-           (instruction (cdr (assoc task-type p3/gptel-task-prompts))))
-      (cond
-       ((null code) (user-error "Select a region first"))
-       ((p3/gptel-sensitive-buffer-p)
-        (user-error "Refusing to send content from a sensitive-looking file"))
-       (t
-        (let* ((start-pos (if (use-region-p) (region-beginning)
-                            (line-beginning-position)))
-               (end-pos (if (use-region-p) (region-end)
-                          (line-end-position)))
-               (context (list :task task-type
-                              :insert-type insert-type
-                              :target-buffer (current-buffer)
-                              :original code
-                              :start-marker (unless (eq insert-type 'message)
-                                              (copy-marker start-pos nil))
-                              :end-marker (unless (eq insert-type 'message)
-                                            (copy-marker end-pos t))
-                              :started nil)))
-          (gptel-request
-           (format "%s\n\nLanguage/mode: %s\n\nCode:\n%s"
-                   instruction major-mode code)
-           :buffer (current-buffer)
-           :stream t
-           :context context
-           :callback #'p3/gptel-stream-callback))))))
-
-  (defvar p3/gptel-command-map
-    (let ((map (make-sparse-keymap)))
-      (define-key map (kbd "l") #'p3/gptel-send-current-line)
-      (define-key map (kbd "r") #'p3/gptel-refactor-region)
-      (define-key map (kbd "d") #'p3/gptel-generate-doc)
-      (define-key map (kbd "t") #'p3/gptel-write-tests)
-      (define-key map (kbd "c") #'p3/gptel-translate-code)
-      (define-key map (kbd "w") #'p3/gptel-write-code)
-      map)
-    "Prefix map for project-local GPTel tasks.")
-  (define-key global-map (kbd "C-c g") p3/gptel-command-map)
-
-  (defun p3/gptel-send-current-line ()
-    "Stream a response to the current line."
-    (interactive)
-    (p3/gptel-send-task "Send Line" 'message))
-
-  (defun p3/gptel-write-tests ()
-    "Stream tests for the region and append them after it."
-    (interactive)
-    (p3/gptel-send-task "Write Tests" 'append))
-
-  (defun p3/gptel-write-code ()
-    "Stream replacement code for the region."
-    (interactive)
-    (p3/gptel-send-task "Write Code" 'replace))
-
-  (defun p3/gptel-refactor-region ()
-    "Stream a refactoring and replace the region when complete."
-    (interactive)
-    (p3/gptel-send-task "Refactor" 'replace))
-
-  (defun p3/gptel-generate-doc ()
-    "Stream documentation and prepend it to the region when complete."
-    (interactive)
-    (p3/gptel-send-task "Generate Documentation" 'prepend))
-
-  (defun p3/gptel-translate-code ()
-    "Stream a translation and append it after the region."
-    (interactive)
-    (p3/gptel-send-task "Translate Code" 'append))
+  (use-package p3-gptel
+    :ensure nil
+    :after gptel
+    :demand t
+    :config
+    (p3/gptel-setup))
 #+END_SRC
 
 ** Flycheck
@@ -2152,97 +1944,14 @@ Do presentations with org-present
 
 ** Python
 
+Python-specific behavior is implemented in =lisp/p3-python.el=.  Package
+configuration and keybindings remain here so the literate config still shows
+how Python support is enabled.
+
 #+BEGIN_SRC emacs-lisp
-  (require 'python)
-  (require 'project)
-  (require 'seq)
-  (require 'cl-lib)
-
-  (defun p3/python-project-interpreter ()
-    "Return the project-local Python executable, when one exists."
-    (when-let* ((project (project-current))
-                (root (project-root project)))
-      (seq-some
-       (lambda (relative)
-         (let ((executable (expand-file-name relative root)))
-           (and (file-executable-p executable) executable)))
-       (if (eq system-type 'windows-nt)
-           '(".venv/Scripts/python.exe" "venv/Scripts/python.exe")
-         '(".venv/bin/python" "venv/bin/python")))))
-
-  (defun p3/python-setup-project-interpreter ()
-    "Use a project's `.venv` or `venv` interpreter for this buffer."
-    (when-let ((interpreter (p3/python-project-interpreter)))
-      (setq-local python-shell-interpreter interpreter)
-      (setq-local python-shell-virtualenv-root
-                  (file-name-directory (directory-file-name
-                                        (file-name-directory interpreter))))))
-
-  (defun p3/python-display-shell ()
-    "Start the Python shell and display it without leaving the source buffer."
-    (interactive)
-    (let ((process (python-shell-get-or-create-process)))
-      (display-buffer (process-buffer process))))
-
-  (defun p3/python-tools-path (file)
-    "Return FILE's path in the OS-specific Python tools environment."
-    (expand-file-name
-     file
-     (expand-file-name
-      (if (eq system-type 'windows-nt)
-          "python-tools/windows/"
-        "python-tools/linux/")
-      user-emacs-directory)))
-
-  (defun p3/python-ensure-language-server ()
-    "Install and return the managed basedpyright language-server executable."
-    (let* ((windows-p (eq system-type 'windows-nt))
-           (system-python (or (executable-find (if windows-p "python" "python3"))
-                              (executable-find "python")))
-           (tool-python (p3/python-tools-path
-                         (if windows-p "Scripts/python.exe" "bin/python")))
-           (server (p3/python-tools-path
-                    (if windows-p
-                        "Scripts/basedpyright-langserver.exe"
-                      "bin/basedpyright-langserver"))))
-      (when (and system-python (not (file-executable-p server)))
-        (make-directory (file-name-directory tool-python) t)
-        (unless (file-executable-p tool-python)
-          (call-process system-python nil "*p3-python-bootstrap*" nil
-                        "-m" "venv" (file-name-directory
-                                     (directory-file-name
-                                      (file-name-directory tool-python)))))
-        (when (file-executable-p tool-python)
-          (message "Installing basedpyright for Python support...")
-          (call-process tool-python nil "*p3-python-bootstrap*" nil
-                        "-m" "pip" "install" "--upgrade" "basedpyright")))
-      (and (file-executable-p server) server)))
-
-  (defun p3/python-eglot-ensure ()
-    "Start Eglot with the managed basedpyright language server."
-    (when-let ((server (p3/python-ensure-language-server)))
-      (require 'eglot)
-      (setq eglot-server-programs
-            (cons `((python-mode python-ts-mode) . (,server "--stdio"))
-                  (cl-remove-if
-                   (lambda (entry)
-                     (equal (car entry) '(python-mode python-ts-mode)))
-                   eglot-server-programs)))
-      (eglot-ensure)))
-
-  (defun p3/python-send-region-or-paragraph-and-step ()
-    "Send the region, or the current paragraph, then move to the next statement."
-    (interactive)
-    (let (beg end)
-      (if (use-region-p)
-          (setq beg (region-beginning) end (region-end))
-        (mark-paragraph)
-        (setq beg (region-beginning) end (region-end)))
-      (python-shell-send-region beg end)
-      (p3/python-display-shell)
-      (goto-char end)
-      (deactivate-mark)
-      (python-nav-forward-statement)))
+  (use-package p3-python
+    :ensure nil
+    :demand t)
 
   (use-package python
     :ensure nil
@@ -2254,7 +1963,8 @@ Do presentations with org-present
                 ("C-<down>" . forward-paragraph)
                 ("C-c C-z" . p3/python-display-shell))
     :hook ((python-mode . p3/python-setup-project-interpreter)
-           (python-mode . p3/python-eglot-ensure))
+           (python-mode . p3/python-eglot-ensure)
+           (python-mode . p3/python-disable-flycheck))
     :custom
     (python-indent-guess-indent-offset t)
     (python-indent-guess-indent-offset-verbose nil)
@@ -2266,6 +1976,7 @@ Do presentations with org-present
     (add-to-list 'auto-mode-alist '("\\.py\\'" . python-ts-mode))
     (add-hook 'python-ts-mode-hook #'p3/python-setup-project-interpreter)
     (add-hook 'python-ts-mode-hook #'p3/python-eglot-ensure)
+    (add-hook 'python-ts-mode-hook #'p3/python-disable-flycheck)
     (with-eval-after-load 'python
       (define-key python-ts-mode-map (kbd "C-<return>") nil)
       (define-key python-ts-mode-map (kbd "S-<return>") #'python-shell-send-statement)
@@ -2273,12 +1984,6 @@ Do presentations with org-present
       (define-key python-ts-mode-map (kbd "C-<up>") #'backward-paragraph)
       (define-key python-ts-mode-map (kbd "C-<down>") #'forward-paragraph)
       (define-key python-ts-mode-map (kbd "C-c C-z") #'p3/python-display-shell)))
-
-  ;; Eglot reports diagnostics through Flymake; avoid duplicate Python reports.
-  (add-hook 'python-mode-hook (lambda () (when (bound-and-true-p flycheck-mode)
-                                  (flycheck-mode -1))))
-  (add-hook 'python-ts-mode-hook (lambda () (when (bound-and-true-p flycheck-mode)
-                                     (flycheck-mode -1))))
 
   (use-package eglot
     :ensure t
@@ -2297,283 +2002,19 @@ Do presentations with org-present
 #+END_SRC
 ** Shell
 
-#+BEGIN_SRC emacs-lisp
-  ;; Windows Rtools/MSYS2 discovery is configured near the beginning of this
-  ;; file so Git and other subprocess-using packages see it during startup.
-#+END_SRC
-
-
-Use the regular shell on Windows and full-window, project-aware vterm sessions
-on Linux.  Terminals are ordinary Emacs buffers: they work with normal window
-management, can be renamed or switched independently, and never get forced
-into a dedicated side window.
+Windows Rtools/MSYS2 discovery remains near the beginning of this file so Git
+and other subprocess-using packages see it during startup.  Shell/vterm
+behavior is implemented in =lisp/p3-terminal.el=; the package wiring remains
+here.
 
 #+BEGIN_SRC emacs-lisp
-  (defun p3/windows-shell-mode-setup ()
-    "Configure Comint for an Rtools/MSYS2 shell on Windows."
-    (add-hook 'comint-output-filter-functions #'comint-strip-ctrl-m nil t)
-    (when-let ((process (get-buffer-process (current-buffer))))
-      (set-process-coding-system process 'utf-8-unix 'utf-8-unix)))
-
-  (when (eq system-type 'windows-nt)
-    (if (not linuxy-environment-path)
-        (display-warning
-         'p3/windows
-         "Rtools/MSYS2 is unavailable; leaving the default Emacs shell unchanged"
-         :warning)
-      (let ((bash (expand-file-name "bash.exe" linuxy-environment-path))
-            (zsh (expand-file-name "zsh.exe" linuxy-environment-path)))
-        (setq shell-file-name (if (file-regular-p bash) bash "bash")
-              explicit-shell-file-name
-              (cond
-               ((file-regular-p zsh) zsh)
-               ((file-regular-p bash) bash)
-               (t shell-file-name))
-              explicit-bash.exe-args '("--login"))
-        (setenv "SHELL" shell-file-name)
-        (add-hook 'shell-mode-hook #'p3/windows-shell-mode-setup)
-        (global-set-key (kbd "C-x C-u") #'shell))))
+  (use-package p3-terminal
+    :ensure nil
+    :demand t
+    :config
+    (p3/terminal-configure-windows-shell))
 
   (when (eq system-type 'gnu/linux)
-    (require 'seq)
-    (declare-function vterm-mode "vterm")
-    (declare-function vterm-copy-mode "vterm")
-
-  (defgroup p3/terminal nil
-    "Project-aware terminal sessions."
-    :group 'applications)
-
-  (defconst p3/blesh-revision
-    "63c23e99f1f7133ae57b79f87b16d1f68cd39884"
-    "Pinned ble.sh revision used by the terminal bootstrapper.")
-
-  (defcustom p3/blesh-source-url "https://github.com/akinomyoga/ble.sh.git"
-    "Git repository used to bootstrap ble.sh."
-    :type 'string
-    :group 'p3/terminal)
-
-  (defcustom p3/blesh-install-directory
-    (expand-file-name
-     "blesh"
-     (file-name-as-directory
-      (or (getenv "XDG_DATA_HOME")
-          (expand-file-name ".local/share" (getenv "HOME")))))
-    "Directory where the pinned ble.sh build is installed."
-    :type 'directory
-    :group 'p3/terminal)
-
-  (defvar p3/vterm-project-buffers (make-hash-table :test #'equal)
-    "Map project roots to their primary terminal buffers.")
-
-  (defun p3/blesh-file ()
-    "Return the expected path of the bootstrapped ble.sh entry point."
-    (expand-file-name "ble.sh" p3/blesh-install-directory))
-
-  (defun p3/terminal--run (program &rest arguments)
-    "Run PROGRAM with ARGUMENTS or show its output and signal an error."
-    (let ((buffer (get-buffer-create "*Terminal bootstrap*")))
-      (with-current-buffer buffer
-        (goto-char (point-max))
-        (insert (format "$ %s %s\n" program
-                        (mapconcat #'shell-quote-argument arguments " "))))
-      (let ((status (apply #'call-process program nil buffer t arguments)))
-        (unless (and (integerp status) (zerop status))
-          (display-buffer buffer)
-          (user-error "Terminal bootstrap command failed (%s): %s"
-                      status program)))))
-
-  (defun p3/install-blesh ()
-    "Install the pinned ble.sh revision into user-local data storage."
-    (interactive)
-    (let ((missing
-           (seq-remove #'executable-find '("git" "make" "gawk"))))
-      (when missing
-        (user-error "Cannot install ble.sh; missing programs: %s"
-                    (string-join missing ", "))))
-    (let* ((build-root (make-temp-file "p3-blesh-build-" t))
-           (source-directory (expand-file-name "source" build-root))
-           (documentation-directory
-            (expand-file-name
-             "doc/blesh"
-             (file-name-directory
-              (directory-file-name p3/blesh-install-directory)))))
-      (unwind-protect
-          (progn
-            (make-directory source-directory t)
-            (p3/terminal--run "git" "-C" source-directory "init")
-            (p3/terminal--run
-             "git" "-C" source-directory "remote" "add" "origin"
-             p3/blesh-source-url)
-            (p3/terminal--run
-             "git" "-C" source-directory "fetch" "--depth" "1" "origin"
-             p3/blesh-revision)
-            (p3/terminal--run
-             "git" "-C" source-directory "checkout" "--detach" "FETCH_HEAD")
-            (p3/terminal--run
-             "git" "-C" source-directory "submodule" "update" "--init"
-             "--recursive" "--depth" "1")
-            (p3/terminal--run
-             "make" "-C" source-directory "install"
-             (format "INSDIR=%s" p3/blesh-install-directory)
-             (format "INSDIR_DOC=%s" documentation-directory))
-            (unless (file-readable-p (p3/blesh-file))
-              (user-error "ble.sh installation did not produce %s"
-                          (p3/blesh-file)))
-            (message "Installed pinned ble.sh revision %s"
-                     (substring p3/blesh-revision 0 8)))
-        (delete-directory build-root t))))
-
-  (defun p3/ensure-blesh ()
-    "Offer to install ble.sh when terminal highlighting is unavailable."
-    (unless (file-readable-p (p3/blesh-file))
-      (if (and (not noninteractive)
-               (y-or-n-p "ble.sh is missing; install syntax highlighting now? "))
-          (p3/install-blesh)
-        (message "Terminal started without syntax highlighting; run M-x p3/install-blesh"))))
-
-  (defun p3/vterm-check-prerequisites ()
-    "Check prerequisites needed to load or compile the vterm module."
-    (unless module-file-suffix
-      (user-error "This Emacs lacks dynamic-module support required by vterm"))
-    (unless (locate-library "vterm-module")
-      (let ((missing
-             (seq-remove #'executable-find
-                         '("cc" "cmake" "libtool" "make"))))
-        (when missing
-          (user-error
-           "Cannot compile vterm; install these system build tools: %s"
-           (string-join missing ", "))))))
-
-  (defun p3/vterm-root ()
-    "Return the project root or current directory for a terminal."
-    (file-name-as-directory
-     (expand-file-name (or (p3/project-root) default-directory))))
-
-  (defun p3/vterm-buffer-name (root)
-    "Return a stable terminal buffer name for ROOT."
-    (format "*vterm:%s:%s*"
-            (file-name-nondirectory (directory-file-name root))
-            (substring (secure-hash 'sha1 root) 0 6)))
-
-  (defun p3/vterm-buffer (&optional new-session)
-    "Return the project terminal, creating a NEW-SESSION when requested."
-    (p3/vterm-check-prerequisites)
-    (p3/ensure-blesh)
-    (require 'vterm)
-    (let* ((root (p3/vterm-root))
-           (name (p3/vterm-buffer-name root))
-           (primary (and (not new-session)
-                         (gethash root p3/vterm-project-buffers)))
-           (buffer (if (buffer-live-p primary)
-                       primary
-                     (if new-session
-                         (generate-new-buffer name)
-                       (get-buffer-create name)))))
-      (with-current-buffer buffer
-        (unless (derived-mode-p 'vterm-mode)
-          (setq default-directory root)
-          (vterm-mode)))
-      (unless new-session
-        (puthash root buffer p3/vterm-project-buffers))
-      buffer))
-
-  (defun p3/vterm (&optional new-session)
-    "Switch the current window to its project terminal.
-
-With a prefix argument, create a NEW-SESSION.  When already in a terminal,
-switch back to the previous buffer instead of hiding or deleting the window."
-    (interactive "P")
-    (if (and (derived-mode-p 'vterm-mode) (not new-session))
-        (switch-to-prev-buffer)
-      (switch-to-buffer (p3/vterm-buffer new-session))))
-
-  (defun p3/vterm-new ()
-    "Create another terminal for the current project in this window."
-    (interactive)
-    (switch-to-buffer (p3/vterm-buffer t)))
-
-  (defun p3/vterm-buffers ()
-    "Return all live vterm buffers."
-    (seq-filter
-     (lambda (buffer)
-       (with-current-buffer buffer
-         (derived-mode-p 'vterm-mode)))
-     (buffer-list)))
-
-  (defun p3/vterm-read-buffer ()
-    "Prompt for and return a live vterm buffer."
-    (let ((buffers (p3/vterm-buffers)))
-      (unless buffers
-        (user-error "There are no live terminal sessions"))
-      (get-buffer
-       (completing-read "Terminal: " (mapcar #'buffer-name buffers)
-                        nil t))))
-
-  (defun p3/vterm-switch ()
-    "Switch the current window to an existing terminal session."
-    (interactive)
-    (switch-to-buffer (p3/vterm-read-buffer)))
-
-  (defun p3/vterm-other-window (&optional new-session)
-    "Open the project terminal in another ordinary window.
-With a prefix argument, create a NEW-SESSION there."
-    (interactive "P")
-    (switch-to-buffer-other-window (p3/vterm-buffer new-session)))
-
-  (defun p3/vterm-maximize (&optional new-session)
-    "Open the project terminal and give it the entire frame.
-With a prefix argument, create a NEW-SESSION first.  The previous window
-layout remains recoverable through `winner-undo'."
-    (interactive "P")
-    (switch-to-buffer (p3/vterm-buffer new-session))
-    (delete-other-windows))
-
-  (defun p3/vterm-rename (name)
-    "Rename the current terminal to NAME."
-    (interactive "sTerminal name: ")
-    (unless (derived-mode-p 'vterm-mode)
-      (user-error "The current buffer is not a terminal"))
-    (rename-buffer (format "*vterm:%s*" name) t))
-
-  (defun p3/vterm-enter-copy-mode ()
-    "Enter vterm copy mode for normal Emacs navigation and selection."
-    (interactive)
-    (unless (derived-mode-p 'vterm-mode)
-      (user-error "The current buffer is not a terminal"))
-    (vterm-copy-mode 1)
-    (message "Vterm copy mode enabled; press RET to copy and exit"))
-
-  (defun p3/vterm-mode-setup ()
-    "Make Emacs editing keys cooperate with the terminal emulator.
-
-CUA's paste command inserts directly into buffers and therefore cannot work in
-vterm's process-owned display.  Disable CUA only in this buffer; vterm's yank
-commands still use the normal Emacs kill ring and system clipboard."
-    (setq-local cua-mode nil))
-
-  (defun p3/vterm-kill ()
-    "Kill the current terminal, or prompt for one to kill."
-    (interactive)
-    (kill-buffer
-     (if (derived-mode-p 'vterm-mode)
-         (current-buffer)
-       (p3/vterm-read-buffer))))
-
-  ;; Retain the old command names for personal bindings outside this file.
-  (defalias 'p3/vterm-toggle #'p3/vterm)
-  (defalias 'p3/vterm-open-here #'p3/vterm)
-
-  (defvar-keymap p3/vterm-command-map
-    :doc "Commands for project-aware terminal sessions."
-    "t" #'p3/vterm
-    "n" #'p3/vterm-new
-    "s" #'p3/vterm-switch
-    "o" #'p3/vterm-other-window
-    "f" #'p3/vterm-maximize
-    "r" #'p3/vterm-rename
-    "c" #'p3/vterm-enter-copy-mode
-    "k" #'p3/vterm-kill)
-
     (keymap-global-set "C-c T" p3/vterm-command-map)
 
     (use-package vterm
