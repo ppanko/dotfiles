@@ -148,7 +148,9 @@
 (ert-deftest p3-platform-latest-r-program-prefers-newest-usable-installation ()
   (cl-letf (((symbol-function 'p3/windows-p) (lambda () t))
             ((symbol-function 'file-directory-p)
-             (lambda (path) (equal path "C:/Program Files/R")))
+             (lambda (path)
+               (or (equal path "C:/Program Files/R")
+                   (string-prefix-p "C:/Program Files/R/R-" path))))
             ((symbol-function 'directory-files)
              (lambda (&rest _args)
                '("C:/Program Files/R/R-4.4.3"
