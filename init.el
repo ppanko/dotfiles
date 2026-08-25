@@ -63,7 +63,7 @@
             (format "Failed to install %s: %s"
                     package
                     (error-message-string err))
-            :error)))))
+            :error))))))
   t)
 
 (setq use-package-ensure-function #'p3/use-package-ensure
