@@ -37,7 +37,7 @@
         (add-hook 'shell-mode-hook #'p3/windows-shell-mode-setup)
         (global-set-key (kbd "C-x C-u") #'shell)))))
 
-defgroup p3/terminal nil
+(defgroup p3/terminal nil
   "Project-aware terminal sessions."
   :group 'applications)
 
