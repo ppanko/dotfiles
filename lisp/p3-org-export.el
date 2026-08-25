@@ -1,6 +1,7 @@
 ;;; p3-org-export.el --- Pandoc export workflow for Org -*- lexical-binding: t; -*-
 
 (require 'org)
+(require 'org-element)
 (require 'ox)
 (require 'subr-x)
 
@@ -101,15 +102,64 @@ Honor Org's standard #+EXPORT_FILE_NAME keyword when present."
           (org-export-output-file-name (concat "." extension) nil)))
     (expand-file-name output)))
 
-(defun p3-org-export--arguments (profile source output reference-document)
+(defun p3-org-export--citations-present-p ()
+  "Return non-nil when the current Org buffer contains Org citations."
+  (org-element-map (org-element-parse-buffer) 'citation
+    (lambda (_citation) t)
+    nil t))
+
+(defun p3-org-export--local-bibliography-p ()
+  "Return non-nil when the current Org buffer declares a bibliography."
+  (not (null (cdr (assoc "BIBLIOGRAPHY"
+                         (org-collect-keywords '("BIBLIOGRAPHY")))))))
+
+(defun p3-org-export--global-bibliographies ()
+  "Return `org-cite-global-bibliography' normalized to a list."
+  (let ((bibliography
+         (and (boundp 'org-cite-global-bibliography)
+              org-cite-global-bibliography)))
+    (cond
+     ((null bibliography) nil)
+     ((stringp bibliography) (list bibliography))
+     ((listp bibliography) bibliography)
+     (t
+      (user-error "Invalid org-cite global bibliography: %S" bibliography)))))
+
+(defun p3-org-export--citation-arguments ()
+  "Return Pandoc citation arguments for the current Org buffer.
+Use a document-local #+BIBLIOGRAPHY declaration when present.  Otherwise,
+pass `org-cite-global-bibliography' explicitly to Pandoc."
+  (when (p3-org-export--citations-present-p)
+    (let ((arguments '("--citeproc")))
+      (if (p3-org-export--local-bibliography-p)
+          arguments
+        (let ((bibliographies (p3-org-export--global-bibliographies)))
+          (unless bibliographies
+            (user-error
+             "Org document contains citations but no bibliography is configured"))
+          (append
+           arguments
+           (mapcar
+            (lambda (bibliography)
+              (let ((path (expand-file-name bibliography)))
+                (unless (file-readable-p path)
+                  (user-error "Bibliography is not readable: %s" path))
+                (concat "--bibliography=" path)))
+            bibliographies)))))))
+
+(defun p3-org-export--arguments
+    (profile source output reference-document &optional document-arguments)
   "Build Pandoc arguments for PROFILE from SOURCE to OUTPUT.
-REFERENCE-DOCUMENT, when non-nil, is passed through `--reference-doc'."
+REFERENCE-DOCUMENT, when non-nil, is passed through `--reference-doc'.
+DOCUMENT-ARGUMENTS contains source-specific Pandoc options such as citation
+processing arguments."
   (let* ((spec (p3-org-export--profile profile))
          (format (plist-get spec :format))
          (extra-arguments (plist-get spec :arguments)))
     (append
      (list "--from=org" (concat "--to=" format))
      extra-arguments
+     document-arguments
      (list source "-o" output)
      (when reference-document
        (list (concat "--reference-doc=" reference-document))))))
@@ -137,8 +187,10 @@ REFERENCE-DOCUMENT overrides the profile's configured default when non-nil."
           (p3-org-export--validate-reference
            (or reference-document
                (p3-org-export--default-reference profile-id))))
+         (document-arguments (p3-org-export--citation-arguments))
          (arguments
-          (p3-org-export--arguments profile-id source output reference)))
+          (p3-org-export--arguments
+           profile-id source output reference document-arguments)))
     (with-temp-buffer
       (let* ((default-directory (file-name-directory source))
              (status
