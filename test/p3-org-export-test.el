@@ -118,6 +118,14 @@
       (should (equal (p3-org-export--citation-arguments)
                      '("--citeproc"))))))
 
+(ert-deftest p3-org-export-citations-require-a-bibliography ()
+  (with-temp-buffer
+    (insert "A claim [cite:@doe2020].\n")
+    (org-mode)
+    (let ((org-cite-global-bibliography nil))
+      (should-error (p3-org-export--citation-arguments)
+                    :type 'user-error))))
+
 (ert-deftest p3-org-export-does-not-run-citeproc-without-citations ()
   (with-temp-buffer
     (insert "Plain text without citations.\n")
@@ -183,6 +191,29 @@
       (with-current-buffer (find-file-noselect source)
         (unwind-protect
             (let ((org-cite-global-bibliography (list bibliography)))
+              (org-mode)
+              (let* ((output (p3-org-export-run 'gfm nil))
+                     (contents (p3-org-export-test--contents output)))
+                (should (string-match-p "Doe 2020" contents))
+                (should (string-match-p "Doe, Jane" contents))
+                (should-not (string-match-p "cite:@doe2020" contents))))
+          (set-buffer-modified-p nil)
+          (kill-buffer (current-buffer)))))))
+
+(ert-deftest p3-org-export-gfm-renders-org-citations-with-local-bibliography ()
+  (skip-unless (executable-find "pandoc"))
+  (p3-org-export-test--with-temp-directory directory
+    (let* ((source (expand-file-name "local-cited-report.org" directory))
+           (bibliography (expand-file-name "references.bib" directory)))
+      (p3-org-export-test--write-bibliography bibliography)
+      (with-temp-file source
+        (insert
+         "#+TITLE: Local Citation Test\n"
+         "#+BIBLIOGRAPHY: references.bib\n\n"
+         "A claim [cite:@doe2020].\n"))
+      (with-current-buffer (find-file-noselect source)
+        (unwind-protect
+            (let ((org-cite-global-bibliography nil))
               (org-mode)
               (let* ((output (p3-org-export-run 'gfm nil))
                      (contents (p3-org-export-test--contents output)))
