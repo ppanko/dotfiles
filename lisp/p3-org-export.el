@@ -2,6 +2,7 @@
 
 (require 'org)
 (require 'org-element)
+(require 'oc)
 (require 'ox)
 (require 'subr-x)
 
@@ -108,44 +109,26 @@ Honor Org's standard #+EXPORT_FILE_NAME keyword when present."
     (lambda (_citation) t)
     nil t))
 
-(defun p3-org-export--local-bibliography-p ()
-  "Return non-nil when the current Org buffer declares a bibliography."
-  (not (null (cdr (assoc "BIBLIOGRAPHY"
-                         (org-collect-keywords '("BIBLIOGRAPHY")))))))
-
-(defun p3-org-export--global-bibliographies ()
-  "Return `org-cite-global-bibliography' normalized to a list."
-  (let ((bibliography
-         (and (boundp 'org-cite-global-bibliography)
-              org-cite-global-bibliography)))
-    (cond
-     ((null bibliography) nil)
-     ((stringp bibliography) (list bibliography))
-     ((listp bibliography) bibliography)
-     (t
-      (user-error "Invalid org-cite global bibliography: %S" bibliography)))))
-
 (defun p3-org-export--citation-arguments ()
   "Return Pandoc citation arguments for the current Org buffer.
-Use a document-local #+BIBLIOGRAPHY declaration when present.  Otherwise,
-pass `org-cite-global-bibliography' explicitly to Pandoc."
+Use Org's own bibliography resolver so local `#+BIBLIOGRAPHY' declarations
+and `org-cite-global-bibliography' are combined with the same semantics Org
+uses for citation lookup."
   (when (p3-org-export--citations-present-p)
-    (let ((arguments '("--citeproc")))
-      (if (p3-org-export--local-bibliography-p)
-          arguments
-        (let ((bibliographies (p3-org-export--global-bibliographies)))
-          (unless bibliographies
-            (user-error
-             "Org document contains citations but no bibliography is configured"))
-          (append
-           arguments
-           (mapcar
-            (lambda (bibliography)
-              (let ((path (expand-file-name bibliography)))
-                (unless (file-readable-p path)
-                  (user-error "Bibliography is not readable: %s" path))
-                (concat "--bibliography=" path)))
-            bibliographies)))))))
+    (let ((bibliographies
+           (mapcar #'expand-file-name
+                   (org-cite-list-bibliography-files))))
+      (unless bibliographies
+        (user-error
+         "Org document contains citations but no bibliography is configured"))
+      (cons
+       "--citeproc"
+       (mapcar
+        (lambda (bibliography)
+          (unless (file-readable-p bibliography)
+            (user-error "Bibliography is not readable: %s" bibliography))
+          (concat "--bibliography=" bibliography))
+        bibliographies)))))
 
 (defun p3-org-export--arguments
     (profile source output reference-document &optional document-arguments)
