@@ -41,8 +41,8 @@
 
 (ert-deftest p3-ess-register-current-process-uses-canonical-project-root ()
   (with-temp-buffer
-    (let ((p3/ess-project-processes (make-hash-table :test #'equal))
-          (ess-local-process-name "R:project"))
+    (let ((p3/ess-project-processes (make-hash-table :test #'equal)))
+      (setq-local ess-local-process-name "R:project")
       (cl-letf (((symbol-function 'derived-mode-p)
                  (lambda (&rest _modes) t))
                 ((symbol-function 'p3/ess-project-root)
@@ -53,21 +53,23 @@
 
 (ert-deftest p3-ess-ensure-project-process-reuses-live-process ()
   (with-temp-buffer
-    (let ((ess-local-process-name nil)
-          (started nil))
+    (let ((started nil))
+      (setq-local ess-local-process-name nil)
       (cl-letf (((symbol-function 'p3/ess-project-process)
                  (lambda () "R:project"))
                 ((symbol-function 'R)
                  (lambda () (interactive) (setq started t))))
         (p3/ess-ensure-project-process)
-        (should (equal ess-local-process-name "R:project"))
+        (should (equal (buffer-local-value
+                        'ess-local-process-name (current-buffer))
+                       "R:project"))
         (should-not started)))))
 
 (ert-deftest p3-ess-ensure-project-process-starts-R-lazily ()
   (with-temp-buffer
-    (let ((ess-local-process-name nil)
-          (lookup-count 0)
+    (let ((lookup-count 0)
           (started nil))
+      (setq-local ess-local-process-name nil)
       (cl-letf (((symbol-function 'p3/ess-project-process)
                  (lambda ()
                    (setq lookup-count (1+ lookup-count))
@@ -76,7 +78,9 @@
                  (lambda () (interactive) (setq started t))))
         (p3/ess-ensure-project-process)
         (should started)
-        (should (equal ess-local-process-name "R:new"))))))
+        (should (equal (buffer-local-value
+                        'ess-local-process-name (current-buffer))
+                       "R:new"))))))
 
 (ert-deftest p3-ess-install-advice-is-idempotent ()
   (let ((symbol 'p3-ess-test--force-current))
