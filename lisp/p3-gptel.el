@@ -53,7 +53,8 @@ its existing list rather than replace a local plist binding."
              (goto-char (marker-position start)))
             ('append
              (goto-char (marker-position end))
-             (p3/gptel-context-set context :insert-start (point))
+             (p3/gptel-context-set context :insert-start
+                                   (copy-marker (point) nil))
              (insert "\n"))
             ('prepend
              (goto-char (marker-position start)))
@@ -61,7 +62,8 @@ its existing list rather than replace a local plist binding."
           (p3/gptel-context-set context :insert-marker
                                 (copy-marker (point) t))
           (unless (plist-get context :insert-start)
-            (p3/gptel-context-set context :insert-start (point)))
+            (p3/gptel-context-set context :insert-start
+                                  (copy-marker (point) nil)))
           (unless (eq insert-type 'message)
             (insert response))))
       (p3/gptel-context-set context :started t)
@@ -117,7 +119,7 @@ its existing list rather than replace a local plist binding."
 (defun p3/gptel-cleanup-context (context)
   "Release markers held by a completed or aborted GPTel CONTEXT."
   (dolist (marker (mapcar (lambda (key) (plist-get context key))
-                          '(:start-marker :end-marker :insert-marker)))
+                          '(:start-marker :end-marker :insert-start :insert-marker)))
     (when (markerp marker)
       (set-marker marker nil))))
 
