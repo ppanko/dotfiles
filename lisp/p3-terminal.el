@@ -8,6 +8,7 @@
 (declare-function vterm-mode "vterm")
 (declare-function vterm-copy-mode "vterm")
 
+(defvar explicit-bash.exe-args)
 (defvar linuxy-environment-path nil
   "Rtools/MSYS2 usr/bin directory selected by the Windows bootstrap.")
 
