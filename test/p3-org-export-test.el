@@ -45,13 +45,13 @@
        (equal (p3-org-export--output-file 'gfm)
               (expand-file-name "final-report.md" directory))))))
 
-(ert-deftest p3-org-export-gfm-arguments-are-explicit-and-unwrapped ()
+(ert-deftest p3-org-export-gfm-arguments-preserve-metadata-and-disable-wrapping ()
   (let ((source "/tmp/report.org")
         (output "/tmp/report.md"))
     (should
      (equal
       (p3-org-export--arguments 'gfm source output nil)
-      (list "--from=org" "--to=gfm" "--wrap=none"
+      (list "--from=org" "--to=gfm" "--standalone" "--wrap=none"
             source "-o" output)))))
 
 (ert-deftest p3-org-export-docx-arguments-use-reference-document ()
@@ -86,20 +86,38 @@
   (should (eq (lookup-key org-mode-map (kbd "C-c E"))
               #'p3/org-export)))
 
+(ert-deftest p3-org-export-updates-keybinding-atlas-without-duplicates ()
+  (let ((p3/keybinding-sections
+         '(("Org"
+            ("C-c b" . "insert citation")
+            ("C-c C-o" . "export to Office")
+            ("C-c E" . "stale export entry")
+            ("C-c P" . "start presentation")))))
+    (p3-org-export--update-keybinding-atlas)
+    (let* ((org-section (cdr (assoc "Org" p3/keybinding-sections)))
+           (open-entry (assoc "C-c C-o" org-section))
+           (export-entries
+            (seq-filter (lambda (entry) (equal (car entry) "C-c E"))
+                        org-section)))
+      (should (equal (cdr open-entry) "open link at point"))
+      (should (= (length export-entries) 1))
+      (should (equal (cdar export-entries) "export Org file")))))
+
 (ert-deftest p3-org-export-gfm-runs-through-pandoc-when-available ()
   (skip-unless (executable-find "pandoc"))
   (p3-org-export-test--with-temp-directory directory
     (let ((source (expand-file-name "report.org" directory)))
       (with-temp-file source
-        (insert "* Heading\n\nBody text.\n"))
+        (insert "#+TITLE: Export Test\n\n* Heading\n\nBody text.\n"))
       (with-current-buffer (find-file-noselect source)
         (unwind-protect
             (progn
               (org-mode)
-              (let ((output (p3-org-export-run 'gfm nil)))
+              (let* ((output (p3-org-export-run 'gfm nil))
+                     (contents (p3-org-export-test--contents output)))
                 (should (file-exists-p output))
-                (should (string-match-p "# Heading"
-                                        (p3-org-export-test--contents output)))))
+                (should (string-match-p "# Heading" contents))
+                (should (string-match-p "title:.*Export Test" contents))))
           (set-buffer-modified-p nil)
           (kill-buffer (current-buffer)))))))
 
