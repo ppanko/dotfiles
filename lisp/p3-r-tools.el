@@ -15,7 +15,6 @@
 (declare-function ess-eval-linewise "ess-inf")
 (declare-function ess-eval-region-or-function-or-paragraph "ess-mode")
 (declare-function ess-get-process "ess-inf" (&optional name))
-(declare-function ess-remote-eval-string "ess-inf" (process string))
 (declare-function ess-send-string "ess-inf" (process string &optional visibly))
 (declare-function ess-symbol-at-point "ess-inf")
 (declare-function inferior-ess-r-force "ess-r-mode")
@@ -303,9 +302,7 @@ With PROMPT-FOR-ARGUMENTS, ask for additional arguments."
 ;;;###autoload
 (defun p3-r-load-view-data-frame ()
   "Load the template `view_df()' helper into the current ESS process."
-  (ess-remote-eval-string
-   (ess-get-process)
-   (p3-r--read-template "view-df.R")))
+  (p3-r-ess-run (p3-r--read-template "view-df.R")))
 
 ;;;###autoload
 (defun p3-r-view-data-frame-at-point ()
