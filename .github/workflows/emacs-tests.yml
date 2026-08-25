@@ -1,0 +1,32 @@
+name: Emacs tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Install Emacs and Pandoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emacs-nox pandoc
+
+      - name: Run ERT test suite
+        run: |
+          emacs -Q --batch \
+            -L lisp \
+            -l test/p3-config-test.el \
+            -l test/p3-r-tools-test.el \
+            -l test/p3-org-export-test.el \
+            -f ert-run-tests-batch-and-exit

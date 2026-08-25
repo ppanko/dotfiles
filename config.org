@@ -44,6 +44,7 @@ Look up keybinds in relevant mode buffers
      "C-c ?" "show keybindings"
      "C-c a" "align region"
      "C-c e" "visit config"
+     "C-c E" "export Org file"
      "C-c g" "GPTel tasks"
      "C-c h" "R documentation search"
      "C-c k" "kill buffer and window"
@@ -107,7 +108,8 @@ Look up keybinds in relevant mode buffers
       ("Org"
        ("C-c b" . "insert citation")
        ("C-c s" . "insert source block")
-       ("C-c C-o" . "export to Office")
+       ("C-c C-o" . "open link at point")
+       ("C-c E" . "export Org file")
        ("C-c C-x C-o" . "sort TODO entries")
        ("C-c P" . "start presentation"))
       ("Presentation"
@@ -1843,47 +1845,16 @@ TODO states according to `org-todo-keywords'."
   (define-key org-mode-map (kbd "C-c C-x C-o") #'p3/org-sort-todos)
 #+END_SRC
 
-Export org to ms-office files!
+Load the Pandoc-backed Org export workflow from =lisp/p3-org-export.el=.
+This keeps the literate config responsible for enabling the workflow while the
+implementation remains independently testable.
 
 #+BEGIN_SRC emacs-lisp
-  (defun p3/org-export-to-office (output-format &optional template-file)
-    "Export the current Org file to OUTPUT-FORMAT using Pandoc.
-OUTPUT-FORMAT must be either \"pptx\" or \"docx\".  TEMPLATE-FILE, when
-non-nil, is passed to Pandoc as the reference document."
-    (interactive
-     (list
-      (completing-read "Output format: " '("pptx" "docx") nil t)
-      (when (y-or-n-p "Use a reference document? ")
-        (read-file-name "Reference document: " nil nil t))))
-    (unless buffer-file-name
-      (user-error "Current Org buffer is not visiting a file"))
-    (unless (member output-format '("pptx" "docx"))
-      (user-error "Unsupported Office output format: %s" output-format))
-    (unless (executable-find "pandoc")
-      (user-error "Pandoc is not installed or is not on exec-path"))
-    (when (and template-file (not (file-readable-p template-file)))
-      (user-error "Reference document is not readable: %s" template-file))
-    (when (buffer-modified-p)
-      (save-buffer))
-    (let* ((org-file buffer-file-name)
-           (output-file
-            (concat (file-name-sans-extension org-file) "." output-format))
-           (arguments
-            (append
-             (list org-file "-o" output-file)
-             (when template-file
-               (list (concat "--reference-doc=" template-file))))))
-      (with-temp-buffer
-        (let ((status
-               (apply #'process-file
-                      "pandoc" nil (current-buffer) nil arguments)))
-          (unless (and (integerp status) (zerop status))
-            (user-error "Pandoc export failed (status %s): %s"
-                        status (string-trim (buffer-string))))))
-      (message "Converted %s to %s" org-file output-file)
-      output-file))
-
-  (define-key org-mode-map (kbd "C-c C-o") #'p3/org-export-to-office)
+  (use-package p3-org-export
+    :ensure nil
+    :demand t
+    :config
+    (p3-org-export-setup))
 #+END_SRC
 
 Make sure org-mode calls evince (gnome pdf viewer) to [[https://emacs.stackexchange.com/questions/28037/org-mode-file-hyperlinks-always-use-doc-view-cant-force-it-to-use-external-pdf][open up pdf files]]

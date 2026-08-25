@@ -63,7 +63,7 @@
             (format "Failed to install %s: %s"
                     package
                     (error-message-string err))
-            :error)))))
+            :error))))))
   t)
 
 (setq use-package-ensure-function #'p3/use-package-ensure
@@ -78,6 +78,10 @@
   (expand-file-name "config.org" user-emacs-directory))
 (defconst p3/config-generated
   (expand-file-name "config.el" user-emacs-directory))
+(defconst p3/lisp-directory
+  (expand-file-name "lisp" user-emacs-directory))
+(add-to-list 'load-path p3/lisp-directory)
+
 (defun p3/load-config (&optional quiet)
   "Tangle and load the literate configuration from `p3/config-source'."
   (org-babel-tangle-file p3/config-source p3/config-generated)
