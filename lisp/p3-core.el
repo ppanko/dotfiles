@@ -5,12 +5,16 @@
 (declare-function projectile-project-root "projectile")
 (declare-function p3/load-config nil (&optional quiet))
 
+(defun p3/project-el-root ()
+  "Return the current built-in project.el root, if any."
+  (when-let ((project (project-current nil)))
+    (project-root project)))
+
 (defun p3/project-root ()
   "Return the current Projectile or built-in project root, if any."
   (or (and (fboundp 'projectile-project-root)
            (ignore-errors (projectile-project-root)))
-      (when-let ((project (project-current nil)))
-        (project-root project))))
+      (p3/project-el-root)))
 
 (defun p3/use-project-root-as-default-dir ()
   "Use the current project root as the buffer's default directory."
