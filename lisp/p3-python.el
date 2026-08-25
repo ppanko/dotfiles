@@ -1,15 +1,16 @@
 ;;; p3-python.el --- Python workflow helpers -*- lexical-binding: t; -*-
 
 (require 'cl-lib)
+(require 'project)
 (require 'python)
 (require 'seq)
-(require 'p3-core)
 
 (defvar eglot-server-programs)
 
 (defun p3/python-project-interpreter ()
   "Return the project-local Python executable, when one exists."
-  (when-let ((root (p3/project-root)))
+  (when-let* ((project (project-current))
+              (root (project-root project)))
     (seq-some
      (lambda (relative)
        (let ((executable (expand-file-name relative root)))
