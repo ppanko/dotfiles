@@ -50,25 +50,32 @@
          (linuxy-environment-path (file-name-as-directory root))
          (bash (expand-file-name "bash.exe" root))
          (zsh (expand-file-name "zsh.exe" root))
-         (old-shell-environment (getenv "SHELL")))
+         (old-shell-environment (getenv "SHELL"))
+         (bash-args-was-bound (boundp 'explicit-bash.exe-args))
+         (old-bash-args (and bash-args-was-bound
+                             (symbol-value 'explicit-bash.exe-args))))
     (unwind-protect
         (progn
           ;; Create fixtures using the host OS, then simulate only the branch
           ;; selection logic as Windows.
           (with-temp-file bash)
           (with-temp-file zsh)
+          (set 'explicit-bash.exe-args nil)
           (let ((system-type 'windows-nt)
                 (global-map (copy-keymap global-map))
                 (shell-file-name "old-shell")
-                (explicit-shell-file-name nil)
-                (explicit-bash.exe-args nil))
+                (explicit-shell-file-name nil))
             (p3/terminal-configure-windows-shell)
             (should (equal shell-file-name bash))
             (should (equal explicit-shell-file-name zsh))
-            (should (equal explicit-bash.exe-args '("--login")))
+            (should (equal (symbol-value 'explicit-bash.exe-args)
+                           '("--login")))
             (should (equal (getenv "SHELL") bash))
             (should (eq (key-binding (kbd "C-x C-u")) #'shell))))
       (setenv "SHELL" old-shell-environment)
+      (if bash-args-was-bound
+          (set 'explicit-bash.exe-args old-bash-args)
+        (makunbound 'explicit-bash.exe-args))
       (delete-directory root t))))
 
 (ert-deftest p3-terminal-windows-shell-strips-carriage-returns ()
