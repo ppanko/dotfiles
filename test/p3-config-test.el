@@ -79,6 +79,49 @@
       (goto-char (point-min))
       (should-not (search-forward implementation nil t)))))
 
+(ert-deftest p3-config-platform-setup-preserves-subsystem-timing ()
+  (with-temp-buffer
+    (insert-file-contents (expand-file-name "config.org" p3-config-test--root))
+    (goto-char (point-min))
+    (should-not (search-forward "(p3/platform-setup)" nil t))
+    (goto-char (point-min))
+    (let ((rtools-position
+           (progn
+             (should (search-forward "(p3/windows-configure-rtools)" nil t))
+             (point)))
+          ess-position
+          r-position
+          terminal-position
+          shell-position
+          shell-binding-position)
+      (setq ess-position
+            (progn
+              (should (search-forward "(use-package ess-r-mode" nil t))
+              (point)))
+      (setq r-position
+            (progn
+              (should (search-forward "(p3/windows-configure-r-program)" nil t))
+              (point)))
+      (setq terminal-position
+            (progn
+              (should (search-forward "(use-package p3-terminal" nil t))
+              (point)))
+      (setq shell-position
+            (progn
+              (should (search-forward "(p3/windows-configure-shell)" nil t))
+              (point)))
+      (setq shell-binding-position
+            (progn
+              (should
+               (search-forward
+                "(global-set-key (kbd \"C-x C-u\") #'shell)" nil t))
+              (point)))
+      (should (< rtools-position ess-position))
+      (should (< ess-position r-position))
+      (should (< r-position terminal-position))
+      (should (< terminal-position shell-position))
+      (should (< shell-position shell-binding-position)))))
+
 (ert-deftest p3-init-does-not-special-case-org-export ()
   (with-temp-buffer
     (insert-file-contents (expand-file-name "init.el" p3-config-test--root))

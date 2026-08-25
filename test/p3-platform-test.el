@@ -13,10 +13,37 @@
 
 (require 'p3-platform)
 
+(ert-deftest p3-platform-overrides-remain-machine-local-variables ()
+  (should-not (get 'p3/windows-rtools-override 'custom-type))
+  (should-not (get 'p3/windows-r-program-override 'custom-type)))
+
 (ert-deftest p3-platform-rtools-version-parses-versioned-directory ()
   (should (= (p3/windows-rtools-version "C:/rtools45") 45))
   (should (= (p3/windows-rtools-version "C:/RTOOLS46/") 46))
   (should-not (p3/windows-rtools-version "C:/rtools")))
+
+(ert-deftest p3-platform-rtools-usable-requires-msys2-bash ()
+  (let* ((root (make-temp-file "p3-platform-rtools-usable-" t))
+         (bash (expand-file-name "usr/bin/bash.exe" root)))
+    (unwind-protect
+        (progn
+          (make-directory (file-name-directory bash) t)
+          (should-not (p3/windows-rtools-usable-p root))
+          (with-temp-file bash)
+          (should (p3/windows-rtools-usable-p root)))
+      (delete-directory root t))))
+
+(ert-deftest p3-platform-latest-rtools-prefers-newest-usable-installation ()
+  (let ((system-type 'windows-nt))
+    (cl-letf (((symbol-function 'file-directory-p)
+               (lambda (path) (equal path "C:/")))
+              ((symbol-function 'directory-files)
+               (lambda (&rest _args)
+                 '("C:/rtools43" "C:/rtools45" "C:/rtools44")))
+              ((symbol-function 'p3/windows-rtools-usable-p)
+               (lambda (directory)
+                 (not (string-suffix-p "rtools45" directory)))))
+      (should (equal (p3/windows-latest-rtools) "C:/rtools44")))))
 
 (ert-deftest p3-platform-rtools-setup-populates-compatible-paths ()
   (let* ((root (make-temp-file "p3-platform-rtools-" t))
@@ -60,7 +87,7 @@
       (setenv "PATH" old-path)
       (delete-directory root t))))
 
-(ert-deftest p3-platform-windows-shell-selects-rtools-shells ()
+(ert-deftest p3-platform-windows-shell-selects-rtools-shells-without-binding-keys ()
   (let* ((root (make-temp-file "p3-platform-shell-" t))
          (linuxy-environment-path (file-name-as-directory root))
          (bash (expand-file-name "bash.exe" root))
@@ -78,13 +105,14 @@
                 (global-map (copy-keymap global-map))
                 (shell-file-name "old-shell")
                 (explicit-shell-file-name nil))
+            (define-key global-map (kbd "C-x C-u") #'ignore)
             (p3/windows-configure-shell)
             (should (equal shell-file-name bash))
             (should (equal explicit-shell-file-name zsh))
             (should (equal (symbol-value 'explicit-bash.exe-args)
                            '("--login")))
             (should (equal (getenv "SHELL") bash))
-            (should (eq (key-binding (kbd "C-x C-u")) #'shell))))
+            (should (eq (key-binding (kbd "C-x C-u")) #'ignore))))
       (setenv "SHELL" old-shell-environment)
       (if bash-args-was-bound
           (set 'explicit-bash.exe-args old-bash-args)
@@ -104,6 +132,36 @@
         (should (equal coding-call
                        '(fake-process utf-8-unix utf-8-unix)))))))
 
+(ert-deftest p3-platform-r-program-in-directory-prefers-standard-layout ()
+  (let* ((root (make-temp-file "p3-platform-r-layout-" t))
+         (standard (expand-file-name "bin/Rterm.exe" root))
+         (legacy (expand-file-name "bin/x64/Rterm.exe" root)))
+    (unwind-protect
+        (progn
+          (make-directory (file-name-directory legacy) t)
+          (with-temp-file legacy)
+          (should (equal (p3/windows-r-program-in-directory root) legacy))
+          (with-temp-file standard)
+          (should (equal (p3/windows-r-program-in-directory root) standard)))
+      (delete-directory root t))))
+
+(ert-deftest p3-platform-latest-r-program-prefers-newest-usable-installation ()
+  (let ((system-type 'windows-nt))
+    (cl-letf (((symbol-function 'file-directory-p)
+               (lambda (path) (equal path "C:/Program Files/R")))
+              ((symbol-function 'directory-files)
+               (lambda (&rest _args)
+                 '("C:/Program Files/R/R-4.4.3"
+                   "C:/Program Files/R/R-4.5.1"
+                   "C:/Program Files/R/R-4.5.0")))
+              ((symbol-function 'p3/windows-r-program-in-directory)
+               (lambda (directory)
+                 (when (string-suffix-p "R-4.5.0" directory)
+                   (concat directory "/bin/Rterm.exe")))))
+      (should
+       (equal (p3/windows-latest-r-program)
+              "C:/Program Files/R/R-4.5.0/bin/Rterm.exe")))))
+
 (ert-deftest p3-platform-r-program-prefers-valid-override ()
   (let* ((root (make-temp-file "p3-platform-r-" t))
          (program (expand-file-name "Rterm.exe" root))
@@ -116,17 +174,39 @@
             (should (equal (p3/windows-select-r-program) program))))
       (delete-directory root t))))
 
-(ert-deftest p3-platform-setup-is-noop-off-windows ()
+(ert-deftest p3-platform-r-program-invalid-override-falls-back-to-discovery ()
+  (let ((p3/windows-r-program-override "Z:/missing/Rterm.exe"))
+    (cl-letf (((symbol-function 'p3/windows-latest-r-program)
+               (lambda () "C:/Program Files/R/R-4.5.1/bin/Rterm.exe")))
+      (should
+       (equal (p3/windows-select-r-program)
+              "C:/Program Files/R/R-4.5.1/bin/Rterm.exe")))))
+
+(ert-deftest p3-platform-configurators-are-noops-off-windows ()
   (let ((system-type 'gnu/linux)
-        (called nil))
-    (cl-letf (((symbol-function 'p3/windows-configure-rtools)
-               (lambda () (setq called t)))
-              ((symbol-function 'p3/windows-configure-r-program)
-               (lambda () (setq called t)))
-              ((symbol-function 'p3/windows-configure-shell)
-               (lambda () (setq called t))))
-      (p3/platform-setup)
-      (should-not called))))
+        (rtools-path "unchanged")
+        (shell-file-name "unchanged-shell")
+        (inferior-R-program-name "unchanged-R"))
+    (p3/windows-configure-rtools)
+    (p3/windows-configure-r-program)
+    (p3/windows-configure-shell)
+    (should (equal rtools-path "unchanged"))
+    (should (equal shell-file-name "unchanged-shell"))
+    (should (equal inferior-R-program-name "unchanged-R"))))
+
+(ert-deftest p3-platform-native-windows-path-semantics ()
+  (unless (eq system-type 'windows-nt)
+    (ert-skip "Native Windows-only path semantics"))
+  (should (equal path-separator ";"))
+  (let ((exec-path nil)
+        (old-path (getenv "PATH")))
+    (unwind-protect
+        (progn
+          (setenv "PATH" "C:/existing;D:/other")
+          (p3/windows-path-prepend "C:/rtools45/usr/bin")
+          (should (equal (car exec-path) "c:/rtools45/usr/bin/"))
+          (should (string-prefix-p "c:/rtools45/usr/bin;" (getenv "PATH"))))
+      (setenv "PATH" old-path))))
 
 (provide 'p3-platform-test)
 
