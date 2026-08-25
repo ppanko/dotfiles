@@ -2,6 +2,7 @@
 
 (require 'ert)
 (require 'org)
+(require 'seq)
 
 (defconst p3-org-export-test--config-directory
   (file-name-directory
@@ -13,6 +14,9 @@
              (expand-file-name "lisp" p3-org-export-test--config-directory))
 
 (require 'p3-org-export)
+
+(defvar p3/keybinding-sections nil
+  "Keybinding atlas state used by exporter setup tests.")
 
 (defmacro p3-org-export-test--with-temp-directory (binding &rest body)
   "Bind BINDING to a temporary directory while evaluating BODY."
