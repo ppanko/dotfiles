@@ -17,12 +17,14 @@
     (emacs-lisp-mode)
     (condition-case err
         (progn
+          ;; `check-parens' distinguishes an incomplete form from the normal
+          ;; end-of-file signal produced by repeatedly calling `read'.
           (check-parens)
           (goto-char (point-min))
-          (while (progn
-                   (skip-chars-forward " \t\r\n")
-                   (< (point) (point-max)))
-            (read (current-buffer))))
+          (condition-case nil
+              (while t
+                (read (current-buffer)))
+            (end-of-file t)))
       (error
        (ert-fail
         (format "Could not read %s: %s" path (error-message-string err)))))))
