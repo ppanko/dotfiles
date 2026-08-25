@@ -32,6 +32,24 @@
     (insert-file-contents path)
     (buffer-string)))
 
+(defun p3-org-export-test--write-bibliography (path)
+  "Write a minimal BibTeX bibliography to PATH."
+  (with-temp-file path
+    (insert
+     "@article{doe2020,\n"
+     "  author = {Doe, Jane},\n"
+     "  title = {Example Article},\n"
+     "  journal = {Example Journal},\n"
+     "  year = {2020}\n"
+     "}\n")))
+
+(defun p3-org-export-test--zip-file-p (path)
+  "Return non-nil when PATH starts with the ZIP file signature."
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (insert-file-contents-literally path nil 0 2)
+    (equal (buffer-string) "PK")))
+
 (ert-deftest p3-org-export-profiles-preserve-office-and-add-markdown ()
   (dolist (profile '(docx gfm pptx))
     (should (p3-org-export--profile profile)))
@@ -78,6 +96,35 @@
                    "/tmp/reference.pptx"))
     (should-not (p3-org-export--default-reference 'gfm))))
 
+(ert-deftest p3-org-export-citations-use-global-bibliography ()
+  (p3-org-export-test--with-temp-directory directory
+    (let ((bibliography (expand-file-name "references.bib" directory)))
+      (p3-org-export-test--write-bibliography bibliography)
+      (with-temp-buffer
+        (setq default-directory directory)
+        (insert "A claim [cite:@doe2020].\n")
+        (org-mode)
+        (let ((org-cite-global-bibliography (list bibliography)))
+          (should
+           (equal (p3-org-export--citation-arguments)
+                  (list "--citeproc"
+                        (concat "--bibliography=" bibliography)))))))))
+
+(ert-deftest p3-org-export-local-bibliography-takes-precedence ()
+  (with-temp-buffer
+    (insert "#+BIBLIOGRAPHY: local.bib\n\nA claim [cite:@doe2020].\n")
+    (org-mode)
+    (let ((org-cite-global-bibliography '("/tmp/global.bib")))
+      (should (equal (p3-org-export--citation-arguments)
+                     '("--citeproc"))))))
+
+(ert-deftest p3-org-export-does-not-run-citeproc-without-citations ()
+  (with-temp-buffer
+    (insert "Plain text without citations.\n")
+    (org-mode)
+    (let ((org-cite-global-bibliography '("/tmp/global.bib")))
+      (should-not (p3-org-export--citation-arguments)))))
+
 (ert-deftest p3-org-export-rejects-unreadable-reference-document ()
   (should-error
    (p3-org-export--validate-reference "/path/that/does/not/exist.docx")
@@ -122,6 +169,51 @@
                 (should (file-exists-p output))
                 (should (string-match-p "# Heading" contents))
                 (should (string-match-p "title:.*Export Test" contents))))
+          (set-buffer-modified-p nil)
+          (kill-buffer (current-buffer)))))))
+
+(ert-deftest p3-org-export-gfm-renders-org-citations-with-global-bibliography ()
+  (skip-unless (executable-find "pandoc"))
+  (p3-org-export-test--with-temp-directory directory
+    (let* ((source (expand-file-name "cited-report.org" directory))
+           (bibliography (expand-file-name "references.bib" directory)))
+      (p3-org-export-test--write-bibliography bibliography)
+      (with-temp-file source
+        (insert "#+TITLE: Citation Test\n\nA claim [cite:@doe2020].\n"))
+      (with-current-buffer (find-file-noselect source)
+        (unwind-protect
+            (let ((org-cite-global-bibliography (list bibliography)))
+              (org-mode)
+              (let* ((output (p3-org-export-run 'gfm nil))
+                     (contents (p3-org-export-test--contents output)))
+                (should (string-match-p "Doe 2020" contents))
+                (should (string-match-p "Doe, Jane" contents))
+                (should-not (string-match-p "cite:@doe2020" contents))))
+          (set-buffer-modified-p nil)
+          (kill-buffer (current-buffer)))))))
+
+(ert-deftest p3-org-export-docx-runs-with-reference-document-when-pandoc-available ()
+  (skip-unless (executable-find "pandoc"))
+  (p3-org-export-test--with-temp-directory directory
+    (let* ((source (expand-file-name "report.org" directory))
+           (reference-source (expand-file-name "reference.md" directory))
+           (reference (expand-file-name "reference.docx" directory)))
+      (with-temp-file source
+        (insert "#+TITLE: Word Export Test\n\n* Heading\n\nBody text.\n"))
+      (with-temp-file reference-source
+        (insert "# Reference document\n"))
+      (should
+       (zerop
+        (call-process "pandoc" nil nil nil
+                      reference-source "-o" reference)))
+      (with-current-buffer (find-file-noselect source)
+        (unwind-protect
+            (progn
+              (org-mode)
+              (let ((output (p3-org-export-run 'docx reference)))
+                (should (file-exists-p output))
+                (should (> (file-attribute-size (file-attributes output)) 0))
+                (should (p3-org-export-test--zip-file-p output))))
           (set-buffer-modified-p nil)
           (kill-buffer (current-buffer)))))))
 
