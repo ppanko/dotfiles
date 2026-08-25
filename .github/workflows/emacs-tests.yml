@@ -28,9 +28,11 @@ jobs:
             -L lisp \
             --eval '(setq byte-compile-error-on-warn t)' \
             -f batch-byte-compile \
+            lisp/p3-platform.el \
             lisp/p3-core.el \
             lisp/p3-python.el \
             lisp/p3-terminal.el \
+            lisp/p3-ess.el \
             lisp/p3-gptel.el
 
       - name: Run ERT test suite
