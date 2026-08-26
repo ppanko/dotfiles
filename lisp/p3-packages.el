@@ -110,6 +110,7 @@ marks the package tree for recompilation in a fresh Emacs process."
        (p3/package-refresh-once)
        (p3/package-prepare-pinned-package package)
        (p3/package-install-from-archive package minimum-version)))
+    (setq p3/package-restart-required t)
     (p3/package-mark-rebuild-needed)))
 
 (defun p3/package-ensure-requirements (package &optional seen)
