@@ -127,25 +127,31 @@
     (insert-file-contents (expand-file-name "init.el" p3-config-test--root))
     (should-not (search-forward "(load \"p3-org-export\"" nil t))))
 
-(ert-deftest p3-init-preflights-packages-before-loading-config ()
+(ert-deftest p3-init-validates-package-state-before-third-party-config ()
   (with-temp-buffer
     (insert-file-contents (expand-file-name "init.el" p3-config-test--root))
-    (let ((recompile-position
+    (let ((bootstrap-position
            (progn
-             (should (search-forward "(p3/package-recompile-if-needed)" nil t))
+             (should (search-forward "(p3/package-bootstrap-ready-p)" nil t))
              (point)))
           preflight-position
+          org-position
           load-position)
       (setq preflight-position
             (progn
               (should (search-forward "(p3/package-preflight-installed)" nil t))
               (point)))
+      (setq org-position
+            (progn
+              (should (search-forward "(require 'org)" nil t))
+              (point)))
       (setq load-position
             (progn
               (should (search-forward "(p3/load-config t)" nil t))
               (point)))
-      (should (< recompile-position preflight-position))
-      (should (< preflight-position load-position)))))
+      (should (< bootstrap-position preflight-position))
+      (should (< preflight-position org-position))
+      (should (< org-position load-position)))))
 
 (provide 'p3-config-test)
 
