@@ -38,19 +38,25 @@
       (should (member '(foundation (5 0)) calls))
       (should (member '(seq (2 0)) calls)))))
 
-(ert-deftest p3-packages-selects-newest-archive-version-satisfying-requirement ()
+(ert-deftest p3-packages-archive-selection-preserves-package-priority ()
   (p3-packages-test--require-function 'p3/package-archive-desc)
-  (let* ((v4 (package-desc-create :name 'foundation :version '(4 0)
-                                  :summary "4" :reqs nil :kind 'single
-                                  :archive "test"))
-         (v5 (package-desc-create :name 'foundation :version '(5 0)
-                                  :summary "5" :reqs nil :kind 'single
-                                  :archive "test"))
-         (v6 (package-desc-create :name 'foundation :version '(6 0)
-                                  :summary "6" :reqs nil :kind 'single
-                                  :archive "test"))
-         (package-archive-contents `((foundation ,v4 ,v6 ,v5))))
-    (should (eq (p3/package-archive-desc 'foundation '(5 0)) v6))
+  (let* ((preferred
+          (package-desc-create :name 'foundation :version '(5 0)
+                               :summary "preferred" :reqs nil :kind 'single
+                               :archive "preferred"))
+         (newer
+          (package-desc-create :name 'foundation :version '(6 0)
+                               :summary "newer" :reqs nil :kind 'single
+                               :archive "lower-priority"))
+         (too-old
+          (package-desc-create :name 'foundation :version '(4 0)
+                               :summary "old" :reqs nil :kind 'single
+                               :archive "preferred"))
+         ;; package.el orders this list by archive/package priority, not solely
+         ;; by version. Select the first entry that satisfies the requirement.
+         (package-archive-contents
+          `((foundation ,preferred ,newer ,too-old))))
+    (should (eq (p3/package-archive-desc 'foundation '(5 0)) preferred))
     (should-not (p3/package-archive-desc 'foundation '(7 0)))))
 
 (ert-deftest p3-packages-installs-versioned-requirement-from-archive-descriptor ()
@@ -79,30 +85,38 @@
       (should marked)
       (should p3/package-restart-required))))
 
-(ert-deftest p3-packages-recompiles-only-user-installed-packages ()
+(ert-deftest p3-packages-recompiles-only-active-user-installed-packages ()
   (p3-packages-test--require-function 'p3/package-recompile-user-packages)
   (let* ((user-root (make-temp-file "p3-package-user-" t))
          (system-root (make-temp-file "p3-package-system-" t))
          (package-user-dir user-root)
-         (user-dir (expand-file-name "user-package-1.0" user-root))
+         (active-dir (expand-file-name "user-package-2.0" user-root))
+         (old-dir (expand-file-name "user-package-1.0" user-root))
          (system-dir (expand-file-name "system-package-1.0" system-root))
-         (user-desc (package-desc-create :name 'user-package :version '(1 0)
-                                         :summary "user" :reqs nil :kind 'single
-                                         :archive "test" :dir user-dir))
-         (system-desc (package-desc-create :name 'system-package :version '(1 0)
-                                           :summary "system" :reqs nil :kind 'single
-                                           :archive nil :dir system-dir))
-         (package-alist `((user-package ,user-desc)
+         (active-desc
+          (package-desc-create :name 'user-package :version '(2 0)
+                               :summary "active" :reqs nil :kind 'single
+                               :archive "test" :dir active-dir))
+         (old-desc
+          (package-desc-create :name 'user-package :version '(1 0)
+                               :summary "old" :reqs nil :kind 'single
+                               :archive "test" :dir old-dir))
+         (system-desc
+          (package-desc-create :name 'system-package :version '(1 0)
+                               :summary "system" :reqs nil :kind 'single
+                               :archive nil :dir system-dir))
+         (package-alist `((user-package ,active-desc ,old-desc)
                           (system-package ,system-desc)))
          recompiled)
     (unwind-protect
         (progn
-          (make-directory user-dir t)
+          (make-directory active-dir t)
+          (make-directory old-dir t)
           (make-directory system-dir t)
           (cl-letf (((symbol-function 'package-recompile)
                      (lambda (descriptor) (push descriptor recompiled))))
             (p3/package-recompile-user-packages))
-          (should (equal recompiled (list user-desc))))
+          (should (equal recompiled (list active-desc))))
       (delete-directory user-root t)
       (delete-directory system-root t))))
 
