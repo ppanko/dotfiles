@@ -138,9 +138,7 @@
           load-position)
       (setq preflight-position
             (progn
-              (should
-               (search-forward
-                "(p3/package-preflight-config p3/config-generated)" nil t))
+              (should (search-forward "(p3/package-preflight-installed)" nil t))
               (point)))
       (setq load-position
             (progn
