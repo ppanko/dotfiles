@@ -22,8 +22,8 @@
 (p3/package-install-update-advice)
 
 ;; Package mutations can leave bytecode compiled against dependencies that
-;; were still loaded from the old package graph.  Rebuild that bytecode only
-;; in a fresh process, before loading the normal configuration.
+;; were still loaded from the old package graph. Rebuild user-installed
+;; bytecode only in a fresh process, before loading the normal configuration.
 (defvar p3/package-bootstrap-ready
   (condition-case err
       (progn
@@ -38,14 +38,14 @@
      nil))
   "Non-nil when package state is safe for normal configuration loading.")
 
-;; Bootstrap use-package itself.  If this changes package state, the package
+;; Bootstrap use-package itself. If this changes package state, the dependency
 ;; preflight below deliberately leaves normal configuration loading for the
 ;; next fresh Emacs process.
 (when p3/package-bootstrap-ready
   (p3/package-install-resilient 'use-package))
 
 ;; Keep the generated file as a cache, never as an independent source of
-;; truth.  Tangling on every startup prevents config.el from drifting from
+;; truth. Tangling on every startup prevents config.el from drifting from
 ;; config.org, including after a checkout or a merge.
 (require 'org)
 (require 'ob-tangle)
@@ -66,7 +66,7 @@
 
 (p3/tangle-config)
 (if (and p3/package-bootstrap-ready
-         (p3/package-preflight-config p3/config-generated))
+         (p3/package-preflight-installed))
     (progn
       (require 'use-package)
       (require 'use-package-ensure)
