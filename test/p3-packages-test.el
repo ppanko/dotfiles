@@ -78,7 +78,9 @@
                  (setq installed package
                        upgrade-built-in-value package-install-upgrade-built-in)))
               ((symbol-function 'p3/package-mark-rebuild-needed)
-               (lambda () (setq marked t))))
+               (lambda ()
+                 (setq marked t
+                       p3/package-restart-required t))))
       (p3/package-install-resilient 'foundation '(5 0))
       (should (eq installed descriptor))
       (should upgrade-built-in-value)
@@ -144,6 +146,29 @@
       (when (file-exists-p p3/package-rebuild-marker)
         (delete-file p3/package-rebuild-marker)))))
 
+(ert-deftest p3-packages-bootstrap-fails-closed-on-package-error ()
+  (p3-packages-test--require-function 'p3/package-bootstrap-ready-p)
+  (let ((p3/package-restart-required nil)
+        warning)
+    (cl-letf (((symbol-function 'p3/package-recompile-if-needed)
+               #'ignore)
+              ((symbol-function 'p3/package-install-resilient)
+               (lambda (&rest _args) (error "package failure")))
+              ((symbol-function 'display-warning)
+               (lambda (&rest args) (setq warning args))))
+      (should-not (p3/package-bootstrap-ready-p))
+      (should warning))))
+
+(ert-deftest p3-packages-bootstrap-requires-restart-after-install ()
+  (p3-packages-test--require-function 'p3/package-bootstrap-ready-p)
+  (let ((p3/package-restart-required nil))
+    (cl-letf (((symbol-function 'p3/package-recompile-if-needed)
+               #'ignore)
+              ((symbol-function 'p3/package-install-resilient)
+               (lambda (&rest _args)
+                 (setq p3/package-restart-required t))))
+      (should-not (p3/package-bootstrap-ready-p)))))
+
 (ert-deftest p3-packages-preflight-fails-closed-after-repair ()
   (p3-packages-test--require-function 'p3/package-preflight-installed)
   (let ((p3/package-restart-required nil)
@@ -165,6 +190,15 @@
                (lambda (_package) nil)))
       (should-error (p3/use-package-ensure 'consumer '(t) nil)
                     :type 'p3/package-restart-needed))))
+
+(ert-deftest p3-packages-use-package-ensure-propagates-install-failure ()
+  (p3-packages-test--require-function 'p3/use-package-ensure)
+  (let ((p3/package-restart-required nil))
+    (cl-letf (((symbol-function 'use-package-as-symbol)
+               (lambda (_name) 'consumer))
+              ((symbol-function 'p3/package-install-resilient)
+               (lambda (&rest _args) (error "install failed"))))
+      (should-error (p3/use-package-ensure 'consumer '(t) nil)))))
 
 (ert-deftest p3-packages-package-menu-marks-rebuild-before-mutation ()
   (p3-packages-test--require-function
