@@ -23,36 +23,40 @@
 
 ;; Package mutations can leave bytecode compiled against dependencies that
 ;; were still loaded from the old package graph. Rebuild user-installed
-;; bytecode only in a fresh process, then validate bootstrap state before the
-;; normal configuration can load.
+;; bytecode only in a fresh process, then validate all installed dependencies
+;; before loading anything from the normal third-party configuration.
 (defvar p3/package-bootstrap-ready
   (p3/package-bootstrap-ready-p)
-  "Non-nil when package state is safe for normal configuration loading.")
+  "Non-nil when package bootstrap state is safe for dependency validation.")
 
-;; Keep the generated file as a cache, never as an independent source of
-;; truth. Tangling on every startup prevents config.el from drifting from
-;; config.org, including after a checkout or a merge.
-(require 'org)
-(require 'ob-tangle)
-(defconst p3/config-source
-  (expand-file-name "config.org" user-emacs-directory))
-(defconst p3/config-generated
-  (expand-file-name "config.el" user-emacs-directory))
+(defvar p3/package-graph-ready
+  (and p3/package-bootstrap-ready
+       (p3/package-preflight-installed))
+  "Non-nil when the installed package dependency graph is safe to load.")
 
-(defun p3/tangle-config ()
-  "Tangle `p3/config-source' into `p3/config-generated'."
-  (org-babel-tangle-file p3/config-source p3/config-generated))
-
-(defun p3/load-config (&optional quiet)
-  "Load the generated configuration cache."
-  (load-file p3/config-generated)
-  (unless quiet
-    (message "Loaded %s" p3/config-source)))
-
-(p3/tangle-config)
-(if (and p3/package-bootstrap-ready
-         (p3/package-preflight-installed))
+(if p3/package-graph-ready
     (progn
+      ;; Keep the generated file as a cache, never as an independent source of
+      ;; truth. Tangling on every normal startup prevents config.el from
+      ;; drifting from config.org, including after a checkout or a merge.
+      (require 'org)
+      (require 'ob-tangle)
+      (defconst p3/config-source
+        (expand-file-name "config.org" user-emacs-directory))
+      (defconst p3/config-generated
+        (expand-file-name "config.el" user-emacs-directory))
+
+      (defun p3/tangle-config ()
+        "Tangle `p3/config-source' into `p3/config-generated'."
+        (org-babel-tangle-file p3/config-source p3/config-generated))
+
+      (defun p3/load-config (&optional quiet)
+        "Load the generated configuration cache."
+        (load-file p3/config-generated)
+        (unless quiet
+          (message "Loaded %s" p3/config-source)))
+
+      (p3/tangle-config)
       (require 'use-package)
       (require 'use-package-ensure)
       (setq use-package-ensure-function #'p3/use-package-ensure
