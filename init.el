@@ -2,7 +2,7 @@
 ;; Establish this before package.el can persist any Custom/package state.
 (setq custom-file (expand-file-name "custom.el" user-emacs-directory))
 
-;; Configure package.el.  Missing packages are bootstrapped automatically;
+;; Configure package.el. Missing packages are bootstrapped automatically;
 ;; upgrades are deliberately handled through the package menu.
 (require 'package)
 (setq package-archives
@@ -23,26 +23,11 @@
 
 ;; Package mutations can leave bytecode compiled against dependencies that
 ;; were still loaded from the old package graph. Rebuild user-installed
-;; bytecode only in a fresh process, before loading the normal configuration.
+;; bytecode only in a fresh process, then validate bootstrap state before the
+;; normal configuration can load.
 (defvar p3/package-bootstrap-ready
-  (condition-case err
-      (progn
-        (p3/package-recompile-if-needed)
-        t)
-    (error
-     (display-warning
-      'p3/package
-      (format "Package recompilation failed; loading stock Emacs only: %s"
-              (error-message-string err))
-      :error)
-     nil))
+  (p3/package-bootstrap-ready-p)
   "Non-nil when package state is safe for normal configuration loading.")
-
-;; Bootstrap use-package itself. If this changes package state, the dependency
-;; preflight below deliberately leaves normal configuration loading for the
-;; next fresh Emacs process.
-(when p3/package-bootstrap-ready
-  (p3/package-install-resilient 'use-package))
 
 ;; Keep the generated file as a cache, never as an independent source of
 ;; truth. Tangling on every startup prevents config.el from drifting from
