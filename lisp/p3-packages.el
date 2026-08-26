@@ -122,6 +122,24 @@ marks the package tree for recompilation in a fresh Emacs process."
        (p3/package-install-from-archive package minimum-version)))
     (p3/package-mark-rebuild-needed)))
 
+(defun p3/package-bootstrap-ready-p ()
+  "Prepare package state for normal configuration loading.
+Recompile stale user bytecode first, then ensure `use-package' exists. Return
+nil on any repair or failure so this Emacs process remains a stock recovery
+session instead of loading a mixed package graph."
+  (condition-case err
+      (progn
+        (p3/package-recompile-if-needed)
+        (p3/package-install-resilient 'use-package)
+        (not p3/package-restart-required))
+    (error
+     (display-warning
+      'p3/package
+      (format "Package bootstrap failed; loading stock Emacs only: %s"
+              (error-message-string err))
+      :error)
+     nil)))
+
 (defun p3/package-ensure-requirements (package &optional seen)
   "Ensure metadata-declared requirements for PACKAGE recursively.
 SEEN prevents dependency cycles. Requirement versions come only from package
@@ -168,7 +186,8 @@ for this process so stock Emacs commands remain usable."
   "Ensure packages requested by use-package NAME with normalized ARGS.
 If installation or dependency repair changes package state, signal
 `p3/package-restart-needed' so the current declaration cannot load against a
-mixed old/new dependency graph."
+mixed old/new dependency graph. Installation failures propagate to use-package,
+which catches and reports declaration errors without corrupting later startup."
   (dolist (ensure args)
     (let ((package (if (eq ensure t)
                        (use-package-as-symbol name)
@@ -177,17 +196,8 @@ mixed old/new dependency graph."
         (when (consp package)
           (use-package-pin-package (car package) (cdr package))
           (setq package (car package)))
-        (condition-case err
-            (progn
-              (p3/package-install-resilient package)
-              (p3/package-ensure-requirements package))
-          (error
-           (display-warning
-            'use-package
-            (format "Failed to install %s: %s"
-                    package
-                    (error-message-string err))
-            :error))))))
+        (p3/package-install-resilient package)
+        (p3/package-ensure-requirements package))))
   (when p3/package-restart-required
     (signal 'p3/package-restart-needed nil))
   t)
