@@ -2,7 +2,7 @@
 ;; Establish this before package.el can persist any Custom/package state.
 (setq custom-file (expand-file-name "custom.el" user-emacs-directory))
 
-;; Configure package.el.  Missing packages are bootstrapped automatically;
+;; Configure package.el. Missing packages are bootstrapped automatically;
 ;; upgrades are deliberately handled through the package menu.
 (require 'package)
 (setq package-archives
@@ -15,80 +15,60 @@
         ("melpa" . 10)))
 (package-initialize)
 
-(defvar p3/package-refresh-attempted nil
-  "Non-nil after this Emacs session has attempted an automatic archive refresh.")
-
-(defun p3/package-refresh-once ()
-  "Refresh package metadata at most once automatically per Emacs session."
-  (unless p3/package-refresh-attempted
-    (setq p3/package-refresh-attempted t)
-    (package-refresh-contents)))
-
-(defun p3/package-prepare-pinned-package (package)
-  "Reload archive metadata needed for pinned PACKAGE, if any."
-  (when (assoc package (bound-and-true-p package-pinned-packages))
-    (package-read-all-archive-contents)))
-
-(defun p3/package-install-resilient (package)
-  "Install PACKAGE, refreshing stale archive metadata once on failure."
-  (unless (package-installed-p package)
-    (p3/package-prepare-pinned-package package)
-    (condition-case _first-error
-        (package-install package t)
-      (error
-       (p3/package-refresh-once)
-       (p3/package-prepare-pinned-package package)
-       (package-install package t)))))
-
-;; Bootstrap use-package itself before loading the literate configuration.
-(p3/package-install-resilient 'use-package)
-(require 'use-package)
-(require 'use-package-ensure)
-
-(defun p3/use-package-ensure (name args _state)
-  "Ensure packages requested by use-package NAME with normalized ARGS."
-  (dolist (ensure args)
-    (let ((package (if (eq ensure t)
-                       (use-package-as-symbol name)
-                     ensure)))
-      (when package
-        (when (consp package)
-          (use-package-pin-package (car package) (cdr package))
-          (setq package (car package)))
-        (condition-case err
-            (p3/package-install-resilient package)
-          (error
-           (display-warning
-            'use-package
-            (format "Failed to install %s: %s"
-                    package
-                    (error-message-string err))
-            :error))))))
-  t)
-
-(setq use-package-ensure-function #'p3/use-package-ensure
-      use-package-always-ensure t)
-
-;; Keep the generated file as a cache, never as an independent source of
-;; truth.  Tangling on every startup prevents config.el from drifting from
-;; config.org, including after a checkout or a merge.
-(require 'org)
-(require 'ob-tangle)
-(defconst p3/config-source
-  (expand-file-name "config.org" user-emacs-directory))
-(defconst p3/config-generated
-  (expand-file-name "config.el" user-emacs-directory))
 (defconst p3/lisp-directory
   (expand-file-name "lisp" user-emacs-directory))
 (add-to-list 'load-path p3/lisp-directory)
+(require 'p3-packages)
+(p3/package-install-update-advice)
 
-(defun p3/load-config (&optional quiet)
-  "Tangle and load the literate configuration from `p3/config-source'."
-  (org-babel-tangle-file p3/config-source p3/config-generated)
-  (load-file p3/config-generated)
-  (unless quiet
-    (message "Loaded %s" p3/config-source)))
-(p3/load-config t)
+;; Package mutations can leave bytecode compiled against dependencies that
+;; were still loaded from the old package graph. Rebuild user-installed
+;; bytecode only in a fresh process, then validate all installed dependencies
+;; before loading anything from the normal third-party configuration.
+(defvar p3/package-bootstrap-ready
+  (p3/package-bootstrap-ready-p)
+  "Non-nil when package bootstrap state is safe for dependency validation.")
+
+(defvar p3/package-graph-ready
+  (and p3/package-bootstrap-ready
+       (p3/package-preflight-installed))
+  "Non-nil when the installed package dependency graph is safe to load.")
+
+(if p3/package-graph-ready
+    (progn
+      ;; Keep the generated file as a cache, never as an independent source of
+      ;; truth. Tangling on every normal startup prevents config.el from
+      ;; drifting from config.org, including after a checkout or a merge.
+      (require 'org)
+      (require 'ob-tangle)
+      (defconst p3/config-source
+        (expand-file-name "config.org" user-emacs-directory))
+      (defconst p3/config-generated
+        (expand-file-name "config.el" user-emacs-directory))
+
+      (defun p3/tangle-config ()
+        "Tangle `p3/config-source' into `p3/config-generated'."
+        (org-babel-tangle-file p3/config-source p3/config-generated))
+
+      (defun p3/load-config (&optional quiet)
+        "Load the generated configuration cache."
+        (load-file p3/config-generated)
+        (unless quiet
+          (message "Loaded %s" p3/config-source)))
+
+      (p3/tangle-config)
+      (require 'use-package)
+      (require 'use-package-ensure)
+      (setq use-package-ensure-function #'p3/use-package-ensure
+            use-package-always-ensure t)
+      (p3/load-config t))
+  (display-warning
+   'p3/package
+   (concat
+    "Package state changed or could not be validated; normal configuration "
+    "was not loaded. Restart Emacs after package repair; stock Emacs "
+    "commands remain available in this session.")
+   :warning))
 
 (defun p3/recentf-record-current-buffer (&rest _)
   "Treat a completed Consult buffer switch as recent file access."
