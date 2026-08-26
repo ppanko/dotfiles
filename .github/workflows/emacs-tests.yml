@@ -28,6 +28,7 @@ jobs:
             -L lisp \
             --eval '(setq byte-compile-error-on-warn t)' \
             -f batch-byte-compile \
+            lisp/p3-packages.el \
             lisp/p3-platform.el \
             lisp/p3-core.el \
             lisp/p3-python.el \
