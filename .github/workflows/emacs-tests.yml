@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - master
+      - fix/package-dependency-lifecycle
 
 permissions:
   contents: read
