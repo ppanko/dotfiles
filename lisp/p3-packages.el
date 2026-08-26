@@ -47,20 +47,18 @@
   (setq p3/package-restart-required t))
 
 (defun p3/package-user-installed-descs ()
-  "Return installed package descriptors owned by `package-user-dir'."
+  "Return active package descriptors owned by `package-user-dir'."
   (let ((root (file-name-as-directory (expand-file-name package-user-dir))))
     (cl-loop
      for (_package . descriptors) in package-alist
-     append
-     (seq-filter
-      (lambda (descriptor)
-        (let ((directory (package-desc-dir descriptor)))
-          (and (stringp directory)
-               (file-in-directory-p (expand-file-name directory) root))))
-      descriptors))))
+     for descriptor = (car descriptors)
+     for directory = (and descriptor (package-desc-dir descriptor))
+     when (and (stringp directory)
+               (file-in-directory-p (expand-file-name directory) root))
+     collect descriptor)))
 
 (defun p3/package-recompile-user-packages ()
-  "Recompile package.el packages installed under `package-user-dir'."
+  "Recompile active package.el packages installed under `package-user-dir'."
   (dolist (descriptor (p3/package-user-installed-descs))
     (package-recompile descriptor)))
 
@@ -73,13 +71,8 @@ Delete the marker only after every recompilation succeeds."
     (setq p3/package-restart-required nil)))
 
 (defun p3/package-installed-desc (package)
-  "Return the newest externally installed descriptor for PACKAGE, or nil."
-  (let ((descriptors (cdr (assq package package-alist))))
-    (car
-     (sort (copy-sequence descriptors)
-           (lambda (a b)
-             (version-list-< (package-desc-version b)
-                             (package-desc-version a)))))))
+  "Return the active externally installed descriptor for PACKAGE, or nil."
+  (cadr (assq package package-alist)))
 
 (defun p3/package-unsatisfied-requirements (descriptor)
   "Return unsatisfied version requirements declared by DESCRIPTOR."
@@ -89,18 +82,14 @@ Delete the marker only after every recompilation succeeds."
    (package-desc-reqs descriptor)))
 
 (defun p3/package-archive-desc (package minimum-version)
-  "Return newest archive descriptor for PACKAGE satisfying MINIMUM-VERSION."
-  (let ((descriptors (cdr (assq package package-archive-contents))))
-    (car
-     (sort
-      (seq-filter
-       (lambda (descriptor)
-         (not (version-list-< (package-desc-version descriptor)
-                             minimum-version)))
-       (copy-sequence descriptors))
-      (lambda (a b)
-        (version-list-< (package-desc-version b)
-                        (package-desc-version a)))))))
+  "Return preferred archive descriptor satisfying MINIMUM-VERSION for PACKAGE.
+`package-archive-contents' is already ordered by package/archive priority, so
+preserve that ordering instead of choosing solely by numerical version."
+  (seq-find
+   (lambda (descriptor)
+     (not (version-list-< (package-desc-version descriptor)
+                         minimum-version)))
+   (cdr (assq package package-archive-contents))))
 
 (defun p3/package-install-from-archive (package minimum-version)
   "Install PACKAGE, requiring MINIMUM-VERSION when non-nil.
@@ -131,7 +120,6 @@ marks the package tree for recompilation in a fresh Emacs process."
        (p3/package-refresh-once)
        (p3/package-prepare-pinned-package package)
        (p3/package-install-from-archive package minimum-version)))
-    (setq p3/package-restart-required t)
     (p3/package-mark-rebuild-needed)))
 
 (defun p3/package-ensure-requirements (package &optional seen)
