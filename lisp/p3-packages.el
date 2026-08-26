@@ -2,9 +2,9 @@
 
 ;;; Commentary:
 ;; Keep package bootstrap version-aware without hard-coding dependency
-;; versions.  Requirements come from package metadata.  Package mutations
-;; leave a marker so stale bytecode is rebuilt in a fresh Emacs process before
-;; the normal configuration is loaded.
+;; versions. Requirements come from installed package metadata. Package
+;; mutations leave a marker so user-installed bytecode is rebuilt in a fresh
+;; Emacs process before the normal configuration is loaded.
 
 ;;; Code:
 
@@ -15,6 +15,9 @@
 (declare-function use-package-as-symbol "use-package-core" (name))
 (declare-function use-package-pin-package "use-package-ensure" (package archive))
 
+(define-error 'p3/package-restart-needed
+  "Package state changed; restart Emacs before loading repaired packages")
+
 (defvar p3/package-refresh-attempted nil
   "Non-nil after this Emacs session has attempted an archive refresh.")
 
@@ -22,7 +25,7 @@
   "Non-nil when package state changed and normal config loading should stop.")
 
 (defvar p3/package-rebuild-marker
-  (expand-file-name ".package-rebuild-needed" user-emacs-directory)
+  (expand-file-name ".p3-rebuild-needed" package-user-dir)
   "Marker file requesting one fresh-process package recompilation.")
 
 (defun p3/package-refresh-once ()
@@ -43,11 +46,29 @@
     (insert "Package state changed; rebuild before loading config.\n"))
   (setq p3/package-restart-required t))
 
+(defun p3/package-user-installed-descs ()
+  "Return installed package descriptors owned by `package-user-dir'."
+  (let ((root (file-name-as-directory (expand-file-name package-user-dir))))
+    (cl-loop
+     for (_package . descriptors) in package-alist
+     append
+     (seq-filter
+      (lambda (descriptor)
+        (let ((directory (package-desc-dir descriptor)))
+          (and (stringp directory)
+               (file-in-directory-p (expand-file-name directory) root))))
+      descriptors))))
+
+(defun p3/package-recompile-user-packages ()
+  "Recompile package.el packages installed under `package-user-dir'."
+  (dolist (descriptor (p3/package-user-installed-descs))
+    (package-recompile descriptor)))
+
 (defun p3/package-recompile-if-needed ()
-  "Recompile installed packages once when the rebuild marker exists.
-Delete the marker only after a successful recompilation."
+  "Recompile user packages once when the rebuild marker exists.
+Delete the marker only after every recompilation succeeds."
   (when (file-exists-p p3/package-rebuild-marker)
-    (package-recompile-all)
+    (p3/package-recompile-user-packages)
     (delete-file p3/package-rebuild-marker)
     (setq p3/package-restart-required nil)))
 
@@ -100,7 +121,7 @@ package cannot incorrectly satisfy the request."
 
 (defun p3/package-install-resilient (package &optional minimum-version)
   "Ensure PACKAGE is installed at optional MINIMUM-VERSION.
-Refresh stale archive metadata once on failure.  Any successful installation
+Refresh stale archive metadata once on failure. Any successful installation
 marks the package tree for recompilation in a fresh Emacs process."
   (unless (package-installed-p package minimum-version)
     (p3/package-prepare-pinned-package package)
@@ -115,65 +136,25 @@ marks the package tree for recompilation in a fresh Emacs process."
 
 (defun p3/package-ensure-requirements (package &optional seen)
   "Ensure metadata-declared requirements for PACKAGE recursively.
-SEEN prevents dependency cycles.  Requirement versions come only from package
+SEEN prevents dependency cycles. Requirement versions come only from package
 metadata; this configuration does not encode dependency version numbers."
   (unless (memq package seen)
     (when-let ((descriptor (p3/package-installed-desc package)))
+      (dolist (requirement (p3/package-unsatisfied-requirements descriptor))
+        (p3/package-install-resilient (car requirement) (cadr requirement)))
       (dolist (requirement (package-desc-reqs descriptor))
-        (let ((dependency (car requirement))
-              (minimum-version (cadr requirement)))
-          (p3/package-install-resilient dependency minimum-version)
-          (p3/package-ensure-requirements dependency (cons package seen)))))))
+        (p3/package-ensure-requirements (car requirement)
+                                        (cons package seen))))))
 
-(defun p3/package-use-package-target (form)
-  "Return the package ensured by a static use-package FORM, or nil."
-  (when (and (consp form)
-             (eq (car form) 'use-package)
-             (symbolp (cadr form)))
-    (let* ((name (cadr form))
-           (arguments (cddr form))
-           (ensure-tail (memq :ensure arguments)))
-      (cond
-       ((and ensure-tail (null (cadr ensure-tail))) nil)
-       ((null ensure-tail) name)
-       ((eq (cadr ensure-tail) t) name)
-       ((symbolp (cadr ensure-tail)) (cadr ensure-tail))
-       ((and (consp (cadr ensure-tail))
-             (symbolp (car (cadr ensure-tail))))
-        (car (cadr ensure-tail)))
-       (t name)))))
-
-(defun p3/package-config-packages (path)
-  "Return statically declared package targets from use-package forms in PATH."
-  (let (packages)
-    (cl-labels
-        ((walk
-          (form)
-          (when (consp form)
-            (unless (memq (car form) '(quote function))
-              (when-let ((package (p3/package-use-package-target form)))
-                (unless (memq package packages)
-                  (setq packages (append packages (list package)))))
-              (mapc #'walk form)))))
-      (with-temp-buffer
-        (insert-file-contents path)
-        (goto-char (point-min))
-        (condition-case nil
-            (while t
-              (walk (read (current-buffer))))
-          (end-of-file nil))))
-    packages))
-
-(defun p3/package-preflight-config (path)
-  "Ensure package requirements for static use-package declarations in PATH.
-Return non-nil only when the package graph was already healthy.  If package
-state must be repaired, leave normal configuration loading for the next fresh
-Emacs process."
+(defun p3/package-preflight-installed ()
+  "Validate requirements for every installed external package.
+Return non-nil only when the installed package graph was already healthy. If
+repair is required or validation fails, leave normal config loading disabled
+for this process so stock Emacs commands remain usable."
   (condition-case err
       (progn
-        (dolist (package (p3/package-config-packages path))
-          (p3/package-install-resilient package)
-          (p3/package-ensure-requirements package))
+        (dolist (entry package-alist)
+          (p3/package-ensure-requirements (car entry)))
         (not p3/package-restart-required))
     (error
      (display-warning
@@ -196,7 +177,10 @@ Emacs process."
                 #'p3/package-menu-execute-with-rebuild-marker)))
 
 (defun p3/use-package-ensure (name args _state)
-  "Ensure packages requested by use-package NAME with normalized ARGS."
+  "Ensure packages requested by use-package NAME with normalized ARGS.
+If installation or dependency repair changes package state, signal
+`p3/package-restart-needed' so the current declaration cannot load against a
+mixed old/new dependency graph."
   (dolist (ensure args)
     (let ((package (if (eq ensure t)
                        (use-package-as-symbol name)
@@ -216,6 +200,8 @@ Emacs process."
                     package
                     (error-message-string err))
             :error))))))
+  (when p3/package-restart-required
+    (signal 'p3/package-restart-needed nil))
   t)
 
 (provide 'p3-packages)
