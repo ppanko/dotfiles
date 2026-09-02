@@ -17,7 +17,7 @@
 - Keep Projectile installed, enabled, and keybound; do not remove or redesign its UI in this PR.
 - Keep existing `.projectile` markers; do not rename them to `.project` in this PR.
 - A nested `.projectile` marker intentionally defines an inner P3 project inside an outer VCS repository.
-- Python intentionally adopts that same shared inner project boundary and may therefore select a different project-local `.venv` than before this PR.
+- Python intentionally adopts that shared inner project boundary and may therefore select a different project-local `.venv` than before this PR.
 - Preserve existing ESS process/session behavior, R helper behavior, terminal behavior, and Python environment policy apart from the approved shared-root semantic change.
 - Preserve the normal one- or two-window workflow; do not add `display-buffer-alist` rules or new window-management behavior.
 - Do not introduce a custom project backend or a Projectile fallback path.
@@ -42,8 +42,9 @@
 - `lisp/p3-r-tools.el` — depend directly on `p3-project`; keep `.projectile` in generated projects.
 - `lisp/p3-python.el` — depend directly on `p3-project` and use `p3/project-root` for interpreter discovery.
 - `lisp/p3-terminal.el` — depend directly on `p3-project`; no terminal behavior changes.
-- `test/p3-core-test.el` — remove tests for the project behavior that moves to `p3-project-test.el`.
+- `test/p3-core-test.el` — remove project tests that move to `p3-project-test.el`.
 - `test/p3-python-test.el` — replace the old separate-project-root regression with the approved shared-root behavior.
+- `test/p3-r-tools-test.el` — explicitly lock in `.projectile` generation.
 - `test/p3-config-test.el` — require visible/eager `p3-project` wiring and verify startup ordering.
 - `config.org` — eagerly load `p3-project` after Windows Rtools/MSYS2 path setup and before project-aware P3 subsystems.
 - `.github/workflows/emacs-tests.yml` — byte-compile and run the new project module/tests.
@@ -61,11 +62,11 @@
 
 **Interfaces:**
 - Consumes: built-in `project-current`, `project-root`, and `project-vc-extra-root-markers` from Emacs 29+.
-- Produces: `p3/project-root () -> directory-or-nil` and `p3/use-project-root-as-default-dir () -> nil`; eager module load also registers `.projectile` in `project-vc-extra-root-markers`.
+- Produces: `p3/project-root () -> directory-or-nil` and `p3/use-project-root-as-default-dir () -> nil`; loading the module registers `.projectile` in `project-vc-extra-root-markers`.
 
-- [ ] **Step 1: Write the new project tests before creating the implementation**
+- [ ] **Step 1: Write the failing project tests**
 
-Create `test/p3-project-test.el` with focused tests for delegation, marker-only projects, nested markers, and buffer-local default directories:
+Create `test/p3-project-test.el`:
 
 ```emacs-lisp
 ;;; p3-project-test.el --- Tests for p3-project -*- lexical-binding: t; -*-
@@ -85,7 +86,7 @@ Create `test/p3-project-test.el` with focused tests for delegation, marker-only 
 (require 'p3-project)
 
 (defun p3-project-test--canonical-directory (directory)
-  "Return DIRECTORY in the normalized form used for root comparisons."
+  "Return DIRECTORY in normalized form for root comparisons."
   (file-name-as-directory (file-truename directory)))
 
 (ert-deftest p3-project-root-delegates-to-project-el ()
@@ -99,7 +100,8 @@ Create `test/p3-project-test.el` with focused tests for delegation, marker-only 
   (cl-letf (((symbol-function 'project-current)
              (lambda (&optional _maybe-prompt _directory) nil))
             ((symbol-function 'projectile-project-root)
-             (lambda () (ert-fail "Projectile must not define P3 project identity"))))
+             (lambda ()
+               (ert-fail "Projectile must not define P3 project identity"))))
     (should-not (p3/project-root))))
 
 (ert-deftest p3-project-marker-only-project-is-detected-from-descendant ()
@@ -122,7 +124,8 @@ Create `test/p3-project-test.el` with focused tests for delegation, marker-only 
          (child (expand-file-name "R" inner)))
     (unwind-protect
         (progn
-          (should (zerop (call-process "git" nil nil nil "-C" outer "init" "-q")))
+          (should
+           (zerop (call-process "git" nil nil nil "-C" outer "init" "-q")))
           (make-directory child t)
           (with-temp-file (expand-file-name ".projectile" inner))
           (let ((default-directory child))
@@ -146,9 +149,7 @@ Create `test/p3-project-test.el` with focused tests for delegation, marker-only 
 ;;; p3-project-test.el ends here
 ```
 
-- [ ] **Step 2: Run the new test file and verify the extraction is not implemented yet**
-
-Run:
+- [ ] **Step 2: Run the new tests and verify the module is missing**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -156,7 +157,7 @@ emacs -Q --batch -L lisp \
   -f ert-run-tests-batch-and-exit
 ```
 
-Expected: FAIL while loading because `p3-project` does not exist yet.
+Expected: FAIL while loading because `p3-project` does not exist.
 
 - [ ] **Step 3: Create the minimal native project module**
 
@@ -166,6 +167,9 @@ Create `lisp/p3-project.el`:
 ;;; p3-project.el --- Shared project identity for the personal Emacs config -*- lexical-binding: t; -*-
 
 (require 'project)
+
+(unless (boundp 'project-vc-extra-root-markers)
+  (error "P3 project support requires Emacs 29 or newer"))
 
 (add-to-list 'project-vc-extra-root-markers ".projectile")
 
@@ -184,50 +188,64 @@ Create `lisp/p3-project.el`:
 ;;; p3-project.el ends here
 ```
 
-- [ ] **Step 4: Remove project ownership from `p3-core.el`**
+- [ ] **Step 4: Replace `p3-core.el` with the exact reduced implementation**
 
-Delete from `lisp/p3-core.el`:
-
-```emacs-lisp
-(require 'project)
-(declare-function projectile-project-root "projectile")
-
-(defun p3/project-el-root () ...)
-(defun p3/project-root () ...)
-(defun p3/use-project-root-as-default-dir () ...)
-```
-
-Keep the `p3/load-config` declaration and the `p3/config-visit` / `p3/config-reload` commands unchanged. The resulting module should start approximately as:
+`lisp/p3-core.el` should contain only:
 
 ```emacs-lisp
 ;;; p3-core.el --- Shared helpers for the personal Emacs config -*- lexical-binding: t; -*-
 
 (declare-function p3/load-config nil (&optional quiet))
+
+(defun p3/config-visit ()
+  "Visit the authoritative literate Emacs configuration."
+  (interactive)
+  (find-file
+   (if (boundp 'p3/config-source)
+       p3/config-source
+     (expand-file-name "config.org" user-emacs-directory))))
+
+(defun p3/config-reload ()
+  "Tangle and reload the authoritative literate Emacs configuration."
+  (interactive)
+  (unless (fboundp 'p3/load-config)
+    (user-error "Config loader is unavailable"))
+  (p3/load-config))
+
+(provide 'p3-core)
+
+;;; p3-core.el ends here
 ```
 
-- [ ] **Step 5: Reduce `p3-core-test.el` to the behavior still owned by core**
+- [ ] **Step 5: Reduce `p3-core-test.el` to the exact behavior still owned by core**
 
-Remove these old tests from `test/p3-core-test.el`:
-
-```text
-p3-core-project-root-prefers-projectile
-p3-core-project-root-falls-back-to-project-el
-p3-core-project-default-directory-is-buffer-local
-```
-
-Retain the existing config-command test:
+Replace `test/p3-core-test.el` with:
 
 ```emacs-lisp
+;;; p3-core-test.el --- Tests for p3-core -*- lexical-binding: t; -*-
+
+(require 'ert)
+
+(defconst p3-core-test--root
+  (file-name-directory
+   (directory-file-name
+    (file-name-directory (or load-file-name buffer-file-name))))
+  "Root of the Emacs configuration under test.")
+
+(add-to-list 'load-path (expand-file-name "lisp" p3-core-test--root))
+
+(require 'p3-core)
+
 (ert-deftest p3-core-config-commands-remain-commands ()
   (should (commandp #'p3/config-visit))
   (should (commandp #'p3/config-reload)))
+
+(provide 'p3-core-test)
+
+;;; p3-core-test.el ends here
 ```
 
-`p3-core-test.el` no longer needs `cl-lib` after those project tests are removed; remove that require if byte-compilation confirms it is unused.
-
-- [ ] **Step 6: Run the focused project/core tests**
-
-Run:
+- [ ] **Step 6: Run the focused tests**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -236,11 +254,9 @@ emacs -Q --batch -L lisp \
   -f ert-run-tests-batch-and-exit
 ```
 
-Expected: all project and core tests PASS.
+Expected: all project/core tests PASS.
 
-- [ ] **Step 7: Byte-compile the new boundary with warnings as errors**
-
-Run:
+- [ ] **Step 7: Byte-compile the new boundary**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -261,7 +277,7 @@ git commit -m "refactor: make project.el own project identity"
 
 ---
 
-### Task 2: Migrate ESS, R, Python, and terminal consumers to the shared root
+### Task 2: Migrate ESS, R, Python, and terminal consumers
 
 **Files:**
 - Modify: `lisp/p3-ess.el`
@@ -269,15 +285,16 @@ git commit -m "refactor: make project.el own project identity"
 - Modify: `lisp/p3-python.el`
 - Modify: `lisp/p3-terminal.el`
 - Modify: `test/p3-python-test.el`
-- Verify unchanged behavior through: `test/p3-ess-test.el`, `test/p3-r-tools-test.el`, `test/p3-terminal-test.el`
+- Modify: `test/p3-r-tools-test.el`
+- Verify: `test/p3-ess-test.el`, `test/p3-terminal-test.el`
 
 **Interfaces:**
 - Consumes: `p3/project-root () -> directory-or-nil` and `p3/use-project-root-as-default-dir () -> nil` from `p3-project.el`.
 - Produces: no new public interface; existing subsystem commands keep their current names and behavior.
 
-- [ ] **Step 1: Replace the obsolete Python regression with a failing shared-root unit test**
+- [ ] **Step 1: Replace the obsolete Python regression with the shared-root unit test**
 
-In `test/p3-python-test.el`, remove `p3-python-project-interpreter-preserves-project-el-root` and add:
+Remove `p3-python-project-interpreter-preserves-project-el-root` from `test/p3-python-test.el` and add:
 
 ```emacs-lisp
 (ert-deftest p3-python-project-interpreter-uses-shared-p3-root ()
@@ -291,11 +308,15 @@ In `test/p3-python-test.el`, remove `p3-python-project-interpreter-preserves-pro
         (should (equal (p3/python-project-interpreter) interpreter))))))
 ```
 
-Update the existing `.venv`, buffer-local setup, and Windows-layout tests so they mock `p3/project-root` directly instead of separately mocking `project-current` and `project-root`.
+Update these existing tests so they mock `p3/project-root` directly instead of `project-current`/`project-root`:
+
+- `p3-python-project-interpreter-prefers-dot-venv`
+- `p3-python-setup-project-interpreter-is-buffer-local`
+- `p3-python-project-interpreter-supports-windows-venv-layout`
 
 - [ ] **Step 2: Add the nested-project Python integration test**
 
-Add to `test/p3-python-test.el`:
+Add:
 
 ```emacs-lisp
 (ert-deftest p3-python-inner-project-marker-selects-inner-venv ()
@@ -307,29 +328,37 @@ Add to `test/p3-python-test.el`:
             (p3-python-test--make-executable
              (expand-file-name ".venv/bin/python" inner)))
            (system-type 'gnu/linux))
-      (should (zerop (call-process "git" nil nil nil "-C" outer "init" "-q")))
+      (should
+       (zerop (call-process "git" nil nil nil "-C" outer "init" "-q")))
       (make-directory source-directory t)
       (with-temp-file (expand-file-name ".projectile" inner))
       (let ((default-directory source-directory))
         (should (equal (p3/python-project-interpreter) interpreter))))))
 ```
 
-Ensure the test file requires `p3-project` explicitly before `p3-python` if that is not already guaranteed by `p3-python` after migration.
+- [ ] **Step 3: Add an explicit scaffolding regression for `.projectile`**
 
-- [ ] **Step 3: Run the Python tests and verify they fail against the old implementation**
+In `p3-r-new-analysis-project-generates-expected-files`, add:
 
-Run:
+```emacs-lisp
+(should (file-exists-p (expand-file-name ".projectile" root)))
+```
+
+This turns the retained marker from an implementation assumption into a tested compatibility contract.
+
+- [ ] **Step 4: Run Python/R tests and verify the Python behavior still fails**
 
 ```bash
 emacs -Q --batch -L lisp \
   -l test/p3-project-test.el \
   -l test/p3-python-test.el \
+  -l test/p3-r-tools-test.el \
   -f ert-run-tests-batch-and-exit
 ```
 
-Expected: FAIL because `p3/python-project-interpreter` still calls the removed `p3/project-el-root` contract or does not honor the mocked shared root.
+Expected: Python shared-root tests FAIL against the old implementation; the new R marker assertion already passes.
 
-- [ ] **Step 4: Migrate the four project-aware modules**
+- [ ] **Step 5: Migrate the four modules to `p3-project`**
 
 In `lisp/p3-python.el`, replace:
 
@@ -343,37 +372,37 @@ with:
 (require 'p3-project)
 ```
 
-and change:
+and replace:
 
 ```emacs-lisp
 (when-let ((root (p3/project-el-root)))
 ```
 
-to:
+with:
 
 ```emacs-lisp
 (when-let ((root (p3/project-root)))
 ```
 
-In `lisp/p3-ess.el`, replace the `p3-core` dependency with `p3-project` and update the commentary sentence to say project identity is delegated to `p3-project`.
+In `lisp/p3-ess.el`, replace `(require 'p3-core)` with `(require 'p3-project)` and change the commentary sentence from:
 
-In `lisp/p3-r-tools.el` and `lisp/p3-terminal.el`, replace:
-
-```emacs-lisp
-(require 'p3-core)
+```text
+Project identity is delegated to p3-core so ESS,
+Python, R helpers, and terminal workflows use the same root abstraction.
 ```
 
-with:
+to:
 
-```emacs-lisp
-(require 'p3-project)
+```text
+Project identity is delegated to p3-project so ESS,
+Python, R helpers, and terminal workflows use the same root abstraction.
 ```
 
-Do **not** change the `.projectile` entry in `p3-r--common-project-files`.
+In both `lisp/p3-r-tools.el` and `lisp/p3-terminal.el`, replace `(require 'p3-core)` with `(require 'p3-project)`.
 
-- [ ] **Step 5: Run all project-dependent subsystem tests**
+Do not change the `.projectile` entry in `p3-r--common-project-files`.
 
-Run:
+- [ ] **Step 6: Run all project-dependent subsystem tests**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -385,11 +414,9 @@ emacs -Q --batch -L lisp \
   -f ert-run-tests-batch-and-exit
 ```
 
-Expected: all tests PASS; existing ESS/R/terminal tests continue to exercise the unchanged `p3/project-root` interface.
+Expected: all tests PASS.
 
-- [ ] **Step 6: Byte-compile all migrated modules**
-
-Run:
+- [ ] **Step 7: Byte-compile migrated modules and search for retired references**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -402,30 +429,23 @@ emacs -Q --batch -L lisp \
   lisp/p3-terminal.el
 ```
 
-Expected: exit status 0 with no warnings or unresolved `p3/project-el-root` references.
+Expected: exit status 0 with no warnings.
 
-- [ ] **Step 7: Verify the retired helper is gone from implementation code**
-
-Run:
+Then:
 
 ```bash
 git grep -n "p3/project-el-root" -- '*.el'
-```
-
-Expected: no matches.
-
-Run:
-
-```bash
 git grep -n "projectile-project-root" -- lisp
 ```
 
-Expected: no matches in `lisp/`; Projectile may still appear in `config.org` and project scaffolding/tests because its UI and marker are intentionally retained.
+Expected: both commands return no implementation matches.
 
 - [ ] **Step 8: Commit Task 2**
 
 ```bash
-git add lisp/p3-ess.el lisp/p3-r-tools.el lisp/p3-python.el lisp/p3-terminal.el test/p3-python-test.el
+git add \
+  lisp/p3-ess.el lisp/p3-r-tools.el lisp/p3-python.el lisp/p3-terminal.el \
+  test/p3-python-test.el test/p3-r-tools-test.el
 git commit -m "refactor: share native project roots across workflows"
 ```
 
@@ -438,56 +458,48 @@ git commit -m "refactor: share native project roots across workflows"
 - Modify: `test/p3-config-test.el`
 
 **Interfaces:**
-- Consumes: eager `p3/windows-configure-rtools` platform setup and `p3-project` module from Tasks 1–2.
-- Produces: startup invariant that `.projectile` is registered with `project.el` before P3 project-aware subsystem configuration can call `project-current`.
+- Consumes: eager `p3/windows-configure-rtools` setup and `p3-project` from Tasks 1–2.
+- Produces: `.projectile` registration before any P3 project-aware subsystem configuration can invoke `project-current`.
 
-- [ ] **Step 1: Add failing config-structure assertions**
+- [ ] **Step 1: Add the failing module-delegation assertion**
 
-Update the module list in `p3-config-org-delegates-custom-subsystems-to-modules` so it includes `"p3-project"`:
+Change the module list in `p3-config-org-delegates-custom-subsystems-to-modules` to:
 
 ```emacs-lisp
 (dolist (module '("p3-platform" "p3-project" "p3-core" "p3-python"
                   "p3-terminal" "p3-ess" "p3-gptel"))
-  ...)
+  (goto-char (point-min))
+  (should (search-forward (format "(use-package %s" module) nil t)))
 ```
 
-Keep `"(defun p3/project-root"` in the implementation exclusion list so `config.org` is explicitly forbidden from reabsorbing project implementation.
+Keep `"(defun p3/project-root"` in the implementation exclusion list.
 
-Add a startup-order test:
+- [ ] **Step 2: Add a startup-order test using independent source positions**
+
+Add this helper and test to `test/p3-config-test.el`:
 
 ```emacs-lisp
+(defun p3-config-test--position-of (text)
+  "Return the position immediately after TEXT in the current buffer."
+  (goto-char (point-min))
+  (should (search-forward text nil t))
+  (point))
+
 (ert-deftest p3-config-project-foundation-precedes-project-consumers ()
   (with-temp-buffer
     (insert-file-contents (expand-file-name "config.org" p3-config-test--root))
     (let ((rtools-position
-           (progn
-             (should (search-forward "(p3/windows-configure-rtools)" nil t))
-             (point)))
-          project-position
-          core-position
-          python-position
-          ess-position
-          terminal-position)
-      (setq project-position
-            (progn
-              (should (search-forward "(use-package p3-project" nil t))
-              (point)))
-      (setq core-position
-            (progn
-              (should (search-forward "(use-package p3-core" nil t))
-              (point)))
-      (setq python-position
-            (progn
-              (should (search-forward "(use-package p3-python" nil t))
-              (point)))
-      (setq ess-position
-            (progn
-              (should (search-forward "(use-package p3-ess" nil t))
-              (point)))
-      (setq terminal-position
-            (progn
-              (should (search-forward "(use-package p3-terminal" nil t))
-              (point)))
+           (p3-config-test--position-of "(p3/windows-configure-rtools)"))
+          (project-position
+           (p3-config-test--position-of "(use-package p3-project"))
+          (core-position
+           (p3-config-test--position-of "(use-package p3-core"))
+          (python-position
+           (p3-config-test--position-of "(use-package p3-python"))
+          (ess-position
+           (p3-config-test--position-of "(use-package p3-ess"))
+          (terminal-position
+           (p3-config-test--position-of "(use-package p3-terminal")))
       (should (< rtools-position project-position))
       (should (< project-position core-position))
       (should (< project-position python-position))
@@ -495,11 +507,7 @@ Add a startup-order test:
       (should (< project-position terminal-position)))))
 ```
 
-If the actual current `config.org` order makes sequential `search-forward` unsuitable for one of these consumers, compute each position independently from `point-min`; keep the assertions themselves unchanged.
-
-- [ ] **Step 2: Run the config tests and verify the new module/order contract fails**
-
-Run:
+- [ ] **Step 3: Run the config tests and verify the new contract fails**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -509,11 +517,11 @@ emacs -Q --batch -L lisp \
 
 Expected: FAIL because `config.org` does not yet contain `(use-package p3-project ...)`.
 
-- [ ] **Step 3: Add the eager project foundation immediately after platform-path setup**
+- [ ] **Step 4: Add the eager project foundation directly after platform-path setup**
 
-In `config.org`, directly after the existing eager `p3-platform` block that calls `p3/windows-configure-rtools`, add:
+Immediately after the existing `p3-platform` block that calls `p3/windows-configure-rtools`, add:
 
-```emacs-lisp
+```org
 #+BEGIN_SRC emacs-lisp
   (use-package p3-project
     :ensure nil
@@ -521,13 +529,11 @@ In `config.org`, directly after the existing eager `p3-platform` block that call
 #+END_SRC
 ```
 
-Do not add keybindings or extra setup calls. Requiring `p3-project` is itself the startup action that registers `.projectile` in `project-vc-extra-root-markers`.
+Do not add keybindings or setup functions. Loading `p3-project` performs the marker registration.
 
-Keep the existing `p3-core` block responsible for `C-c e` / `C-c r`; do not move those commands into the project module.
+Keep the existing `p3-core` block responsible for `C-c e` and `C-c r`.
 
-- [ ] **Step 4: Run the config tests and tangle smoke test**
-
-Run:
+- [ ] **Step 5: Run config/tangle tests**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -535,9 +541,9 @@ emacs -Q --batch -L lisp \
   -f ert-run-tests-batch-and-exit
 ```
 
-Expected: PASS, including readable `init.el`, readable tangled config, module delegation, platform ordering, and project-foundation ordering.
+Expected: PASS, including readable `init.el`, readable tangled output, module delegation, existing platform ordering, and project-foundation ordering.
 
-- [ ] **Step 5: Commit Task 3**
+- [ ] **Step 6: Commit Task 3**
 
 ```bash
 git add config.org test/p3-config-test.el
@@ -546,7 +552,7 @@ git commit -m "refactor: load project foundation before project workflows"
 
 ---
 
-### Task 4: Add Linux and Windows regression gates for the new boundary
+### Task 4: Add Linux and Windows regression gates
 
 **Files:**
 - Create: `test/p3-project-windows-test.el`
@@ -554,8 +560,8 @@ git commit -m "refactor: load project foundation before project workflows"
 - Modify: `.github/workflows/windows-platform-tests.yml`
 
 **Interfaces:**
-- Consumes: `p3/windows-configure-rtools`, `p3/project-root`, built-in `project-current`, and `project-files`.
-- Produces: CI evidence that marker-only project discovery works on Linux and that Windows project file enumeration works with a Unix-compatible MSYS2 tool directory placed first through the existing platform setup path.
+- Consumes: `p3/windows-configure-rtools`, `p3/project-root`, built-in `project-current`, `project-root`, and `project-files`.
+- Produces: final CI evidence for Linux project semantics and native-Windows marker-only file enumeration.
 
 - [ ] **Step 1: Write the native-Windows integration test**
 
@@ -600,14 +606,16 @@ Create `test/p3-project-windows-test.el`:
           (should (file-readable-p find))
           (make-directory child t)
           (with-temp-file (expand-file-name ".projectile" root))
-          (with-temp-file data-file (insert "x <- 1\n"))
+          (with-temp-file data-file
+            (insert "x <- 1\n"))
           (p3/windows-configure-rtools)
           (let* ((default-directory child)
                  (project (project-current nil))
                  (files (project-files project)))
             (should project)
             (should
-             (equal (file-name-as-directory (file-truename (project-root project)))
+             (equal (file-name-as-directory
+                     (file-truename (project-root project)))
                     (file-name-as-directory (file-truename root))))
             (should
              (seq-some
@@ -623,11 +631,11 @@ Create `test/p3-project-windows-test.el`:
 ;;; p3-project-windows-test.el ends here
 ```
 
-The test deliberately uses the normal `p3/windows-configure-rtools` path. CI supplies a known MSYS2-compatible root from the preinstalled Git for Windows distribution; this exercises the relevant path-ordering behavior without adding an Rtools installation to CI.
+CI will supply a known MSYS2-compatible root from Git for Windows. This exercises the existing `p3/windows-configure-rtools` path-ordering behavior without installing Rtools solely for CI.
 
-- [ ] **Step 2: Extend the normal Ubuntu Emacs test workflow**
+- [ ] **Step 2: Extend the normal Ubuntu workflow**
 
-In `.github/workflows/emacs-tests.yml`, add `lisp/p3-project.el` to the byte-compilation list before modules that require it:
+In `.github/workflows/emacs-tests.yml`, add `p3-project.el` to byte-compilation before modules that consume it:
 
 ```yaml
             lisp/p3-platform.el \
@@ -635,7 +643,7 @@ In `.github/workflows/emacs-tests.yml`, add `lisp/p3-project.el` to the byte-com
             lisp/p3-core.el \
 ```
 
-Add the new platform-neutral project tests to the ERT command before subsystem tests:
+Add `p3-project-test.el` to the ERT command:
 
 ```yaml
             -l test/p3-config-test.el \
@@ -643,11 +651,11 @@ Add the new platform-neutral project tests to the ERT command before subsystem t
             -l test/p3-core-test.el \
 ```
 
-Do not add the Windows-only integration test to this Linux job.
+Do not load the Windows-only integration test in this Linux job.
 
 - [ ] **Step 3: Expand Windows workflow path triggers narrowly**
 
-In `.github/workflows/windows-platform-tests.yml`, keep the existing platform paths and add:
+Keep the current paths and add:
 
 ```yaml
       - "lisp/p3-project.el"
@@ -655,11 +663,9 @@ In `.github/workflows/windows-platform-tests.yml`, keep the existing platform pa
       - "test/p3-project-windows-test.el"
 ```
 
-This causes Windows CI to run when either half of the project/platform integration changes.
+- [ ] **Step 4: Resolve the Git-for-Windows MSYS2 root**
 
-- [ ] **Step 4: Resolve a stable MSYS2 root from Git for Windows in CI**
-
-Before running ERT in `.github/workflows/windows-platform-tests.yml`, add:
+Before ERT in `.github/workflows/windows-platform-tests.yml`, add:
 
 ```yaml
       - name: Locate Git for Windows MSYS2 root
@@ -676,11 +682,11 @@ Before running ERT in `.github/workflows/windows-platform-tests.yml`, add:
           "P3_TEST_MSYS2_ROOT=$($gitRoot -replace '\\','/')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 ```
 
-This is test scaffolding only. Production Windows behavior continues to discover and use Rtools through `p3-platform.el`.
+Production behavior still discovers Rtools; Git for Windows is only the CI fixture providing the same `usr/bin/bash.exe` + Unix `find.exe` layout required by the path setup contract.
 
 - [ ] **Step 5: Extend the Windows compile/test commands**
 
-Change the byte-compile step to compile both boundary modules:
+Use:
 
 ```yaml
       - name: Byte-compile Windows boundary modules
@@ -691,11 +697,7 @@ Change the byte-compile step to compile both boundary modules:
           -f batch-byte-compile
           lisp/p3-platform.el
           lisp/p3-project.el
-```
 
-Change the test step to run both existing platform tests and the new Windows project integration test:
-
-```yaml
       - name: Run Windows platform and project tests
         shell: powershell
         run: >-
@@ -705,9 +707,9 @@ Change the test step to run both existing platform tests and the new Windows pro
           -f ert-run-tests-batch-and-exit
 ```
 
-- [ ] **Step 6: Run the complete local Linux gate before pushing CI changes**
+- [ ] **Step 6: Run the complete local Linux gate before pushing**
 
-Run exactly the suite used by `.github/workflows/emacs-tests.yml` after adding the new project test:
+Byte-compile exactly the normal workflow module set plus `p3-project.el`:
 
 ```bash
 emacs -Q --batch \
@@ -724,9 +726,9 @@ emacs -Q --batch \
   lisp/p3-gptel.el
 ```
 
-Expected: exit status 0 and no warnings.
+Expected: exit status 0 with no warnings.
 
-Then run:
+Run the complete ERT suite:
 
 ```bash
 emacs -Q --batch \
@@ -748,8 +750,6 @@ Expected: all ERT tests PASS.
 
 - [ ] **Step 7: Inspect the final diff for scope leakage**
 
-Run:
-
 ```bash
 git diff master...HEAD --stat
 git diff master...HEAD -- \
@@ -757,12 +757,12 @@ git diff master...HEAD -- \
   lisp/p3-python.el lisp/p3-terminal.el config.org test .github/workflows
 ```
 
-Verify all of the following before committing/pushing:
+Verify:
 
 - Projectile package configuration and keybindings still exist.
-- `p3-r--common-project-files` still emits `.projectile`.
-- No ESS process/session implementation changed beyond its required module dependency/commentary.
-- No terminal window/switching implementation changed beyond its required module dependency.
+- R project scaffolding still emits `.projectile` and the ERT assertion proves it.
+- ESS process/session code changed only in dependency/commentary lines.
+- Terminal switching/window code changed only in its dependency line.
 - No `display-buffer-alist` rules were added.
 - No startup/tangling redesign was introduced.
 - No `p3/project-el-root` implementation or references remain.
@@ -770,7 +770,10 @@ Verify all of the following before committing/pushing:
 - [ ] **Step 8: Commit Task 4**
 
 ```bash
-git add test/p3-project-windows-test.el .github/workflows/emacs-tests.yml .github/workflows/windows-platform-tests.yml
+git add \
+  test/p3-project-windows-test.el \
+  .github/workflows/emacs-tests.yml \
+  .github/workflows/windows-platform-tests.yml
 git commit -m "test: cover native project foundation across platforms"
 ```
 
@@ -781,7 +784,7 @@ Push `refactor/project-el-foundation` after the local suite is green. Confirm:
 - Ubuntu `Emacs tests` passes.
 - Windows `Windows platform tests` passes, including marker-only `project-files` enumeration.
 
-If CI reveals a platform-specific failure, diagnose that exact failure locally or from the job log before pushing another change; do not add diagnostic workflow machinery.
+If CI reveals a platform-specific failure, diagnose that exact failure from the job log before pushing another change. Do not add diagnostic workflow machinery.
 
 ---
 
@@ -795,7 +798,7 @@ PR 1 is implementation-complete only when all of these are true:
 4. Existing `.projectile` projects are recognized by native `project.el`, including nested projects inside outer Git repositories.
 5. Python resolves `.venv` from that shared inner root in the nested-project case.
 6. `config.org` eagerly loads `p3-project` after Windows Unix-tool path setup and before project-aware P3 modules.
-7. Existing R project scaffolding still creates `.projectile`.
+7. Existing R project scaffolding still creates `.projectile`, with explicit ERT coverage.
 8. The one-/two-window workflow is unchanged.
 9. Linux byte-compilation and the complete ERT suite pass.
 10. Native Windows project detection and `project-files` enumeration pass through the existing platform path setup.
