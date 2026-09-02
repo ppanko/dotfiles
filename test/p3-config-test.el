@@ -122,6 +122,26 @@
       (should (< terminal-position shell-position))
       (should (< shell-position shell-binding-position)))))
 
+(ert-deftest p3-init-loads-project-foundation-before-literate-config ()
+  (with-temp-buffer
+    (insert-file-contents (expand-file-name "init.el" p3-config-test--root))
+    (let ((load-path-position
+           (progn
+             (should (search-forward "(add-to-list 'load-path p3/lisp-directory)" nil t))
+             (point)))
+          project-position
+          config-position)
+      (setq project-position
+            (progn
+              (should (search-forward "(require 'p3-project)" nil t))
+              (point)))
+      (setq config-position
+            (progn
+              (should (search-forward "(p3/load-config t)" nil t))
+              (point)))
+      (should (< load-path-position project-position))
+      (should (< project-position config-position)))))
+
 (ert-deftest p3-init-does-not-special-case-org-export ()
   (with-temp-buffer
     (insert-file-contents (expand-file-name "init.el" p3-config-test--root))
