@@ -27,7 +27,9 @@ Introduce `lisp/p3-project.el` as the owner of project discovery and project-roo
 
 Keeping `.projectile` as the marker in this PR is intentional. Existing non-VCS R projects and newly generated R projects remain recognizable to Projectile, while `project.el` gains the same root marker. A later PR can decide whether Projectile is still useful and whether the marker should be renamed.
 
-Registration of `.projectile` is startup-critical. `p3-project.el` must be loaded before any P3 subsystem or package configuration is allowed to call `project-current`, because `project.el` may cache project detection. The configuration must therefore establish the marker during the eager P3 foundation setup rather than waiting for an R, Python, ESS, or terminal buffer to load the module lazily.
+Registration of `.projectile` is startup-critical. `p3-project.el` must be loaded before any P3 subsystem or package configuration is allowed to call `project-current`, because `project.el` may cache project detection. The bootstrap therefore requires `p3-project` in `init.el` immediately after the P3 Lisp directory enters `load-path` and before the literate configuration is tangled or loaded. This is an intentionally narrow bootstrap responsibility, not a broader startup/tangling redesign.
+
+The existing platform setup still configures Rtools/MSYS2 early in the literate configuration before normal project-aware workflows run. Registering the project marker itself does not depend on those Unix tools; project file enumeration on Windows does, and is covered separately by the Windows integration gate.
 
 `p3-core.el` will return to genuinely shared configuration helpers and will no longer contain project discovery.
 
@@ -89,7 +91,7 @@ Add or revise ERT coverage to establish these invariants:
 4. `p3-core.el` no longer owns project discovery.
 5. Python uses the shared `p3/project-root` contract and, in the nested-project case, resolves a project-local `.venv` from the inner root.
 6. ESS, R tools, and terminal helpers continue to consume `p3/project-root` without other behavioral changes.
-7. `.projectile` registration is established by the eager P3 foundation configuration before project-aware subsystem setup.
+7. `init.el` loads `p3-project` after adding the P3 Lisp directory to `load-path` and before loading the literate configuration.
 8. On Windows, a `.projectile`-only project can both be detected and have its files enumerated after normal P3 platform setup.
 9. The extracted modules byte-compile with warnings treated as errors.
 10. The existing full ERT suite remains green.
