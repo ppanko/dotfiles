@@ -3,13 +3,13 @@
 (require 'cl-lib)
 (require 'python)
 (require 'seq)
-(require 'p3-core)
+(require 'p3-project)
 
 (defvar eglot-server-programs)
 
 (defun p3/python-project-interpreter ()
   "Return the project-local Python executable, when one exists."
-  (when-let ((root (p3/project-el-root)))
+  (when-let ((root (p3/project-root)))
     (seq-some
      (lambda (relative)
        (let ((executable (expand-file-name relative root)))

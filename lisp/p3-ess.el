@@ -2,12 +2,12 @@
 
 ;;; Commentary:
 ;; Keep ESS process ownership and project-session coordination out of the
-;; literate configuration.  Project identity is delegated to p3-core so ESS,
+;; literate configuration.  Project identity is delegated to p3-project so ESS,
 ;; Python, R helpers, and terminal workflows use the same root abstraction.
 
 ;;; Code:
 
-(require 'p3-core)
+(require 'p3-project)
 
 (declare-function R "ess-r-mode")
 (declare-function smartparens-mode "smartparens" (&optional arg))
