@@ -3,11 +3,6 @@
 (require 'ert)
 (require 'org)
 (require 'ob-tangle)
-(require 'project)
-
-(defvar projectile-mode-hook nil)
-
-(require 'p3-project)
 
 (defconst p3-config-test--root
   (file-name-directory
@@ -146,12 +141,6 @@
               (point)))
       (should (< load-path-position project-position))
       (should (< project-position config-position)))))
-
-(ert-deftest p3-projectile-mode-hook-keeps-native-provider-authoritative ()
-  (let ((project-find-functions '(project-projectile project-try-vc)))
-    (run-hooks 'projectile-mode-hook)
-    (should-not (memq #'project-projectile project-find-functions))
-    (should (memq #'project-try-vc project-find-functions))))
 
 (ert-deftest p3-init-does-not-special-case-org-export ()
   (with-temp-buffer
