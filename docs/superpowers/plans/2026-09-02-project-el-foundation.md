@@ -229,5 +229,5 @@ The CI fixture may use Git for Windows' bundled MSYS2 tree because the contract 
 - [x] No new window-management behavior is introduced.
 - [x] `config.org` startup/tangling behavior is not redesigned.
 - [x] Windows project-file enumeration is covered.
-- [ ] Final Ubuntu and Windows CI gates green on the reviewed head.
+- [x] Final Ubuntu and Windows CI gates green on the reviewed head.
 - [ ] Explicit merge approval received.
