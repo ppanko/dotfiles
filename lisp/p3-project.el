@@ -2,6 +2,8 @@
 
 (require 'project)
 
+(declare-function project-projectile "projectile" (directory))
+
 (unless (boundp 'project-vc-extra-root-markers)
   (error "P3 project support requires Emacs 29 or newer"))
 
