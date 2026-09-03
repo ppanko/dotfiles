@@ -20,14 +20,16 @@ Introduce `lisp/p3-config-loader.el` as the focused owner of the generated-confi
 
 - `p3/config-source`, pointing to `config.org`;
 - `p3/config-generated`, pointing to ignored `config.el`;
-- freshness detection for the generated cache;
-- explicit cache rebuilding;
-- conditional cache rebuilding for startup;
-- loading the generated configuration.
+- `p3/config-cache-stale-p`, which decides whether regeneration is needed;
+- `p3/config-build`, which explicitly regenerates and validates the cache;
+- `p3/config-load-generated`, which loads the existing generated file without performing freshness logic; and
+- `p3/config-load`, the normal startup entry point that rebuilds only when required and then loads the cache.
 
-`init.el` remains responsible for bootstrap sequencing only. After adding `lisp/` to `load-path` and establishing the early `p3-project` project semantics, it requires `p3-config-loader` and asks it to load the configuration. The loader decides whether a build is required.
+This separation keeps the two workflows explicit. Startup uses `p3/config-load`; interactive reload uses `p3/config-build` followed by `p3/config-load-generated`, so reload cannot accidentally perform a second rebuild because of timestamp edge cases.
 
-`p3-core.el` retains the user-facing visit/reload commands, but delegates build/load behavior to the loader rather than owning the generated-file lifecycle itself.
+`init.el` remains responsible for bootstrap sequencing only. After adding `lisp/` to `load-path` and establishing the early `p3-project` project semantics, it requires `p3-config-loader` and calls `p3/config-load`. The loader decides whether a build is required.
+
+`p3-core.el` retains the user-facing visit/reload commands and depends on `p3-config-loader` for build/load behavior rather than owning the generated-file lifecycle itself.
 
 ## Source-of-truth contract
 
@@ -58,22 +60,25 @@ A build should:
 
 1. load Org/Babel tangling support lazily;
 2. tangle `config.org` into a temporary file in the same configuration directory;
-3. replace `config.el` only after the tangle succeeds; and
-4. return the generated file path.
+3. verify that the temporary file is syntactically readable Emacs Lisp without evaluating it;
+4. replace `config.el` only after tangling and validation both succeed; and
+5. return the generated file path.
 
-Using a temporary file protects the last valid generated cache from a failed or interrupted tangle. The final replacement should occur only after `org-babel-tangle-file` completes successfully.
+Using a staged temporary file protects the last valid generated cache from an interrupted tangle or a source edit that tangles into malformed Lisp. Runtime errors inside otherwise readable configuration are intentionally not part of build validation; they remain load-time errors.
 
-The temporary file must be cleaned up on both success and failure.
+The temporary file must be cleaned up on both success and failure. Replacement should happen only after successful validation and should permit replacing an existing cache.
 
 The build command may report a concise interactive success message, but startup-triggered rebuilds should remain quiet unless an error occurs.
 
 ## Load and startup contract
 
-Expose a loader entry point that performs the normal startup path:
+`p3/config-load-generated` loads `p3/config-generated` exactly as it exists and does no freshness checking or rebuilding.
+
+`p3/config-load` performs the normal startup path:
 
 1. check whether the generated cache is missing or stale;
 2. call `p3/config-build` only when rebuilding is required; and
-3. load `config.el`.
+3. call `p3/config-load-generated`.
 
 When the cache is current, normal startup must not require `org`, `ob-tangle`, or call `org-babel-tangle-file` as part of the loader path.
 
@@ -85,7 +90,7 @@ The startup ordering established by the project foundation remains intact: `p3-p
 
 The existing user-facing `p3/config-reload` command should preserve its current practical meaning: edits to `config.org` are rebuilt and then loaded into the current Emacs session.
 
-`p3/config-reload` therefore must force an explicit `p3/config-build` before loading, rather than relying only on modification-time freshness. This keeps the edit -> reload workflow deterministic even in unusual timestamp situations.
+`p3/config-reload` therefore calls `p3/config-build` unconditionally and, only after that succeeds, calls `p3/config-load-generated`. It does not call the freshness-aware startup entry point. This guarantees exactly one rebuild per reload request and remains deterministic even in unusual timestamp situations.
 
 `p3/config-visit` continues to open `config.org`.
 
@@ -93,7 +98,7 @@ Existing keybindings for visiting and reloading the configuration remain unchang
 
 ## Failure behavior
 
-If a startup-triggered rebuild fails, startup should surface the build error rather than silently load the older cache. The previous valid `config.el` should remain on disk because rebuilding occurs through a temporary file, but stale configuration must not be silently substituted for the authoritative source.
+If a startup-triggered rebuild fails during tangling or syntax validation, startup should surface the build error rather than silently load the older cache. The previous valid `config.el` remains on disk because rebuilding occurs through a staged temporary file, but stale configuration must not be silently substituted for the authoritative source.
 
 If an interactive `p3/config-build` or `p3/config-reload` fails, the current Emacs session remains as it was before the attempted reload, and the last valid generated cache remains available for later recovery.
 
@@ -112,13 +117,13 @@ Add focused ERT coverage for `p3-config-loader.el` that establishes:
 1. a missing generated cache is stale;
 2. an older generated cache is stale;
 3. a generated cache newer than or equal to the source is current;
-4. a current cache loads without invoking the tangler;
+4. a current cache loads without invoking the tangler or requiring Org/Babel through the loader;
 5. a missing or stale cache rebuilds before loading;
 6. explicit `p3/config-build` always rebuilds regardless of timestamps;
-7. `p3/config-reload` always rebuilds before loading;
-8. a failed build does not replace an existing valid generated cache;
-9. temporary build artifacts are cleaned up after success and failure;
-10. the loader does not require Org/Babel on the current-cache path;
+7. `p3/config-reload` performs exactly one explicit build followed by a direct generated-file load;
+8. a tangle failure does not replace an existing valid generated cache;
+9. syntactically malformed tangled output does not replace an existing valid generated cache;
+10. temporary build artifacts are cleaned up after success and failure;
 11. `init.el` loads `p3-project` before `p3-config-loader` loads the literate configuration;
 12. the real `config.org` still tangles to syntactically readable Emacs Lisp.
 
@@ -143,6 +148,7 @@ This PR will not:
 - remove `config.org`;
 - introduce hashes, manifests, watchers, Makefiles, or external build tooling;
 - byte-compile the generated `config.el`;
+- evaluate generated code as part of build validation;
 - reorganize `config.org` into package modules;
 - redesign package bootstrap or package installation;
 - alter project semantics from PR #10;
