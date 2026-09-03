@@ -22,10 +22,13 @@ Introduce `lisp/p3-project.el` as the owner of project discovery and project-roo
 
 - require built-in `project`;
 - register `.projectile` in `project-vc-extra-root-markers`;
+- prevent Projectile's `project-projectile` backend from remaining in `project-find-functions` when `projectile-mode` is enabled;
 - expose the existing `p3/project-root` interface, backed only by `project-current` and `project-root`;
 - expose `p3/use-project-root-as-default-dir`.
 
 Keeping `.projectile` as the marker in this PR is intentional. Existing non-VCS R projects and newly generated R projects remain recognizable to Projectile, while `project.el` gains the same root marker. A later PR can decide whether Projectile is still useful and whether the marker should be renamed.
+
+Projectile itself integrates with `project.el` by adding `project-projectile` to `project-find-functions` whenever `projectile-mode` is enabled. That would make Projectile the effective provider behind `project-current`, even though P3 no longer calls `projectile-project-root` directly. P3 therefore attaches a small policy function to `projectile-mode-hook` that removes `project-projectile` after Projectile updates its hooks. Projectile remains enabled for its commands, project list, and UI; it simply does not supply P3's `project.el` identity. The same policy is applied once when `p3-project.el` loads so reloading the module repairs an already-active Projectile session.
 
 Registration of `.projectile` is startup-critical. `p3-project.el` must be loaded before any P3 subsystem or package configuration is allowed to call `project-current`, because `project.el` may cache project detection. The bootstrap therefore requires `p3-project` in `init.el` immediately after the P3 Lisp directory enters `load-path` and before the literate configuration is tangled or loaded. This is an intentionally narrow bootstrap responsibility, not a broader startup/tangling redesign.
 
@@ -54,7 +57,7 @@ As a consequence, Python project-local interpreter discovery will also use that 
 
 ## Compatibility
 
-Projectile is not removed, disabled, or re-keyed. Existing `.projectile` project markers stay in place, including the marker emitted by the R project scaffolder.
+Projectile is not removed, disabled, or re-keyed. Existing `.projectile` project markers stay in place, including the marker emitted by the R project scaffolder. Projectile commands remain available, but its `project-projectile` bridge is deliberately removed from `project-find-functions` while P3 is active so built-in project discovery remains authoritative.
 
 The supported baseline for this design is Emacs 29+. No compatibility backend for older Emacs versions will be added in this PR. If pre-29 support becomes a real requirement, it should be handled as a separate compatibility decision rather than by retaining two competing project systems.
 
@@ -85,16 +88,17 @@ This PR does not add a custom project backend or a Projectile fallback path.
 
 Add or revise ERT coverage to establish these invariants:
 
-1. `p3/project-root` delegates to `project-current`/`project-root` and does not consult Projectile.
-2. A temporary `.projectile`-only directory is recognized through the public `project-current` contract, including from a descendant directory.
-3. A nested `.projectile` marker inside an outer Git repository resolves to the inner project root.
-4. `p3-core.el` no longer owns project discovery.
-5. Python uses the shared `p3/project-root` contract and, in the nested-project case, resolves a project-local `.venv` from the inner root.
-6. ESS, R tools, and terminal helpers continue to consume `p3/project-root` without other behavioral changes.
-7. `init.el` loads `p3-project` after adding the P3 Lisp directory to `load-path` and before loading the literate configuration.
-8. On Windows, a `.projectile`-only project can both be detected and have its files enumerated after normal P3 platform setup.
-9. The extracted modules byte-compile with warnings treated as errors.
-10. The existing full ERT suite remains green.
+1. `p3/project-root` delegates to `project-current`/`project-root`.
+2. When Projectile inserts `project-projectile` ahead of native providers, the P3 `projectile-mode-hook` policy removes it and a real `project-current` lookup proceeds through the native provider.
+3. A temporary `.projectile`-only directory is recognized through the public `project-current` contract, including from a descendant directory.
+4. A nested `.projectile` marker inside an outer Git repository resolves to the inner project root.
+5. `p3-core.el` no longer owns project discovery.
+6. Python uses the shared `p3/project-root` contract and, in the nested-project case, resolves a project-local `.venv` from the inner root.
+7. ESS, R tools, and terminal helpers continue to consume `p3/project-root` without other behavioral changes.
+8. `init.el` loads `p3-project` after adding the P3 Lisp directory to `load-path` and before loading the literate configuration.
+9. On Windows, a `.projectile`-only project can both be detected and have its files enumerated after normal P3 platform setup.
+10. The extracted modules byte-compile with warnings treated as errors.
+11. The existing full ERT suite remains green.
 
 CI should add `p3-project.el` to byte-compilation and load its tests in the normal suite. The existing Windows platform workflow should be extended narrowly enough to cover the project detection/file-enumeration contract when project/platform files change. No additional diagnostic workflow is needed.
 
