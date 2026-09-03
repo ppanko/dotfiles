@@ -10,7 +10,7 @@
 (require 'cl-lib)
 (require 'seq)
 (require 'subr-x)
-(require 'p3-core)
+(require 'p3-project)
 
 (declare-function ess-eval-linewise "ess-inf")
 (declare-function ess-eval-region-or-function-or-paragraph "ess-mode")

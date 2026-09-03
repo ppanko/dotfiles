@@ -2,7 +2,7 @@
 
 (require 'seq)
 (require 'subr-x)
-(require 'p3-core)
+(require 'p3-project)
 
 (declare-function vterm-mode "vterm")
 (declare-function vterm-copy-mode "vterm")

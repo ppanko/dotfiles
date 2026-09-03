@@ -82,6 +82,10 @@
   (expand-file-name "lisp" user-emacs-directory))
 (add-to-list 'load-path p3/lisp-directory)
 
+;; Establish native project semantics before the literate config or any
+;; project-aware package has a chance to populate `project.el' caches.
+(require 'p3-project)
+
 (defun p3/load-config (&optional quiet)
   "Tangle and load the literate configuration from `p3/config-source'."
   (org-babel-tangle-file p3/config-source p3/config-generated)

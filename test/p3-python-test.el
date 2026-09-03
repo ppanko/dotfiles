@@ -11,7 +11,7 @@
 
 (add-to-list 'load-path (expand-file-name "lisp" p3-python-test--root))
 
-(require 'p3-core)
+(require 'p3-project)
 (require 'p3-python)
 
 (defmacro p3-python-test--with-temp-project (binding &rest body)
@@ -37,31 +37,35 @@
            (_venv (p3-python-test--make-executable
                    (expand-file-name "venv/bin/python" root))))
       (let ((system-type 'gnu/linux))
-        (cl-letf (((symbol-function 'project-current)
-                   (lambda (&optional _maybe-prompt _directory) 'fake-project))
-                  ((symbol-function 'project-root)
-                   (lambda (_project) root)))
+        (cl-letf (((symbol-function 'p3/project-root)
+                   (lambda () root)))
           (should (equal (p3/python-project-interpreter) dot-venv)))))))
 
-(ert-deftest p3-python-project-interpreter-preserves-project-el-root ()
-  "Python environment lookup should retain its pre-refactor project.el scope."
-  (p3-python-test--with-temp-project project-root-directory
-    (p3-python-test--with-temp-project projectile-root-directory
-      (let ((project-interpreter
-             (p3-python-test--make-executable
-              (expand-file-name ".venv/bin/python" project-root-directory)))
-            (_projectile-interpreter
-             (p3-python-test--make-executable
-              (expand-file-name ".venv/bin/python" projectile-root-directory)))
-            (system-type 'gnu/linux))
-        (cl-letf (((symbol-function 'project-current)
-                   (lambda (&optional _maybe-prompt _directory) 'fake-project))
-                  ((symbol-function 'project-root)
-                   (lambda (_project) project-root-directory))
-                  ((symbol-function 'p3/project-root)
-                   (lambda () projectile-root-directory)))
-          (should (equal (p3/python-project-interpreter)
-                         project-interpreter)))))))
+(ert-deftest p3-python-project-interpreter-uses-shared-p3-root ()
+  (p3-python-test--with-temp-project root
+    (let ((interpreter
+           (p3-python-test--make-executable
+            (expand-file-name ".venv/bin/python" root)))
+          (system-type 'gnu/linux))
+      (cl-letf (((symbol-function 'p3/project-root)
+                 (lambda () root)))
+        (should (equal (p3/python-project-interpreter) interpreter))))))
+
+(ert-deftest p3-python-inner-project-marker-selects-inner-venv ()
+  (skip-unless (executable-find "git"))
+  (p3-python-test--with-temp-project outer
+    (let* ((inner (expand-file-name "analysis" outer))
+           (source-directory (expand-file-name "src" inner))
+           (interpreter
+            (p3-python-test--make-executable
+             (expand-file-name ".venv/bin/python" inner)))
+           (system-type 'gnu/linux))
+      (should
+       (zerop (call-process "git" nil nil nil "-C" outer "init" "-q")))
+      (make-directory source-directory t)
+      (with-temp-file (expand-file-name ".projectile" inner))
+      (let ((default-directory source-directory))
+        (should (equal (p3/python-project-interpreter) interpreter))))))
 
 (ert-deftest p3-python-setup-project-interpreter-is-buffer-local ()
   (p3-python-test--with-temp-project root
@@ -69,10 +73,8 @@
                         (expand-file-name ".venv/bin/python" root))))
       (with-temp-buffer
         (let ((system-type 'gnu/linux))
-          (cl-letf (((symbol-function 'project-current)
-                     (lambda (&optional _maybe-prompt _directory) 'fake-project))
-                    ((symbol-function 'project-root)
-                     (lambda (_project) root)))
+          (cl-letf (((symbol-function 'p3/project-root)
+                     (lambda () root)))
             (p3/python-setup-project-interpreter)
             (should (local-variable-p 'python-shell-interpreter))
             (should (equal python-shell-interpreter interpreter))
@@ -85,10 +87,8 @@
     (let ((interpreter (p3-python-test--make-executable
                         (expand-file-name ".venv/Scripts/python.exe" root)))
           (system-type 'windows-nt))
-      (cl-letf (((symbol-function 'project-current)
-                 (lambda (&optional _maybe-prompt _directory) 'fake-project))
-                ((symbol-function 'project-root)
-                 (lambda (_project) root)))
+      (cl-letf (((symbol-function 'p3/project-root)
+                 (lambda () root)))
         (should (equal (p3/python-project-interpreter) interpreter))))))
 
 (ert-deftest p3-python-tools-path-is-platform-specific ()
