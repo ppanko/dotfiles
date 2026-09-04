@@ -2,7 +2,7 @@
 
 ## Status
 
-Design for the third Emacs modernization PR. This PR establishes a durable boundary between top-level configuration orchestration, declarative configuration modules, and reusable behavior libraries. It is intentionally behavior-preserving and does not perform the later ESS, Python, Org, terminal, or GPTel cleanups.
+Design for the third Emacs modernization PR. This PR establishes a durable boundary between top-level configuration orchestration, declarative configuration modules, and reusable behavior libraries. It preserves user-facing behavior and deliberately avoids the later ESS, Python, Org, terminal, or GPTel cleanups. The one intentional startup-order normalization is that existing platform setup becomes explicitly earlier than ordinary configuration modules; the platform logic itself does not change.
 
 ## Problem
 
@@ -21,7 +21,7 @@ PR #11 also deliberately simplified startup around one generated `config.el` cac
 
 1. Make `config.org` a concise, annotated map of the Emacs configuration.
 2. Establish a clear distinction between configuration modules and reusable behavior libraries.
-3. Move coherent generic/global configuration out of `config.org` without changing behavior.
+3. Move coherent generic/global configuration out of `config.org` without changing user-facing behavior.
 4. Preserve the simple single-cache startup model from PR #11.
 5. Keep later subsystem cleanup PRs focused and meaningful.
 6. Make the new boundaries independently understandable and testable.
@@ -79,7 +79,8 @@ Rules:
 3. Behavior libraries must not depend on `p3-config-*` modules or on `use-package`.
 4. Configuration modules should not depend on one another unless a true hard dependency exists. Loading order must not substitute for undocumented coupling.
 5. No code scans `lisp/`, builds a module registry, or automatically loads matching filenames.
-6. Platform setup remains explicit and early in `config.org` because it affects PATH, Rtools/MSYS2, Git, shells, and subprocess discovery before ordinary package configuration.
+6. Platform setup remains explicit in `config.org` because it affects PATH, Rtools/MSYS2, Git, shells, and subprocess discovery.
+7. Platform setup is intentionally moved ahead of ordinary `p3-config-*` loading. This is an ordering normalization only: `p3-platform` behavior and Windows Rtools/MSYS2 selection logic remain unchanged.
 
 ## `config.org` end state
 
@@ -109,20 +110,22 @@ The literate file should not duplicate package lists, detailed keybinding invent
 
 ### `p3-config-base.el`
 
-Owns broad startup-adjacent and global configuration that is not a specialized workflow implementation:
+Owns broad startup-adjacent and global infrastructure that is not editing behavior or a specialized workflow:
 
 - dashboard;
-- which-key and the configuration of the keybinding atlas entry point;
+- which-key and wiring for the keybinding atlas entry point;
 - package-update UI wiring;
 - auto-compile and `load-prefer-newer`;
 - secrets loading;
 - fonts and cursor defaults;
-- global editing/process defaults that do not belong to a specialized subsystem;
+- global process/session defaults such as prompt and Comint behavior;
 - backups and auto-save locations;
 - global modes such as auto-revert and font lock;
 - line-number setup;
 - trash behavior;
 - async and basic Dired configuration.
+
+Editing semantics such as CUA, delete-selection, whitespace cleanup, indentation, pairing, and editing keybindings belong in `p3-config-editing.el` rather than this module.
 
 Platform activation itself stays explicit in `config.org` rather than being hidden inside this module.
 
@@ -143,13 +146,14 @@ This PR does not replace Company or redesign completion behavior.
 
 ### `p3-config-editing.el`
 
-Owns generic editing package configuration and global editing bindings:
+Owns generic editing package configuration and global editing semantics:
 
+- CUA and delete-selection behavior;
+- whitespace cleanup and indentation defaults;
 - smartparens;
 - undo-tree;
 - super-save;
 - multiple-cursors;
-- whitespace and indentation defaults;
 - generic editing keybindings and hooks that are not tied to a specialized subsystem.
 
 Reusable editing commands with meaningful logic belong in `p3-commands.el`, not this module.
@@ -173,12 +177,12 @@ Owns generic buffer/window/navigation configuration:
 - winner;
 - transpose-frame;
 - Avy;
-- generic buffer/window helper wiring;
+- buffer/window package wiring and bindings;
 - the existing narrow `inferior-ess-r-mode` display rule.
 
 The name `workspace` is deliberate: `windows` would be ambiguous with Microsoft Windows platform support in `p3-platform.el`.
 
-The ESS display rule remains here for this PR because it is display policy, not ESS process behavior. It must not be broadened into a generic REPL or side-window policy.
+Substantial buffer/window helper commands belong in `p3-commands.el`; this module owns their wiring. The ESS display rule remains here for this PR because it is display policy, not ESS process behavior. It must not be broadened into a generic REPL or side-window policy.
 
 ## Behavior libraries introduced in PR 3
 
@@ -186,6 +190,7 @@ The ESS display rule remains here for this PR because it is display policy, not 
 
 Owns generic reusable interactive commands currently embedded in `config.org`, including coherent helpers such as:
 
+- the keybinding atlas data and display command;
 - save/kill-other-buffers;
 - sudo edit;
 - region suffix/transform helpers;
@@ -193,6 +198,7 @@ Owns generic reusable interactive commands currently embedded in `config.org`, i
 - force-quotes;
 - move-line helpers;
 - open in external application;
+- nontrivial generic buffer/window helper commands;
 - byte-compile configuration directory;
 - curl-version inspection;
 - similar generic commands that are not package configuration.
@@ -217,7 +223,7 @@ A block moves in PR 3 when all of the following are true:
 
 1. it belongs to a generic/global domain covered by the modules above;
 2. moving it does not require redesigning a specialized subsystem;
-3. its current behavior can be preserved directly;
+3. its current user-facing behavior can be preserved directly;
 4. the destination makes the ownership clearer rather than merely shortening `config.org`.
 
 A block stays in `config.org` when extraction would require simultaneous subsystem redesign or when its meaning is clearer next to a later dedicated cleanup area.
@@ -270,6 +276,8 @@ Migrate one domain at a time. For each domain:
 
 The migration should preserve existing command names and keybindings unless retaining a name would make the new boundary technically incorrect. Compatibility aliases are preferable to unrelated renaming in this PR.
 
+The platform-order normalization should be performed as one explicit, reviewable change rather than occurring accidentally as a side effect of moving base configuration.
+
 ## Testing and verification
 
 ### Byte compilation
@@ -293,6 +301,7 @@ Repository/config tests should verify architectural facts such as:
 - `config.org` explicitly loads the new `p3-config-*` modules;
 - representative moved implementation functions no longer exist inline in `config.org`;
 - behavior libraries do not require configuration modules;
+- platform setup appears before ordinary configuration-module loading;
 - the generated startup cache contract remains unchanged;
 - generated `config.el` remains ignored and untracked.
 
@@ -307,10 +316,12 @@ PR 3 must preserve:
 - current completion stack and Company behavior;
 - current Magit and Git helper keybindings;
 - current generic editing bindings;
-- Windows Rtools/MSYS2 platform setup and ordering;
+- Windows Rtools/MSYS2 discovery and configuration logic;
 - the single generated `config.el` cache model;
 - `config.org` as a readable top-level map;
 - existing specialized subsystem behavior.
+
+The deliberate exception to strict execution-order preservation is platform activation: it becomes explicitly earlier than ordinary configuration modules so environment discovery is visible as a prerequisite rather than hidden among package setup.
 
 ## Failure handling
 
@@ -354,9 +365,9 @@ PR 3 is complete when:
 1. the five agreed `p3-config-*` domains are tracked modules;
 2. generic reusable commands and Git behavior have moved into behavior libraries;
 3. `config.org` is materially shorter and reads primarily as a configuration map for migrated domains;
-4. platform setup remains explicit and early;
+4. platform setup remains explicit and precedes ordinary configuration-module loading without changing its discovery/configuration logic;
 5. no specialized later-phase subsystem has been substantially redesigned;
-6. existing behavior and keybindings are preserved;
+6. existing user-facing behavior and keybindings are preserved;
 7. all new modules byte-compile cleanly;
 8. focused tests and the full regression suite pass;
 9. structural tests protect the new boundary;
