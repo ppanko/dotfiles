@@ -59,9 +59,9 @@ jobs:
           -l test/p3-project-windows-test.el
           -f ert-run-tests-batch-and-exit
 
-      - name: Run Windows config-cache replacement test
+      - name: Run Windows config-cache tests
         shell: powershell
         run: >-
           emacs -Q --batch -L lisp
           -l test/p3-config-loader-test.el
-          --eval '(ert-run-tests-batch-and-exit "^p3-config-loader-build-replaces-existing-cache$")'
+          -f ert-run-tests-batch-and-exit
