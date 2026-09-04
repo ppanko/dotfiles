@@ -185,9 +185,6 @@ WIDTH and HEIGHT are canvas dimensions; NORMAL is the old-position outline."
         (let* ((clip-id (format "pptx-preview-%s" (p3-pptx-spike--get 'id shape)))
                (clip (svg-clip-path svg :id clip-id)))
           (svg-rectangle clip x y w h)
-          ;; Shift the whole authoritative raster, then clip it to the moved
-          ;; object's rectangle.  This creates an immediate drag ghost without
-          ;; pretending to re-render PowerPoint text/charts in Emacs.
           (svg-embed svg p3-pptx-spike--render-file "image/png" nil
                      :x dx :y dy :width width :height height
                      :clip-path (format "url(#%s)" clip-id)
@@ -422,17 +419,23 @@ rendering; otherwise update the live geometry model after persistence."
       (when (buffer-live-p process-buffer)
         (kill-buffer process-buffer)))))
 
+(defun p3-pptx-spike--make-render-snapshot (generation)
+  "Copy the working deck to a complete render snapshot for GENERATION."
+  (let ((snapshot
+         (make-temp-file
+          (expand-file-name (format "render-%d-" generation)
+                            p3-pptx-spike--temp-directory)
+          nil ".pptx")))
+    (copy-file p3-pptx-spike--working snapshot t)
+    snapshot))
+
 (defun p3-pptx-spike--start-render ()
   "Start one nonblocking fidelity render of the current working deck."
   (if (and p3-pptx-spike--render-process
            (process-live-p p3-pptx-spike--render-process))
       nil
     (let* ((generation p3-pptx-spike--edit-generation)
-           (snapshot
-            (make-temp-file
-             (expand-file-name (format "render-%d-" generation)
-                               p3-pptx-spike--temp-directory)
-             nil ".pptx"))
+           (snapshot (p3-pptx-spike--make-render-snapshot generation))
            (output (concat (file-name-sans-extension snapshot) ".png"))
            (model (copy-tree p3-pptx-spike--model))
            (process-buffer (generate-new-buffer " *p3-pptx-render*"))
@@ -444,7 +447,6 @@ rendering; otherwise update the live geometry model after persistence."
              :connection-type 'pipe
              :noquery t
              :sentinel #'p3-pptx-spike--render-sentinel)))
-      (copy-file p3-pptx-spike--working snapshot t)
       (process-put process 'editor-buffer (current-buffer))
       (process-put process 'generation generation)
       (process-put process 'output output)
