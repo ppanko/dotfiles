@@ -74,12 +74,15 @@
 (ert-deftest p3-config-org-delegates-custom-subsystems-to-modules ()
   (let ((contents (p3-config-test--contents "config.org")))
     (dolist (module '("p3-platform" "p3-core" "p3-python" "p3-terminal"
-                      "p3-ess" "p3-gptel"))
+                      "p3-gptel"))
       (should (string-match-p (regexp-quote (format "(use-package %s" module))
                               contents)))
-    (dolist (package '("python" "eglot" "ess-r-mode" "vterm" "gptel"))
+    (dolist (package '("python" "eglot" "vterm" "gptel"))
       (should (string-match-p (regexp-quote (format "(use-package %s" package))
                               contents)))
+    (should
+     (string-match-p
+      (regexp-quote "(p3/config-load-module 'p3-config-ess)") contents))
     (dolist (implementation '("(defun p3/windows-rtools-version"
                                "(defun p3/windows-latest-r-program"
                                "(defun p3/project-root"
@@ -102,6 +105,8 @@
                    "(p3/config-load-module 'p3-config-editing)" contents))
          (completion (p3-config-test--position
                       "(p3/config-load-module 'p3-config-completion)" contents))
+         (ess (p3-config-test--position
+               "(p3/config-load-module 'p3-config-ess)" contents))
          (r-program (p3-config-test--position
                      "(p3/windows-configure-r-program)" contents))
          (shell (p3-config-test--position
@@ -112,13 +117,15 @@
     (should (< rtools base))
     (should (< base editing))
     (should (< editing completion))
-    (should (< completion r-program))
+    (should (< completion ess))
+    (should (< ess r-program))
     (should (< r-program shell))))
 
 (ert-deftest p3-config-platform-setup-preserves-subsystem-timing ()
   (let* ((contents (p3-config-test--contents "config.org"))
          (rtools (p3-config-test--position "(p3/windows-configure-rtools)" contents))
-         (ess (p3-config-test--position "(use-package ess-r-mode" contents))
+         (ess (p3-config-test--position
+               "(p3/config-load-module 'p3-config-ess)" contents))
          (r-program (p3-config-test--position
                      "(p3/windows-configure-r-program)" contents))
          (terminal (p3-config-test--position "(use-package p3-terminal" contents))
@@ -132,10 +139,10 @@
     (should (< terminal shell))
     (should (< shell shell-binding))))
 
-(ert-deftest p3-config-org-source-loads-five-config-modules ()
+(ert-deftest p3-config-org-source-loads-six-config-modules ()
   (let ((contents (p3-config-test--contents "config.org")))
     (dolist (module '(p3-config-base p3-config-editing p3-config-completion
-                      p3-config-workspace p3-config-git))
+                      p3-config-ess p3-config-workspace p3-config-git))
       (should
        (string-match-p
         (regexp-quote (format "(p3/config-load-module '%s)" module))
@@ -170,7 +177,11 @@
                "(defun p3/consult-r-doc-chapter-search"
                "(defun p3/consult-line-all"
                "(defun p3/ess-company-config"
-               "(defvar p3/r-company-backends"))
+               "(defvar p3/r-company-backends"
+               "(use-package p3-r-tools"
+               "(use-package p3-ess"
+               "(use-package ess-r-mode"
+               "(defun compile-rmd"))
       (should-not (string-match-p (regexp-quote implementation) contents)))
     (dolist (package '(dashboard which-key vertico company undo-tree super-save
                        multiple-cursors magit git-gutter-fringe+ transpose-frame
@@ -178,6 +189,18 @@
       (should-not
        (string-match-p (regexp-quote (format "(use-package %s" package))
                        contents)))))
+
+(ert-deftest p3-config-ess-orchestration-has-one-owner ()
+  (let* ((contents (p3-config-test--contents "config.org"))
+         (ess (p3-config-test--position
+               "(p3/config-load-module 'p3-config-ess)" contents))
+         (r-program (p3-config-test--position
+                     "(p3/windows-configure-r-program)" contents)))
+    (should-not (string-match-p "(use-package p3-r-tools" contents))
+    (should-not
+     (string-match-p
+      (regexp-quote "(keymap-global-set \"C-c R\"") contents))
+    (should (< ess r-program))))
 
 (ert-deftest p3-config-behavior-library-owner-pattern-is-explicit ()
   (let ((base (p3-config-test--contents "lisp/p3-config-base.el"))
