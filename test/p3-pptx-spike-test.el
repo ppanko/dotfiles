@@ -53,6 +53,22 @@
         (should render-scheduled)
         (should-not render-called)))))
 
+(ert-deftest p3-pptx-spike-render-snapshot-is-complete-before-use ()
+  (let ((directory (make-temp-file "p3-pptx-spike-test-" t)))
+    (unwind-protect
+        (let ((working (expand-file-name "working.pptx" directory)))
+          (with-temp-file working
+            (insert "complete-pptx-snapshot"))
+          (with-temp-buffer
+            (setq-local p3-pptx-spike--working working
+                        p3-pptx-spike--temp-directory directory)
+            (let ((snapshot (p3-pptx-spike--make-render-snapshot 3)))
+              (should (file-exists-p snapshot))
+              (with-temp-buffer
+                (insert-file-contents-literally snapshot)
+                (should (equal (buffer-string) "complete-pptx-snapshot"))))))
+      (delete-directory directory t))))
+
 (provide 'p3-pptx-spike-test)
 
 ;;; p3-pptx-spike-test.el ends here
