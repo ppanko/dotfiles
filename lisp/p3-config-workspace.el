@@ -3,6 +3,8 @@
 (require 'use-package)
 (require 'p3-commands)
 
+(declare-function winner-mode "winner" (&optional arg))
+
 (use-package transpose-frame
   :defer t
   :bind ("C-c t" . transpose-frame))
