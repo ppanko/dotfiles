@@ -29,7 +29,7 @@
 
 ### New files
 
-- `lisp/p3-config-base.el` — broad global configuration: dashboard, which-key wiring, package-update UI, fonts/cursor, process/session defaults, backups/autosaves, global modes, line numbers, trash, async/Dired, basic global UI bindings. Exact-source-loads `p3-commands.el`.
+- `lisp/p3-config-base.el` — broad global configuration: dashboard, which-key wiring, package-update UI, fonts/cursor, process/session defaults, backups/autosaves, global modes, line numbers, trash, async/Dired, and basic global UI bindings. Exact-source-loads `p3-commands.el`.
 - `lisp/p3-config-completion.el` — savehist, Vertico, Orderless, Marginalia, Consult, Embark, Company, and the existing completion-specific helper functions.
 - `lisp/p3-config-editing.el` — CUA/delete-selection/whitespace/indentation, smartparens, generic editing bindings, google-this, wgrep, undo-tree, super-save, and multiple-cursors.
 - `lisp/p3-config-git.el` — Magit command map/declaration, git-gutter wiring, and binding for the config-and-notes sync command. Exact-source-loads `p3-git.el`.
@@ -43,7 +43,7 @@
 
 - `lisp/p3-config-loader.el` — add exact-source local-module loading.
 - `config.org` — retain early orchestration; replace migrated implementation blocks with concise module headings and exact-source loader stanzas.
-- `test/p3-config-loader-test.el` — exact-source loader tests and stale-bytecode contract support.
+- `test/p3-config-loader-test.el` — exact-source loader, behavior-owner reload, and stale-bytecode tests.
 - `test/p3-core-test.el` — integration test proving `p3/config-reload` re-evaluates a migrated module source.
 - `test/p3-config-test.el` — structural ownership/order tests for the new architecture.
 - `.github/workflows/emacs-tests.yml` — byte-compile all new modules and load new ERT files.
@@ -64,7 +64,7 @@
 
 - [ ] **Step 1: Add failing loader tests for exact source re-evaluation**
 
-Append tests equivalent to the following to `test/p3-config-loader-test.el`:
+Append to `test/p3-config-loader-test.el`:
 
 ```elisp
 (ert-deftest p3-config-loader-load-module-reloads-exact-source ()
@@ -97,9 +97,7 @@ Append tests equivalent to the following to `test/p3-config-loader-test.el`:
       (delete-directory p3/config-lisp-directory t))))
 ```
 
-- [ ] **Step 2: Run only the loader tests and verify RED**
-
-Run:
+- [ ] **Step 2: Run loader tests and verify RED**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -107,11 +105,11 @@ emacs -Q --batch -L lisp \
   -f ert-run-tests-batch-and-exit
 ```
 
-Expected: FAIL because `p3/config-lisp-directory` / `p3/config-load-module` do not exist.
+Expected: FAIL because the new loader API does not exist.
 
 - [ ] **Step 3: Implement the exact-source loader**
 
-Add near the existing config path constants in `lisp/p3-config-loader.el`:
+Add near the existing path constants in `lisp/p3-config-loader.el`:
 
 ```elisp
 (defconst p3/config-lisp-directory
@@ -139,13 +137,11 @@ Do not use `require`, `load`, module discovery, or `.elc` selection in this help
 
 - [ ] **Step 4: Re-run loader tests and verify GREEN**
 
-Run the Step 2 command.
+Run the Step 2 command. Expected: PASS.
 
-Expected: PASS.
+- [ ] **Step 5: Add a real `p3/config-reload` integration test**
 
-- [ ] **Step 5: Add a failing `p3/config-reload` integration test**
-
-Append to `test/p3-core-test.el` a temporary real Org config plus local module test:
+Append to `test/p3-core-test.el`:
 
 ```elisp
 (ert-deftest p3-core-config-reload-reloads-current-module-source ()
@@ -177,31 +173,18 @@ Append to `test/p3-core-test.el` a temporary real Org config plus local module t
       (delete-directory directory t))))
 ```
 
-- [ ] **Step 6: Run core tests and verify GREEN**
-
-Run:
+- [ ] **Step 6: Run core tests and compile the loader**
 
 ```bash
-emacs -Q --batch -L lisp \
-  -l test/p3-core-test.el \
-  -f ert-run-tests-batch-and-exit
-```
-
-Expected: PASS; no production change to `p3/config-reload` is needed because the generated config will call the new exact-source loader.
-
-- [ ] **Step 7: Byte-compile the loader**
-
-Run:
-
-```bash
+emacs -Q --batch -L lisp -l test/p3-core-test.el -f ert-run-tests-batch-and-exit
 emacs -Q --batch -L lisp \
   --eval '(setq byte-compile-error-on-warn t)' \
   -f batch-byte-compile lisp/p3-config-loader.el
 ```
 
-Expected: success with no warnings.
+Expected: PASS with no compile warnings.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add lisp/p3-config-loader.el test/p3-config-loader-test.el test/p3-core-test.el
@@ -213,24 +196,22 @@ git commit -m "Add exact-source config module loading"
 ### Task 2: Lock down early orchestration ordering before extracting domains
 
 **Files:**
-- Modify: `config.org` (`* Startup` early auto-compile/secrets/platform blocks)
+- Modify: `config.org` (`* Startup` auto-compile/secrets/platform blocks)
 - Modify: `test/p3-config-test.el`
 
 **Interfaces:**
-- Consumes: `p3/config-load-module` from Task 1 and existing `p3/windows-configure-rtools`.
 - Produces: explicit order `load-prefer-newer` -> auto-compile -> secrets -> Rtools/MSYS2. R-program and shell configuration remain later.
 
-- [ ] **Step 1: Write failing structural order tests**
-
-Add a test to `test/p3-config-test.el` that reads `config.org`, records string positions, and asserts:
+- [ ] **Step 1: Add a failing structural order test**
 
 ```elisp
 (ert-deftest p3-config-early-orchestration-order-is-explicit ()
   (with-temp-buffer
     (insert-file-contents (expand-file-name "config.org" p3-config-test--root))
     (goto-char (point-min))
-    (let ((newer (progn (should (search-forward "(setq load-prefer-newer t)" nil t))
-                        (point)))
+    (let ((newer (progn
+                   (should (search-forward "(setq load-prefer-newer t)" nil t))
+                   (point)))
           auto secrets rtools r-program shell)
       (setq auto
             (progn
@@ -259,11 +240,7 @@ Add a test to `test/p3-config-test.el` that reads `config.org`, records string p
       (should (< r-program shell)))))
 ```
 
-Keep the existing `p3-config-platform-setup-preserves-subsystem-timing` test; update only if the new structure makes its string anchors stale.
-
-- [ ] **Step 2: Run the structural test and verify RED**
-
-Run:
+- [ ] **Step 2: Run the focused test and verify RED**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -271,11 +248,11 @@ emacs -Q --batch -L lisp \
   --eval '(ert-run-tests-batch-and-exit "p3-config-early-orchestration-order-is-explicit")'
 ```
 
-Expected: FAIL because the current block enables auto-compile before setting `load-prefer-newer`.
+Expected: FAIL because the current auto-compile block sets `load-prefer-newer` after activating auto-compile.
 
 - [ ] **Step 3: Reorder only the early bootstrap forms**
 
-Change the startup block to this shape:
+Use this shape in `config.org`:
 
 ```elisp
 (setq load-prefer-newer t)
@@ -304,14 +281,10 @@ Change the startup block to this shape:
 
 Do not move `p3/windows-configure-r-program` or `p3/windows-configure-shell`.
 
-- [ ] **Step 4: Run the structural test and the real config-build smoke test**
-
-Run:
+- [ ] **Step 4: Run all config structural/build tests**
 
 ```bash
-emacs -Q --batch -L lisp \
-  -l test/p3-config-test.el \
-  -f ert-run-tests-batch-and-exit
+emacs -Q --batch -L lisp -l test/p3-config-test.el -f ert-run-tests-batch-and-exit
 ```
 
 Expected: PASS.
@@ -330,24 +303,16 @@ git commit -m "Make config bootstrap ordering explicit"
 **Files:**
 - Create: `lisp/p3-commands.el`
 - Create: `test/p3-commands-test.el`
-- Modify later tasks only: `config.org` still contains the original definitions until Task 4 removes them.
 
 **Interfaces:**
-- Produces the exact functions/data named in the approved spec: `p3/keybinding-sections`, `p3/keybinding-atlas`, `p3/save-kill-other-buffers`, `p3/sudo-edit`, `p3/region-suffix`, `p3/newline-after-comma-or-space`, `p3/force-quotes`, `p3/byte-compile-init-dir`, `p3/windows-shell`, `move-line`, `move-line-up`, `move-line-down`, `p3/open-in-external-app`, `check-curl-version`, `p3/get-local-buffer-mode`, and `p3/is-current-buffer-mode-inferior-ess-r-mode`.
+- Produces exactly: `p3/keybinding-sections`, `p3/keybinding-atlas`, `p3/save-kill-other-buffers`, `p3/sudo-edit`, `p3/region-suffix`, `p3/newline-after-comma-or-space`, `p3/force-quotes`, `p3/byte-compile-init-dir`, `p3/windows-shell`, `move-line`, `move-line-up`, `move-line-down`, `p3/open-in-external-app`, `check-curl-version`, `p3/get-local-buffer-mode`, and `p3/is-current-buffer-mode-inferior-ess-r-mode`.
 
-- [ ] **Step 1: Write focused failing command tests**
+- [ ] **Step 1: Create failing command tests**
 
-Create `test/p3-commands-test.el` with the standard repository root/load-path boilerplate and tests such as:
+Create `test/p3-commands-test.el` with repository load-path boilerplate and:
 
 ```elisp
 (require 'ert)
-
-(defconst p3-commands-test--root
-  (file-name-directory
-   (directory-file-name
-    (file-name-directory (or load-file-name buffer-file-name)))))
-(add-to-list 'load-path (expand-file-name "lisp" p3-commands-test--root))
-
 (require 'p3-commands)
 
 (ert-deftest p3-commands-core-helpers-remain-commands ()
@@ -380,23 +345,19 @@ Create `test/p3-commands-test.el` with the standard repository root/load-path bo
   (should (equal (caar p3/keybinding-sections) "Global")))
 ```
 
-On non-Windows, do not require `p3/windows-shell` to be defined if its original platform guard is preserved. On Windows, add a conditional command assertion.
+On non-Windows, omit `p3/windows-shell` from the command list if its original platform guard is preserved. On Windows, assert it is a command.
 
-- [ ] **Step 2: Run tests and verify RED**
-
-Run:
+- [ ] **Step 2: Run and verify RED**
 
 ```bash
-emacs -Q --batch -L lisp \
-  -l test/p3-commands-test.el \
-  -f ert-run-tests-batch-and-exit
+emacs -Q --batch -L lisp -l test/p3-commands-test.el -f ert-run-tests-batch-and-exit
 ```
 
 Expected: FAIL because `p3-commands.el` does not exist.
 
-- [ ] **Step 3: Create `p3-commands.el` by moving the exact approved definitions verbatim**
+- [ ] **Step 3: Create `p3-commands.el`**
 
-Use this file shell:
+Use:
 
 ```elisp
 ;;; p3-commands.el --- Generic personal interactive commands -*- lexical-binding: t; -*-
@@ -405,31 +366,25 @@ Use this file shell:
 (declare-function dired-get-marked-files "dired" (&optional localp arg filter distinguish-one-marked error))
 (declare-function w32-shell-execute "w32fns" (operation document &optional parameters show-flag))
 
-;; Copy the exact current definitions/data listed in this task from config.org.
-;; Do not rename, simplify regexes, alter prompts, or change behavior.
+;; Insert, unchanged, the exact current definitions/data named in this task.
 
 (provide 'p3-commands)
 
 ;;; p3-commands.el ends here
 ```
 
-For `p3/windows-shell`, preserve the current Windows-only definition guard. For `p3/open-in-external-app`, preserve all three Windows/macOS/Linux branches exactly.
+Copy those definitions verbatim from `config.org`; do not rename, simplify regexes, alter prompts, change external-open OS branches, or change the Windows-only definition guard for `p3/windows-shell`.
 
-- [ ] **Step 4: Run command tests and byte compilation**
-
-Run:
+- [ ] **Step 4: Run tests and byte-compile**
 
 ```bash
-emacs -Q --batch -L lisp \
-  -l test/p3-commands-test.el \
-  -f ert-run-tests-batch-and-exit
-
+emacs -Q --batch -L lisp -l test/p3-commands-test.el -f ert-run-tests-batch-and-exit
 emacs -Q --batch -L lisp \
   --eval '(setq byte-compile-error-on-warn t)' \
   -f batch-byte-compile lisp/p3-commands.el
 ```
 
-Expected: both succeed with no warnings.
+Expected: PASS with no warnings.
 
 - [ ] **Step 5: Commit**
 
@@ -440,43 +395,34 @@ git commit -m "Extract generic personal commands"
 
 ---
 
-### Task 4: Create the base configuration module and remove migrated base implementation from `config.org`
+### Task 4: Create the base configuration module and remove migrated base implementation
 
 **Files:**
 - Create: `lisp/p3-config-base.el`
-- Modify: `config.org` (`* Startup`, `* General`, `* Global settings`, and generic command blocks in `* Functions`)
+- Modify: `config.org` (`* Startup`, `* General`, `* Global settings`, generic `* Functions` blocks)
 - Modify: `test/p3-config-test.el`
 
 **Interfaces:**
-- Consumes: `(p3/config-load-module 'p3-commands)` from Task 1/3.
-- Produces: feature `p3-config-base`; keeps keybinding atlas and newly extracted commands reloadable.
+- Consumes: `p3/config-load-module` and `p3-commands`.
+- Produces: feature `p3-config-base`; exact-source-loads `p3-commands` on every config reload.
 
-- [ ] **Step 1: Add failing structural ownership tests**
+- [ ] **Step 1: Add failing base ownership tests**
 
-Add assertions to `test/p3-config-test.el` that:
+Assert `config.org` contains:
 
 ```elisp
-(goto-char (point-min))
-(should (search-forward "(p3/config-load-module 'p3-config-base)" nil t))
-(goto-char (point-min))
-(should-not (search-forward "(defconst p3/keybinding-sections" nil t))
-(goto-char (point-min))
-(should-not (search-forward "(defun p3/keybinding-atlas" nil t))
-(goto-char (point-min))
-(should-not (search-forward "(defun p3/save-kill-other-buffers" nil t))
+(p3/config-load-module 'p3-config-base)
 ```
 
-Also read `lisp/p3-config-base.el` and assert it contains:
+and no longer contains inline definitions for `p3/keybinding-sections`, `p3/keybinding-atlas`, or the generic functions moved to `p3-commands.el`. Also read `lisp/p3-config-base.el` and assert it contains:
 
 ```elisp
 (p3/config-load-module 'p3-commands)
 ```
 
-- [ ] **Step 2: Run the new structural test and verify RED**
+- [ ] **Step 2: Verify RED**
 
-Run the focused `p3-config-test` selector for the new base ownership test.
-
-Expected: FAIL because the module does not exist and definitions remain inline.
+Run the focused structural test. Expected: FAIL.
 
 - [ ] **Step 3: Create `p3-config-base.el`**
 
@@ -490,13 +436,13 @@ Start with:
 (p3/config-load-module 'p3-commands)
 ```
 
-Move the existing blocks, preserving forms and values, for:
+Move the current blocks, preserving forms and values, for:
 
 - fullscreen default frame;
 - dashboard;
-- which-key declaration/replacements and `C-c ?` atlas binding;
+- which-key and `C-c ?` atlas wiring;
 - package declaration and `p3/package-update`;
-- fonts and cursor;
+- fonts/cursor;
 - y/n prompt advice and process-kill prompt glue;
 - Comint scroll defaults and scrolling settings;
 - delete-by-trash;
@@ -506,10 +452,10 @@ Move the existing blocks, preserving forms and values, for:
 - backup/autosave directories and version settings;
 - Dired;
 - all-the-icons / all-the-icons-dired;
-- basic font-scale bindings;
-- the Windows `C-x C-i` binding for `p3/windows-shell`.
+- font-scale bindings;
+- Windows-only `C-x C-i` binding for `p3/windows-shell`.
 
-Do **not** move `load-prefer-newer`, auto-compile activation, secrets, or platform activation into this module.
+Do not move `load-prefer-newer`, auto-compile activation, secrets, or platform activation into this module.
 
 End with:
 
@@ -519,21 +465,17 @@ End with:
 ;;; p3-config-base.el ends here
 ```
 
-- [ ] **Step 4: Replace migrated blocks in `config.org` with a concise Base section**
+- [ ] **Step 4: Replace migrated `config.org` blocks with a concise Base section**
 
-After the early orchestration block, add a short explanation plus:
+Immediately after early orchestration, use short prose plus:
 
 ```elisp
 (p3/config-load-module 'p3-config-base)
 ```
 
-Delete the moved implementations from their former sections. For generic commands whose bindings are owned by later tasks, temporarily leave only the binding forms in `config.org` after deleting their function definitions. Do not duplicate function bodies.
+Delete moved function bodies. For extracted commands whose bindings are owned by later tasks, temporarily leave only their binding forms. Keep the existing `p3-core` stanza in `config.org`.
 
-Keep the existing `p3-core` loader/bindings in `config.org` for this PR; it is not part of the five-domain extraction.
-
-- [ ] **Step 5: Run structural/config build tests and byte-compile base**
-
-Run:
+- [ ] **Step 5: Run config/core/command tests and compile base**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -569,7 +511,7 @@ git commit -m "Extract broad base configuration"
 **Interfaces:**
 - Produces: feature `p3-config-completion`, `p3/r-company-backends`, `p3/ess-company-config`, `p3/consult-r-doc-chapter-search`, and `p3/consult-line-all`.
 
-- [ ] **Step 1: Add failing structural tests for completion ownership**
+- [ ] **Step 1: Add failing completion ownership tests**
 
 Assert `config.org` contains:
 
@@ -577,24 +519,15 @@ Assert `config.org` contains:
 (p3/config-load-module 'p3-config-completion)
 ```
 
-and no longer contains:
+and no longer contains inline `p3/consult-r-doc-chapter-search`, `p3/consult-line-all`, `p3/ess-company-config`, `p3/r-company-backends`, `use-package vertico`, or `use-package company`.
 
-```text
-(defun p3/consult-r-doc-chapter-search
-(defun p3/consult-line-all
-(defun p3/ess-company-config
-(defvar p3/r-company-backends
-(use-package vertico
-(use-package company
-```
+- [ ] **Step 2: Verify RED**
 
-- [ ] **Step 2: Run focused structural test and verify RED**
-
-Expected: FAIL on current inline completion section.
+Run the focused structural test. Expected: FAIL.
 
 - [ ] **Step 3: Create `p3-config-completion.el`**
 
-Use:
+Start with:
 
 ```elisp
 ;;; p3-config-completion.el --- Completion and search configuration -*- lexical-binding: t; -*-
@@ -606,41 +539,32 @@ Use:
 (declare-function consult-ripgrep "consult" (&optional directory initial))
 ```
 
-Move the current blocks verbatim for:
+Move verbatim:
 
 - savehist;
 - Vertico;
 - Orderless;
 - Marginalia;
-- the three Consult declarations;
-- `p3/consult-r-doc-chapter-search`;
-- `p3/consult-line-all`;
-- Consult;
-- Embark;
-- embark-consult;
-- Company, including `p3/r-company-backends`, `p3/ess-company-config`, and `company-dabbrev-downcase`.
+- Consult helper declarations/functions and Consult block;
+- Embark and embark-consult;
+- Company including `p3/r-company-backends`, `p3/ess-company-config`, and `company-dabbrev-downcase`.
 
-Do not move synosaurus or yasnippet in this PR.
+Do not move synosaurus or yasnippet. End with `(provide 'p3-config-completion)`.
 
-End with `(provide 'p3-config-completion)`.
+- [ ] **Step 4: Replace the inline completion block**
 
-- [ ] **Step 4: Replace the inline completion block with the module stanza**
-
-At the existing completion section position, retain concise prose and:
+At the current completion section position, retain short prose plus:
 
 ```elisp
 (p3/config-load-module 'p3-config-completion)
 ```
 
-This keeps completion loading before ESS, preserving availability of `p3/ess-company-config` for the later ESS hook.
+Keep this before ESS so the existing ESS Company hook still resolves.
 
-- [ ] **Step 5: Run tests and byte compilation**
+- [ ] **Step 5: Test and compile**
 
 ```bash
-emacs -Q --batch -L lisp \
-  -l test/p3-config-test.el \
-  -f ert-run-tests-batch-and-exit
-
+emacs -Q --batch -L lisp -l test/p3-config-test.el -f ert-run-tests-batch-and-exit
 emacs -Q --batch -L lisp \
   --eval '(setq byte-compile-error-on-warn t)' \
   -f batch-byte-compile lisp/p3-config-completion.el
@@ -661,16 +585,16 @@ git commit -m "Extract completion configuration"
 
 **Files:**
 - Create: `lisp/p3-config-editing.el`
-- Modify: `config.org` (`* General`, `* Global settings`, `** Editing-related`, `** Multiple cursors`, temporary generic command bindings)
+- Modify: `config.org` (`* General`, `* Global settings`, `** Editing-related`, `** Multiple cursors`)
 - Modify: `test/p3-config-test.el`
 
 **Interfaces:**
-- Consumes: feature `p3-commands`; `p3-config-base` exact-source-loads it before this module.
+- Consumes: `p3-commands` (already exact-source-reloaded by base during `C-c r`).
 - Produces: feature `p3-config-editing`.
 
-- [ ] **Step 1: Add failing structural order/ownership tests**
+- [ ] **Step 1: Add failing editing order/ownership tests**
 
-Assert both stanzas exist and editing loads before completion:
+Assert both module stanzas exist and editing loads before completion:
 
 ```elisp
 (let ((editing (progn
@@ -690,11 +614,11 @@ Also assert inline `use-package undo-tree`, `use-package super-save`, and `use-p
 
 - [ ] **Step 2: Verify RED**
 
-Run the focused structural test. Expected: FAIL because no editing module exists.
+Run the focused structural test. Expected: FAIL.
 
 - [ ] **Step 3: Create `p3-config-editing.el`**
 
-Use:
+Start with:
 
 ```elisp
 ;;; p3-config-editing.el --- Generic editing configuration -*- lexical-binding: t; -*-
@@ -703,39 +627,39 @@ Use:
 (require 'p3-commands)
 ```
 
-Move the existing forms, preserving their values/bindings, for:
+Move, preserving current settings/bindings:
 
-- delete-selection mode;
+- delete-selection;
 - before-save whitespace cleanup;
-- CUA mode and `cua-auto-tabify-rectangles`;
+- CUA and `cua-auto-tabify-rectangles`;
 - `indent-tabs-mode` default;
 - default Cyrillic transliteration input method;
 - smartparens;
 - global compile binding and disabled suspend binding;
-- the current initial regex-aware isearch bindings;
+- current initial regex-aware isearch bindings;
 - `C-c a` align-region lambda;
-- generic extracted-command bindings: `C-c s` -> `p3/region-suffix`, `C-c C-SPC` -> `p3/newline-after-comma-or-space`, `C-c q` -> `p3/force-quotes`, `M-<up>` / `M-<down>` -> move-line commands;
+- extracted-command bindings `C-c s`, `C-c C-SPC`, `C-c q`, `M-<up>`, `M-<down>`;
 - google-this;
 - wgrep;
 - undo-tree;
 - super-save;
 - multiple-cursors.
 
-Load this module at the early general/global editing position, before the completion section. That preserves the current final `C-s` / `C-r` outcome because Consult still loads afterward and rebinds them.
+Load this module at the early general/global editing position before completion. This preserves the final Consult `C-s` / `C-r` bindings because completion still loads afterward.
 
 End with `(provide 'p3-config-editing)`.
 
-- [ ] **Step 4: Replace corresponding inline blocks in `config.org`**
+- [ ] **Step 4: Replace corresponding inline blocks**
 
-Add concise prose plus:
+Use concise prose plus:
 
 ```elisp
 (p3/config-load-module 'p3-config-editing)
 ```
 
-Remove the migrated inline blocks and the temporary generic command binding forms left by Task 4.
+Remove the temporary generic command binding forms left by Task 4.
 
-- [ ] **Step 5: Run config/command tests and compile**
+- [ ] **Step 5: Test and compile**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -772,19 +696,13 @@ git commit -m "Extract editing configuration"
 - Produces behavior functions `p3/check-git-installed`, `p3/get-commit-message`, `p3/git-call`, `p3/git-run`, `p3/git-commit-and-push-repository`, `p3/git-commit-and-push-emacs-config`, and `close-magit-buffers`.
 - Produces config feature `p3-config-git` and `p3/magit-command-map`.
 
-- [ ] **Step 1: Write failing Git behavior tests**
+- [ ] **Step 1: Create failing Git behavior tests**
 
-Create `test/p3-git-test.el` with repository boilerplate and tests such as:
+Create `test/p3-git-test.el` with normal repository load-path boilerplate and:
 
 ```elisp
 (require 'ert)
 (require 'cl-lib)
-(add-to-list 'load-path
-             (expand-file-name "lisp"
-                               (file-name-directory
-                                (directory-file-name
-                                 (file-name-directory
-                                  (or load-file-name buffer-file-name))))))
 (require 'p3-git)
 
 (ert-deftest p3-git-run-returns-output-on-success ()
@@ -812,35 +730,30 @@ Create `test/p3-git-test.el` with repository boilerplate and tests such as:
       (when (buffer-live-p other) (kill-buffer other)))))
 ```
 
-- [ ] **Step 2: Run Git tests and verify RED**
+- [ ] **Step 2: Verify RED**
+
+```bash
+emacs -Q --batch -L lisp -l test/p3-git-test.el -f ert-run-tests-batch-and-exit
+```
 
 Expected: FAIL because `p3-git.el` does not exist.
 
-- [ ] **Step 3: Create `p3-git.el` from the exact inline implementations**
+- [ ] **Step 3: Create `p3-git.el`**
 
-Use:
+Start with:
 
 ```elisp
 ;;; p3-git.el --- Personal Git process helpers -*- lexical-binding: t; -*-
 
 (require 'subr-x)
-
-;; Move the seven approved definitions from config.org verbatim.
-
-(provide 'p3-git)
-
-;;; p3-git.el ends here
 ```
 
-Do not alter staging behavior: config repo remains `git add -A`; notes remain `git add -u`; push remains `push --set-upstream origin HEAD`.
+Move the seven approved definitions verbatim from `config.org`. Do not alter staging behavior: config repo remains `git add -A`; notes remain `git add -u`; push remains `push --set-upstream origin HEAD`. End with `(provide 'p3-git)`.
 
-- [ ] **Step 4: Run Git tests and compile behavior library**
+- [ ] **Step 4: Test and compile behavior library**
 
 ```bash
-emacs -Q --batch -L lisp \
-  -l test/p3-git-test.el \
-  -f ert-run-tests-batch-and-exit
-
+emacs -Q --batch -L lisp -l test/p3-git-test.el -f ert-run-tests-batch-and-exit
 emacs -Q --batch -L lisp \
   --eval '(setq byte-compile-error-on-warn t)' \
   -f batch-byte-compile lisp/p3-git.el
@@ -848,7 +761,7 @@ emacs -Q --batch -L lisp \
 
 Expected: PASS.
 
-- [ ] **Step 5: Add failing structural tests for Git config ownership/reload wiring**
+- [ ] **Step 5: Add failing Git config structural tests**
 
 Assert `config.org` source-loads `p3-config-git`, no longer defines the seven Git functions, and `lisp/p3-config-git.el` contains:
 
@@ -858,7 +771,7 @@ Assert `config.org` source-loads `p3-config-git`, no longer defines the seven Gi
 
 - [ ] **Step 6: Create `p3-config-git.el`**
 
-Use:
+Start with:
 
 ```elisp
 ;;; p3-config-git.el --- Git and Magit configuration -*- lexical-binding: t; -*-
@@ -876,19 +789,17 @@ Move verbatim:
 - git-gutter-fringe+ block;
 - `right-fringe-width` setting.
 
-`close-magit-buffers` now comes from `p3-git.el`; do not redefine it here.
+Do not redefine `close-magit-buffers` here. End with `(provide 'p3-config-git)`.
 
-End with `(provide 'p3-config-git)`.
+- [ ] **Step 7: Replace the Git section**
 
-- [ ] **Step 7: Replace the Git section in `config.org`**
-
-Keep a short explanation and:
+Use short prose plus:
 
 ```elisp
 (p3/config-load-module 'p3-config-git)
 ```
 
-- [ ] **Step 8: Run Git/config tests and compile config module**
+- [ ] **Step 8: Test and compile**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -916,22 +827,22 @@ git commit -m "Extract Git behavior and configuration"
 
 **Files:**
 - Create: `lisp/p3-config-workspace.el`
-- Modify: `config.org` (`** Buffers, Windows, and Frames` plus window-related global bindings)
+- Modify: `config.org` (`** Buffers, Windows, and Frames` and window-related global bindings)
 - Modify: `test/p3-config-test.el`
 
 **Interfaces:**
 - Consumes: `p3-commands` for buffer/window helpers.
 - Produces: feature `p3-config-workspace`.
 
-- [ ] **Step 1: Add failing structural tests**
+- [ ] **Step 1: Add failing workspace structural tests**
 
-Assert `config.org` source-loads `p3-config-workspace`, no longer defines `p3/get-local-buffer-mode` or `p3/is-current-buffer-mode-inferior-ess-r-mode`, and the workspace module contains exactly one display policy anchored on:
+Assert `config.org` source-loads `p3-config-workspace`, no longer defines `p3/get-local-buffer-mode` or `p3/is-current-buffer-mode-inferior-ess-r-mode`, and the module contains the existing anchor:
 
 ```elisp
 (major-mode . inferior-ess-r-mode)
 ```
 
-Also assert the workspace module does not introduce `python`, `vterm`, `shell-mode`, or a generic REPL pattern inside its `display-buffer-alist` rule.
+Also assert its display policy does not add `python`, `vterm`, `shell-mode`, or a generic REPL matcher.
 
 - [ ] **Step 2: Verify RED**
 
@@ -939,7 +850,7 @@ Run the focused structural test. Expected: FAIL.
 
 - [ ] **Step 3: Create `p3-config-workspace.el`**
 
-Use:
+Start with:
 
 ```elisp
 ;;; p3-config-workspace.el --- Window, buffer, and navigation configuration -*- lexical-binding: t; -*-
@@ -950,31 +861,29 @@ Use:
 
 Move verbatim:
 
-- transpose-frame declaration and `C-c t` binding;
+- transpose-frame and `C-c t`;
 - the existing `inferior-ess-r-mode` `display-buffer-alist` entry, unchanged;
 - ace-window and `M-o`;
-- winner mode;
+- winner;
 - restart-emacs;
 - Avy and `M-s`;
-- Windows/Linux resize-window global bindings;
+- Windows/Linux resize-window bindings;
 - `C-c k` -> `kill-buffer-and-window`;
 - `C-x C-k` -> `p3/save-kill-other-buffers`.
 
-Do not add any generic side-window behavior.
+Do not add any generic side-window behavior. End with `(provide 'p3-config-workspace)`.
 
-End with `(provide 'p3-config-workspace)`.
+- [ ] **Step 4: Replace old workspace/window blocks**
 
-- [ ] **Step 4: Replace old workspace/window blocks in `config.org`**
-
-At the existing Buffers/Windows/Frames location, retain concise prose and:
+At the existing Buffers/Windows/Frames location, retain short prose plus:
 
 ```elisp
 (p3/config-load-module 'p3-config-workspace)
 ```
 
-Delete the migrated window resize bindings from their earlier global section and the two inline buffer-mode helper definitions.
+Delete migrated window resize bindings from the earlier global section and delete the two inline buffer-mode helper definitions.
 
-- [ ] **Step 5: Run tests and compile**
+- [ ] **Step 5: Test and compile**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -998,7 +907,7 @@ git commit -m "Extract workspace configuration"
 
 ---
 
-### Task 9: Finish structural boundary tests, stale-bytecode regression, and CI coverage
+### Task 9: Finish reload, stale-bytecode, architecture, and CI regression gates
 
 **Files:**
 - Modify: `test/p3-config-loader-test.el`
@@ -1008,16 +917,72 @@ git commit -m "Extract workspace configuration"
 
 **Interfaces:**
 - Consumes: all modules from Tasks 1-8.
-- Produces: final architecture regression gate.
+- Produces: final architecture/reload regression gate.
 
-- [ ] **Step 1: Add the stale-bytecode regression test**
+- [ ] **Step 1: Add owner-pattern reload tests for both new behavior libraries**
 
-Add to `test/p3-config-loader-test.el` a test that creates a temporary load-path entry, byte-compiles version 1, rewrites a newer source version 2, sets `load-prefer-newer` to `t`, and verifies ordinary `require` loads version 2:
+The production base/Git modules are declarative and package-heavy, so test their reload mechanism in isolation with temporary owner modules using the same filenames and exact pattern. Add a helper to `test/p3-config-loader-test.el`:
+
+```elisp
+(defun p3-config-loader-test--write-owned-module
+    (directory owner behavior value)
+  "Write OWNER that exact-source-loads BEHAVIOR setting VALUE."
+  (with-temp-file (expand-file-name (format "%s.el" behavior) directory)
+    (insert (format "(setq p3-config-loader-test--owned-value '%s)\n" value)
+            (format "(provide '%s)\n" behavior)))
+  (with-temp-file (expand-file-name (format "%s.el" owner) directory)
+    (insert "(require 'p3-config-loader)\n"
+            (format "(p3/config-load-module '%s)\n" behavior)
+            (format "(provide '%s)\n" owner))))
+```
+
+Then test the two approved owner pairs:
+
+```elisp
+(ert-deftest p3-config-loader-base-owner-reloads-p3-commands ()
+  (let* ((directory (make-temp-file "p3-owner-reload-test-" t))
+         (p3/config-lisp-directory directory))
+    (unwind-protect
+        (progn
+          (p3-config-loader-test--write-owned-module
+           directory 'p3-config-base 'p3-commands 'one)
+          (p3/config-load-module 'p3-config-base)
+          (should (eq p3-config-loader-test--owned-value 'one))
+          (p3-config-loader-test--write-owned-module
+           directory 'p3-config-base 'p3-commands 'two)
+          (p3/config-load-module 'p3-config-base)
+          (should (eq p3-config-loader-test--owned-value 'two)))
+      (dolist (feature '(p3-config-base p3-commands))
+        (setq features (delq feature features)))
+      (delete-directory directory t))))
+
+(ert-deftest p3-config-loader-git-owner-reloads-p3-git ()
+  (let* ((directory (make-temp-file "p3-owner-reload-test-" t))
+         (p3/config-lisp-directory directory))
+    (unwind-protect
+        (progn
+          (p3-config-loader-test--write-owned-module
+           directory 'p3-config-git 'p3-git 'one)
+          (p3/config-load-module 'p3-config-git)
+          (should (eq p3-config-loader-test--owned-value 'one))
+          (p3-config-loader-test--write-owned-module
+           directory 'p3-config-git 'p3-git 'two)
+          (p3/config-load-module 'p3-config-git)
+          (should (eq p3-config-loader-test--owned-value 'two)))
+      (dolist (feature '(p3-config-git p3-git))
+        (setq features (delq feature features)))
+      (delete-directory directory t))))
+```
+
+Combined with structural tests that production `p3-config-base.el` and `p3-config-git.el` contain the same exact-source owner calls, these tests cover the approved reload contract without loading external packages in ERT.
+
+- [ ] **Step 2: Add the stale-bytecode regression test**
 
 ```elisp
 (ert-deftest p3-config-loader-load-prefer-newer-protects-local-requires ()
   (let* ((directory (make-temp-file "p3-stale-bytecode-test-" t))
          (source (expand-file-name "p3-stale-bytecode-test-module.el" directory))
+         (compiled (concat source "c"))
          (feature 'p3-stale-bytecode-test-module)
          (load-path (cons directory load-path))
          (load-prefer-newer t))
@@ -1027,10 +992,11 @@ Add to `test/p3-config-loader-test.el` a test that creates a temporary load-path
             (insert "(setq p3-config-loader-test--stale-value 'old)\n"
                     "(provide 'p3-stale-bytecode-test-module)\n"))
           (byte-compile-file source)
-          (sleep-for 1)
           (with-temp-file source
             (insert "(setq p3-config-loader-test--stale-value 'new)\n"
                     "(provide 'p3-stale-bytecode-test-module)\n"))
+          (set-file-times compiled (seconds-to-time 1000000000))
+          (set-file-times source (seconds-to-time 2000000000))
           (setq features (delq feature features)
                 p3-config-loader-test--stale-value nil)
           (require feature)
@@ -1039,28 +1005,24 @@ Add to `test/p3-config-loader-test.el` a test that creates a temporary load-path
       (delete-directory directory t))))
 ```
 
-If filesystem timestamp granularity makes `sleep-for 1` insufficient on a runner, replace timing with explicit `set-file-times` on source and `.elc`; do not add retry loops.
+- [ ] **Step 3: Complete architecture structural assertions**
 
-- [ ] **Step 2: Complete architecture structural assertions**
+Ensure `test/p3-config-test.el` checks:
 
-Ensure `test/p3-config-test.el` now checks all of these in one or more focused tests:
-
-- all five exact-source stanzas exist;
+- all five exact-source config-module stanzas exist;
 - `p3-config-editing` precedes `p3-config-completion`;
 - early order is newer -> auto-compile -> secrets -> Rtools -> ordinary config modules;
 - R-program and shell configuration still occur later;
 - every listed moved function is absent from `config.org`;
 - `p3-config-base.el` exact-source-loads `p3-commands`;
 - `p3-config-git.el` exact-source-loads `p3-git`;
-- `p3-commands.el` and `p3-git.el` contain no `(require 'p3-config-...` dependency;
-- generated `config.el` contract still builds through `p3/config-build`;
-- `.gitignore` still ignores generated `config.el` and `*.elc`.
+- `p3-commands.el` and `p3-git.el` contain no dependency on `p3-config-*`;
+- the real config still builds through `p3/config-build`;
+- generated `config.el` and `*.elc` remain ignored/untracked.
 
 Use string/ordering assertions, not exact line counts.
 
-- [ ] **Step 3: Run the full local ERT suite before touching workflows**
-
-Run:
+- [ ] **Step 4: Run the full local ERT suite**
 
 ```bash
 emacs -Q --batch \
@@ -1083,9 +1045,7 @@ emacs -Q --batch \
 
 Expected: all tests PASS.
 
-- [ ] **Step 4: Byte-compile every tracked module with warnings as errors**
-
-Run:
+- [ ] **Step 5: Byte-compile every tracked module with warnings as errors**
 
 ```bash
 emacs -Q --batch \
@@ -1112,48 +1072,19 @@ emacs -Q --batch \
 
 Expected: success with no warnings.
 
-- [ ] **Step 5: Update Ubuntu workflow once**
+- [ ] **Step 6: Update the Ubuntu workflow once**
 
-In `.github/workflows/emacs-tests.yml`:
+In `.github/workflows/emacs-tests.yml`, add the seven new Lisp files to byte compilation and add `test/p3-commands-test.el` plus `test/p3-git-test.el` to the ERT command. Make no other CI expansion.
 
-- add the seven new Lisp files to `Byte-compile extracted modules`;
-- add `test/p3-commands-test.el` and `test/p3-git-test.el` to the ERT command;
-- make no other CI expansion.
+- [ ] **Step 7: Update the Windows workflow narrowly**
 
-- [ ] **Step 6: Update the Windows workflow narrowly**
+Add PR path triggers for `config.org`, all new local modules, `test/p3-config-test.el`, `test/p3-commands-test.el`, and `test/p3-git-test.el`. Extend Windows byte compilation at minimum with `lisp/p3-commands.el` and `lisp/p3-git.el`. Keep existing config-loader coverage and run `test/p3-config-test.el` on Windows so the real secrets/Rtools/source-loader ordering is checked. Do not duplicate the full Ubuntu suite.
 
-In `.github/workflows/windows-platform-tests.yml`:
+- [ ] **Step 8: Re-run local full ERT and byte compilation after workflow edits**
 
-Add PR path triggers for:
+Run Steps 4 and 5 again. Expected: PASS.
 
-```yaml
-      - "config.org"
-      - "lisp/p3-commands.el"
-      - "lisp/p3-git.el"
-      - "lisp/p3-config-base.el"
-      - "lisp/p3-config-editing.el"
-      - "lisp/p3-config-completion.el"
-      - "lisp/p3-config-workspace.el"
-      - "lisp/p3-config-git.el"
-      - "test/p3-config-test.el"
-      - "test/p3-commands-test.el"
-      - "test/p3-git-test.el"
-```
-
-Extend the Windows byte-compile step at minimum with:
-
-```text
-lisp/p3-commands.el
-lisp/p3-git.el
-```
-
-Keep the existing loader compile/test coverage. Add `test/p3-config-test.el` to a Windows batch ERT invocation so secrets/Rtools/source-loader ordering is verified from the real repository text. Do not turn this into a broad duplicate of the Ubuntu suite.
-
-- [ ] **Step 7: Re-run local equivalents after workflow edits**
-
-Re-run Steps 3 and 4. Expected: PASS.
-
-- [ ] **Step 8: Commit final gate changes**
+- [ ] **Step 9: Commit final gate changes**
 
 ```bash
 git add test/p3-config-loader-test.el test/p3-config-test.el \
@@ -1173,8 +1104,6 @@ git commit -m "Verify configuration module boundaries"
 
 - [ ] **Step 1: Compare branch against `master`**
 
-Run:
-
 ```bash
 git diff --stat master...HEAD
 git diff --check master...HEAD
@@ -1185,23 +1114,21 @@ Expected: no whitespace errors; only intended source/tests/docs/workflow files c
 
 - [ ] **Step 2: Adversarially review the final diff against the spec**
 
-Explicitly check:
+Check explicitly:
 
 - no moved function remains duplicated inline;
 - no unapproved helper was swept into `p3-commands.el` or `p3-git.el`;
 - no ESS/Python/Org/terminal/GPTel redesign slipped in;
-- the ESS display rule is byte-for-byte equivalent in behavior and still narrow;
-- `C-c r` reaches every new `p3-config-*` source and, through base/Git config modules, the two new behavior libraries;
-- early secrets override semantics are intact;
+- the ESS display rule is behaviorally unchanged and still narrow;
+- `C-c r` reaches all five new config-module sources and, through base/Git owner modules, both new behavior libraries;
+- secrets-based Rtools overrides remain effective;
 - Company configuration is unchanged;
 - Git staging/push behavior is unchanged;
-- config module loading uses explicit names only; there is no discovery/registry mechanism.
+- local config module loading uses explicit names only; there is no registry/discovery layer.
 
-- [ ] **Step 3: Run the full local verification one last time**
+- [ ] **Step 3: Run the full local gate one last time**
 
-Run the full ERT and byte-compile commands from Task 9.
-
-Expected: PASS.
+Run Task 9 Steps 4 and 5. Expected: PASS.
 
 - [ ] **Step 4: Open one PR only after the branch is locally green**
 
@@ -1211,36 +1138,14 @@ Use title:
 Split declarative configuration into focused modules
 ```
 
-PR body should summarize:
+The PR body must state: five `p3-config-*` modules; `p3-commands.el` / `p3-git.el` extraction; exact-source reload contract; preserved single-cache startup; explicit secrets/Rtools ordering; deferred ESS/Python/Org/etc. work; verification performed; and no merge without explicit approval.
 
-- five `p3-config-*` modules;
-- `p3-commands.el` / `p3-git.el` behavior extraction;
-- exact-source reload contract;
-- preserved single-cache startup;
-- explicit secrets/Rtools ordering;
-- deferred ESS/Python/Org/etc. work;
-- test coverage and no-merge-without-approval constraint.
+- [ ] **Step 5: Inspect exact-head Ubuntu and Windows CI**
 
-Do not merge.
+Expected: Ubuntu byte compilation and full ERT succeed; Windows boundary compilation/config tests succeed.
 
-- [ ] **Step 5: Inspect exact-head Ubuntu and Windows CI once**
-
-Expected:
-
-- Ubuntu byte compilation succeeds;
-- full ERT suite succeeds;
-- Windows boundary compilation/tests succeed.
-
-If a gate fails, fix only the root cause, rerun the narrow failing test locally where possible, push one corrective commit, and allow CI to rerun. After two unproductive attempts on the same failure mode, change diagnostic strategy rather than adding diagnostic machinery.
+If a gate fails, fix the root cause, run the narrow failing test locally where possible, push one corrective commit, and allow CI to rerun. After two unproductive attempts on the same failure mode, switch diagnostic strategy rather than adding diagnostic machinery.
 
 - [ ] **Step 6: Final PR review and handoff**
 
-Report:
-
-- exact branch/HEAD SHA;
-- changed-file count;
-- exact-head CI results;
-- any non-blocking observations;
-- recommendation on squash merge.
-
-Wait for explicit merge approval.
+Report exact branch/HEAD SHA, changed-file count, exact-head CI results, any non-blocking observations, and the recommended merge method. Wait for explicit merge approval.
