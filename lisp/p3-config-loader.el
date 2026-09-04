@@ -105,7 +105,8 @@
 (defun p3/config-build ()
   "Rebuild and validate the generated cache from `p3/config-source'."
   (interactive)
-  (let* ((source-digest (p3/config--source-digest))
+  (let* ((interactive-build (called-interactively-p 'interactive))
+         (source-digest (p3/config--source-digest))
          (directory (file-name-directory p3/config-generated))
          (staged (make-temp-file
                   (expand-file-name ".p3-config-stage-" directory)
@@ -115,9 +116,10 @@
           (require 'org)
           (require 'ob-tangle)
           (p3/config--validate-tangle-contract)
-          (let ((outputs
-                 (org-babel-tangle-file
-                  p3/config-source staged "emacs-lisp")))
+          (let* ((inhibit-message (not interactive-build))
+                 (outputs
+                  (org-babel-tangle-file
+                   p3/config-source staged "emacs-lisp")))
             (p3/config--assert-single-tangle-output outputs staged))
           (unless (equal source-digest (p3/config--source-digest))
             (error "%s changed while the config cache was being built"
@@ -125,7 +127,7 @@
           (p3/config--insert-fingerprint staged source-digest)
           (p3/config--assert-readable-elisp staged)
           (rename-file staged p3/config-generated t)
-          (when (called-interactively-p 'interactive)
+          (when interactive-build
             (message "Built %s" p3/config-generated))
           p3/config-generated)
       (when (file-exists-p staged)
