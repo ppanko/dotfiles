@@ -30,6 +30,7 @@ jobs:
             -f batch-byte-compile \
             lisp/p3-platform.el \
             lisp/p3-project.el \
+            lisp/p3-config-loader.el \
             lisp/p3-core.el \
             lisp/p3-python.el \
             lisp/p3-terminal.el \
