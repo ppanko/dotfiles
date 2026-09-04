@@ -26,6 +26,8 @@ jobs:
         run: |
           emacs -Q --batch \
             -L lisp \
+            --eval '(require (quote use-package-ensure))' \
+            --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
             --eval '(setq byte-compile-error-on-warn t)' \
             -f batch-byte-compile \
             lisp/p3-platform.el \
@@ -37,6 +39,7 @@ jobs:
             lisp/p3-config-base.el \
             lisp/p3-config-editing.el \
             lisp/p3-config-completion.el \
+            lisp/p3-config-ess.el \
             lisp/p3-config-workspace.el \
             lisp/p3-config-git.el \
             lisp/p3-python.el \
@@ -51,6 +54,7 @@ jobs:
             -L lisp \
             -l test/p3-config-loader-test.el \
             -l test/p3-config-test.el \
+            -l test/p3-config-ess-test.el \
             -l test/p3-project-test.el \
             -l test/p3-core-test.el \
             -l test/p3-platform-test.el \

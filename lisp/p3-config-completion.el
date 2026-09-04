@@ -2,7 +2,6 @@
 
 (require 'use-package)
 
-(defvar company-backends)
 (defvar company-dabbrev-downcase)
 (defvar xref-show-xrefs-function)
 (defvar xref-show-definitions-function)
@@ -86,20 +85,6 @@
 
 (use-package company
   :hook (after-init . global-company-mode)
-  :init
-  (defvar p3/r-company-backends
-    '((:separate
-       ;; Help and objects.
-       company-R-library company-R-args company-R-objects
-       company-dabbrev-code
-       :with company-yasnippet)
-      ;; Filenames and other completion-at-point providers.
-      company-capf)
-    "Company completion backends used in ESS R buffers.")
-
-  (defun p3/ess-company-config ()
-    "Configuration for ESS."
-    (setq-local company-backends p3/r-company-backends))
   :config
   (setq company-dabbrev-downcase nil))
 
