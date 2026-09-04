@@ -17,6 +17,8 @@
 (defvar p3/package-refresh-attempted)
 (defvar comint-scroll-to-bottom-on-input)
 (defvar comint-scroll-to-bottom-on-output)
+(defvar mouse-wheel-scroll-amount)
+(defvar mouse-wheel-progressive-speed)
 (defvar tramp-backup-directory-alist)
 (defvar tramp-auto-save-directory)
 (defvar all-the-icons-scale-factor)
