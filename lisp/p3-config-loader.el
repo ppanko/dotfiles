@@ -41,6 +41,15 @@
     (or (null recorded)
         (not (equal recorded (p3/config--source-digest))))))
 
+(defun p3/config--assert-safe-tangle-info (info)
+  "Reject an INFO record whose tangle setting could escape staging."
+  (let* ((params (nth 2 info))
+         (tangle (cdr (assq :tangle params))))
+    (unless (or (null tangle)
+                (equal (format "%s" tangle) "no"))
+      (user-error "Unsupported :tangle setting %S in %s"
+                  tangle p3/config-source))))
+
 (defun p3/config--validate-tangle-contract ()
   "Reject source blocks whose tangle setting could escape staging."
   (with-temp-buffer
@@ -48,18 +57,18 @@
     (setq buffer-file-name p3/config-source)
     (org-mode)
     (goto-char (point-min))
+    ;; `org-babel-next-src-block' moves to a later block, so validate a
+    ;; source block already under point before advancing through the file.
+    (let ((info (org-babel-get-src-block-info 'light)))
+      (when info
+        (p3/config--assert-safe-tangle-info info)))
     (let ((done nil))
       (while (not done)
         (condition-case err
             (progn
               (org-babel-next-src-block 1)
-              (let* ((info (org-babel-get-src-block-info 'light))
-                     (params (nth 2 info))
-                     (tangle (cdr (assq :tangle params))))
-                (unless (or (null tangle)
-                            (equal (format "%s" tangle) "no"))
-                  (user-error "Unsupported :tangle setting %S in %s"
-                              tangle p3/config-source))))
+              (p3/config--assert-safe-tangle-info
+               (org-babel-get-src-block-info 'light)))
           (user-error
            (if (string-match-p
                 "\\`No \\(?:further \\)?code blocks\\'"
