@@ -41,6 +41,7 @@ jobs:
         run: |
           emacs -Q --batch \
             -L lisp \
+            -l test/p3-config-loader-test.el \
             -l test/p3-config-test.el \
             -l test/p3-project-test.el \
             -l test/p3-core-test.el \
