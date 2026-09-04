@@ -63,6 +63,16 @@
       (cadr value)
     value))
 
+(defun p3-config-python-test--count-occurrences (needle contents)
+  "Return the number of non-overlapping NEEDLE occurrences in CONTENTS."
+  (let ((start 0)
+        (count 0)
+        (regexp (regexp-quote needle)))
+    (while (string-match regexp contents start)
+      (setq count (1+ count)
+            start (match-end 0)))
+    count))
+
 (defun p3-config-python-test--python-bindings ()
   "Return normalized source bindings for `python-mode'."
   (let* ((form (p3-config-python-test--use-package-form 'python))
@@ -209,6 +219,18 @@
    (member
     '(setq flycheck-python-flake8-executable "flake8")
     (p3-config-python-test--forms "lisp/p3-config-python.el"))))
+
+(ert-deftest p3-config-python-config-org-delegates-python-wiring ()
+  (let* ((contents (p3-config-python-test--contents "config.org"))
+         (owner "(p3/config-load-module 'p3-config-python)"))
+    (should (= 1 (p3-config-python-test--count-occurrences owner contents)))
+    (dolist (forbidden '("(use-package p3-python"
+                          "(use-package python"
+                          "(use-package eglot"
+                          "(add-hook 'python-ts-mode-hook"
+                          "flycheck-python-flake8-executable"))
+      (should-not (string-match-p (regexp-quote forbidden) contents)))
+    (should (string-match-p (regexp-quote "(python . t)") contents))))
 
 (provide 'p3-config-python-test)
 
