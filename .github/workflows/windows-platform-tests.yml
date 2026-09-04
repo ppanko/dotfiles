@@ -64,4 +64,4 @@ jobs:
         run: >-
           emacs -Q --batch -L lisp
           -l test/p3-config-loader-test.el
-          --eval "(ert-run-tests-batch-and-exit \"^p3-config-loader-build-replaces-existing-cache$\")"
+          --eval '(ert-run-tests-batch-and-exit "^p3-config-loader-build-replaces-existing-cache$")'
