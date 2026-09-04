@@ -13,6 +13,10 @@
   (expand-file-name "config.el" user-emacs-directory)
   "Ignored generated cache for `p3/config-source'.")
 
+(defconst p3/config-lisp-directory
+  (expand-file-name "lisp" user-emacs-directory)
+  "Directory containing tracked local Emacs Lisp modules.")
+
 (defconst p3/config--fingerprint-prefix
   ";; p3-config-source-sha256: "
   "Prefix used to record the source digest in the generated cache.")
@@ -40,6 +44,22 @@
   (let ((recorded (p3/config--generated-digest)))
     (or (null recorded)
         (not (equal recorded (p3/config--source-digest))))))
+
+(defun p3/config--module-path (module)
+  "Return the tracked source path for local MODULE."
+  (unless (symbolp module)
+    (signal 'wrong-type-argument (list 'symbolp module)))
+  (let ((name (symbol-name module)))
+    (unless (string-match-p "\\`[[:alnum:]-]+\\'" name)
+      (user-error "Invalid local module name: %S" module))
+    (expand-file-name (concat name ".el") p3/config-lisp-directory)))
+
+(defun p3/config-load-module (module)
+  "Load exactly the tracked `.el' source for local MODULE."
+  (let ((path (p3/config--module-path module)))
+    (unless (file-readable-p path)
+      (signal 'file-missing (list "Local module source is missing" path)))
+    (load-file path)))
 
 (defun p3/config--assert-safe-tangle-info (info)
   "Reject an INFO record whose tangle setting could escape staging."

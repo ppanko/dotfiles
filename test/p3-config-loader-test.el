@@ -48,6 +48,17 @@
   "Return staged config-cache files remaining in DIRECTORY."
   (directory-files directory t "\\`\\.p3-config-stage-"))
 
+(defun p3-config-loader-test--write-owned-module
+    (directory owner behavior value)
+  "Write OWNER that exact-source-loads BEHAVIOR setting VALUE."
+  (with-temp-file (expand-file-name (format "%s.el" behavior) directory)
+    (insert (format "(setq p3-config-loader-test--owned-value '%s)\n" value)
+            (format "(provide '%s)\n" behavior)))
+  (with-temp-file (expand-file-name (format "%s.el" owner) directory)
+    (insert "(require 'p3-config-loader)\n"
+            (format "(p3/config-load-module '%s)\n" behavior)
+            (format "(provide '%s)\n" owner))))
+
 (ert-deftest p3-config-loader-does-not-load-org-at-module-load ()
   (should-not p3-config-loader-test--org-loaded-by-loader-p)
   (should-not p3-config-loader-test--ob-tangle-loaded-by-loader-p))
@@ -93,6 +104,94 @@
     (setq p3-config-loader-test--loaded nil)
     (p3/config-load-generated)
     (should (eq p3-config-loader-test--loaded 'source))))
+
+(ert-deftest p3-config-loader-load-module-reloads-exact-source ()
+  (let* ((directory (make-temp-file "p3-config-module-test-" t))
+         (p3/config-lisp-directory directory)
+         (source (expand-file-name "p3-test-module.el" directory)))
+    (unwind-protect
+        (progn
+          (with-temp-file source
+            (insert "(setq p3-config-loader-test--module-value 'one)\n"
+                    "(provide 'p3-test-module)\n"))
+          (setq p3-config-loader-test--module-value nil)
+          (provide 'p3-test-module)
+          (p3/config-load-module 'p3-test-module)
+          (should (eq p3-config-loader-test--module-value 'one))
+          (with-temp-file source
+            (insert "(setq p3-config-loader-test--module-value 'two)\n"
+                    "(provide 'p3-test-module)\n"))
+          (p3/config-load-module 'p3-test-module)
+          (should (eq p3-config-loader-test--module-value 'two)))
+      (setq features (delq 'p3-test-module features))
+      (delete-directory directory t))))
+
+(ert-deftest p3-config-loader-load-module-rejects-missing-source ()
+  (let ((p3/config-lisp-directory
+         (make-temp-file "p3-config-module-test-" t)))
+    (unwind-protect
+        (should-error (p3/config-load-module 'p3-missing-module)
+                      :type 'file-missing)
+      (delete-directory p3/config-lisp-directory t))))
+
+(ert-deftest p3-config-loader-base-owner-reloads-p3-commands ()
+  (let* ((directory (make-temp-file "p3-owner-reload-test-" t))
+         (p3/config-lisp-directory directory))
+    (unwind-protect
+        (progn
+          (p3-config-loader-test--write-owned-module
+           directory 'p3-config-base 'p3-commands 'one)
+          (p3/config-load-module 'p3-config-base)
+          (should (eq p3-config-loader-test--owned-value 'one))
+          (p3-config-loader-test--write-owned-module
+           directory 'p3-config-base 'p3-commands 'two)
+          (p3/config-load-module 'p3-config-base)
+          (should (eq p3-config-loader-test--owned-value 'two)))
+      (dolist (feature '(p3-config-base p3-commands))
+        (setq features (delq feature features)))
+      (delete-directory directory t))))
+
+(ert-deftest p3-config-loader-git-owner-reloads-p3-git ()
+  (let* ((directory (make-temp-file "p3-owner-reload-test-" t))
+         (p3/config-lisp-directory directory))
+    (unwind-protect
+        (progn
+          (p3-config-loader-test--write-owned-module
+           directory 'p3-config-git 'p3-git 'one)
+          (p3/config-load-module 'p3-config-git)
+          (should (eq p3-config-loader-test--owned-value 'one))
+          (p3-config-loader-test--write-owned-module
+           directory 'p3-config-git 'p3-git 'two)
+          (p3/config-load-module 'p3-config-git)
+          (should (eq p3-config-loader-test--owned-value 'two)))
+      (dolist (feature '(p3-config-git p3-git))
+        (setq features (delq feature features)))
+      (delete-directory directory t))))
+
+(ert-deftest p3-config-loader-load-prefer-newer-protects-local-requires ()
+  (let* ((directory (make-temp-file "p3-stale-bytecode-test-" t))
+         (source (expand-file-name "p3-stale-bytecode-test-module.el" directory))
+         (compiled (concat source "c"))
+         (feature 'p3-stale-bytecode-test-module)
+         (load-path (cons directory load-path))
+         (load-prefer-newer t))
+    (unwind-protect
+        (progn
+          (with-temp-file source
+            (insert "(setq p3-config-loader-test--stale-value 'old)\n"
+                    "(provide 'p3-stale-bytecode-test-module)\n"))
+          (byte-compile-file source)
+          (with-temp-file source
+            (insert "(setq p3-config-loader-test--stale-value 'new)\n"
+                    "(provide 'p3-stale-bytecode-test-module)\n"))
+          (set-file-times compiled (seconds-to-time 1000000000))
+          (set-file-times source (seconds-to-time 2000000000))
+          (setq features (delq feature features)
+                p3-config-loader-test--stale-value nil)
+          (require feature)
+          (should (eq p3-config-loader-test--stale-value 'new)))
+      (setq features (delq feature features))
+      (delete-directory directory t))))
 
 (ert-deftest p3-config-loader-current-cache-loads-without-build-or-org-require ()
   (p3-config-loader-test--with-files "source"
