@@ -7,6 +7,17 @@
 (defvar git-gutter-fr+-side)
 (declare-function global-git-gutter+-mode "git-gutter-fringe+" (&optional arg))
 (declare-function close-magit-buffers "p3-git" ())
+(declare-function magit-stage-files "magit" (files))
+(declare-function magit-commit-create "magit" (&optional args))
+(declare-function magit-pull "magit" ())
+(declare-function magit-merge "magit" ())
+(declare-function magit-push-current-to-pushremote "magit" (&optional args))
+(declare-function magit-remote-add "magit" (remote url &optional args))
+(declare-function magit-status "magit" (&optional directory cache))
+(declare-function magit-log-current "magit" (&optional args files))
+(declare-function magit-diff "magit" (&optional range args files))
+(declare-function magit-blame "magit" (&optional reverse))
+(declare-function magit-after-save-refresh-status "magit-mode" ())
 
 (global-set-key (kbd "C-c C-g") #'p3/git-commit-and-push-emacs-config)
 
