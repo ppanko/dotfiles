@@ -26,6 +26,7 @@ jobs:
         run: |
           emacs -Q --batch \
             -L lisp \
+            -L spikes/pptx-editor \
             --eval '(require (quote use-package-ensure))' \
             --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
             --eval '(setq byte-compile-error-on-warn t)' \
@@ -54,6 +55,7 @@ jobs:
         run: |
           emacs -Q --batch \
             -L lisp \
+            -L spikes/pptx-editor \
             -l test/p3-config-loader-test.el \
             -l test/p3-config-test.el \
             -l test/p3-config-ess-test.el \
