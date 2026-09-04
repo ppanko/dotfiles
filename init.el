@@ -69,15 +69,6 @@
 (setq use-package-ensure-function #'p3/use-package-ensure
       use-package-always-ensure t)
 
-;; Keep the generated file as a cache, never as an independent source of
-;; truth.  Tangling on every startup prevents config.el from drifting from
-;; config.org, including after a checkout or a merge.
-(require 'org)
-(require 'ob-tangle)
-(defconst p3/config-source
-  (expand-file-name "config.org" user-emacs-directory))
-(defconst p3/config-generated
-  (expand-file-name "config.el" user-emacs-directory))
 (defconst p3/lisp-directory
   (expand-file-name "lisp" user-emacs-directory))
 (add-to-list 'load-path p3/lisp-directory)
@@ -86,13 +77,10 @@
 ;; project-aware package has a chance to populate `project.el' caches.
 (require 'p3-project)
 
-(defun p3/load-config (&optional quiet)
-  "Tangle and load the literate configuration from `p3/config-source'."
-  (org-babel-tangle-file p3/config-source p3/config-generated)
-  (load-file p3/config-generated)
-  (unless quiet
-    (message "Loaded %s" p3/config-source)))
-(p3/load-config t)
+;; Load the generated literate-config cache, rebuilding it only when its
+;; embedded source fingerprint no longer matches config.org.
+(require 'p3-config-loader)
+(p3/config-load)
 
 (defun p3/recentf-record-current-buffer (&rest _)
   "Treat a completed Consult buffer switch as recent file access."
