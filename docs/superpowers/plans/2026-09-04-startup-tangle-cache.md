@@ -33,7 +33,7 @@
 ## File Structure
 
 - **Create `lisp/p3-config-loader.el`** — config source/cache paths, SHA-256 fingerprint handling, tangle-contract validation, staged build, exact generated-file load, startup load decision.
-- **Create `test/p3-config-loader-test.el`** — isolated unit tests for fingerprinting, direct loading, staged build behavior, failure preservation, and replacement.
+- **Create `test/p3-config-loader-test.el`** — isolated unit tests for fingerprinting, direct loading, stale-cache rebuilds, staged build behavior, failure preservation, and replacement.
 - **Modify `lisp/p3-core.el`** — depend on the loader and implement reload as exactly one explicit build plus one direct load.
 - **Modify `init.el`** — remove unconditional Org/Babel/tangle bootstrap and call `p3/config-load` after `p3-project`.
 - **Modify `test/p3-core-test.el`** — verify reload delegates exactly once to build and direct load.
@@ -54,7 +54,7 @@
 - Produces: `p3/config-generated` — absolute path to ignored `config.el`.
 - Produces: `p3/config-cache-stale-p` — returns non-nil unless the generated header fingerprint exactly matches the current source digest.
 - Produces: `p3/config-load-generated` — loads exactly `p3/config-generated` with `load-file`.
-- Produces: `p3/config-load` — later extended to build on stale/missing cache, then load.
+- Produces: `p3/config-load` — later uses `p3/config-build` on stale/missing cache, then loads the exact generated file.
 - Internal: `p3/config--source-digest`, `p3/config--generated-digest`, `p3/config--fingerprint-prefix`.
 
 - [ ] **Step 1: Write the loader tests for content-based validity**
@@ -124,7 +124,6 @@ Create `test/p3-config-loader-test.el` with a loader-isolation snapshot taken im
     (p3-config-loader-test--write-current-cache "(setq p3-test-cache t)\n")
     (with-temp-file p3/config-source
       (insert "source-v2"))
-    ;; Make the stale cache newer than the source to prove mtimes are irrelevant.
     (set-file-times p3/config-source (seconds-to-time 1000000000))
     (set-file-times p3/config-generated (seconds-to-time 2000000000))
     (should (p3/config-cache-stale-p))))
@@ -132,7 +131,6 @@ Create `test/p3-config-loader-test.el` with a loader-isolation snapshot taken im
 (ert-deftest p3-config-loader-matching-fingerprint-is-current-regardless-of-mtime ()
   (p3-config-loader-test--with-files "source"
     (p3-config-loader-test--write-current-cache "(setq p3-test-cache t)\n")
-    ;; Make the valid cache older than the source to prove mtimes are irrelevant.
     (set-file-times p3/config-generated (seconds-to-time 1000000000))
     (set-file-times p3/config-source (seconds-to-time 2000000000))
     (should-not (p3/config-cache-stale-p))))
@@ -219,14 +217,20 @@ Append:
     (p3/config-load-generated)
     (should (eq p3-config-loader-test--loaded 'source))))
 
-(ert-deftest p3-config-loader-current-cache-loads-without-build ()
+(ert-deftest p3-config-loader-current-cache-loads-without-build-or-org-require ()
   (p3-config-loader-test--with-files "source"
     (p3-config-loader-test--write-current-cache
      "(setq p3-config-loader-test--loaded 'current)\n")
     (setq p3-config-loader-test--loaded nil)
-    (cl-letf (((symbol-function 'p3/config-build)
-               (lambda () (ert-fail "Current cache attempted a rebuild"))))
-      (p3/config-load))
+    (let ((original-require (symbol-function 'require)))
+      (cl-letf (((symbol-function 'p3/config-build)
+                 (lambda () (ert-fail "Current cache attempted a rebuild")))
+                ((symbol-function 'require)
+                 (lambda (feature &rest args)
+                   (when (memq feature '(org ob-tangle))
+                     (ert-fail (format "Current cache required %S" feature)))
+                   (apply original-require feature args))))
+        (p3/config-load)))
     (should (eq p3-config-loader-test--loaded 'current))))
 ```
 
@@ -234,7 +238,7 @@ Append:
 
 Expected: FAIL because `p3/config-load-generated` / `p3/config-load` are undefined.
 
-- [ ] **Step 7: Implement exact loading and the initial startup entry point**
+- [ ] **Step 7: Implement exact loading and the startup entry point**
 
 Add:
 
@@ -250,7 +254,7 @@ Add:
   (p3/config-load-generated))
 ```
 
-Do not implement a fake `p3/config-build`; Task 2 immediately supplies the build implementation. For this Task 1 green run, bind `p3/config-build` only in the current-cache test as shown above, so the path under test never calls it.
+Do not implement a fake `p3/config-build`; Task 2 immediately supplies the build implementation. For this Task 1 green run, the current-cache test binds `p3/config-build` and therefore never calls the undefined production function.
 
 - [ ] **Step 8: Run only the Task 1 tests and verify green**
 
@@ -350,13 +354,12 @@ Add:
       (let* ((info (org-babel-get-src-block-info 'light))
              (params (nth 2 info))
              (tangle (cdr (assq :tangle params))))
-        ;; The normal pre-tangle effective value is "no".  Reject "yes" and
-        ;; filenames alike: either could override the staged target supplied
-        ;; by this loader.
         (unless (or (null tangle) (equal (format "%s" tangle) "no"))
           (user-error "Unsupported :tangle setting %S in %s"
                       tangle p3/config-source))))))
 ```
+
+Reject `yes` as well as filenames: either can override the staged target supplied by the loader.
 
 - [ ] **Step 4: Write red tests for output validation, syntax preservation, source stability, and cleanup**
 
@@ -427,7 +430,7 @@ Add:
                    "old-cache"))))
 ```
 
-The source-stability test closes a narrow race in the content-fingerprint contract: the digest recorded in `config.el` must describe the same source contents that were actually tangled.
+The source-stability test closes the narrow race between hashing and tangling: the fingerprint published in `config.el` must describe the same source contents that were actually tangled.
 
 - [ ] **Step 5: Implement staged-file validation helpers**
 
@@ -483,8 +486,6 @@ Add:
                  (org-babel-tangle-file
                   p3/config-source staged "emacs-lisp")))
             (p3/config--assert-single-tangle-output outputs staged))
-          ;; Do not stamp or publish output from a source file that changed
-          ;; while Babel was reading/tangling it.
           (unless (equal source-digest (p3/config--source-digest))
             (error "%s changed while the config cache was being built"
                    p3/config-source))
@@ -500,7 +501,7 @@ Add:
 
 Do not catch build errors. The caller must see tangle/validation failures, and stale startup must not silently load the older cache.
 
-- [ ] **Step 7: Add a green replacement/fingerprint test that will also be reused on Windows**
+- [ ] **Step 7: Add green tests for replacement, stale startup rebuilding, and explicit rebuilding**
 
 Add:
 
@@ -512,6 +513,7 @@ Add:
       (insert "old-cache"))
     (let ((directory (file-name-directory p3/config-generated)))
       (should (equal (p3/config-build) p3/config-generated))
+      (should (commandp #'p3/config-build))
       (should-not (p3/config-cache-stale-p))
       (with-temp-buffer
         (insert-file-contents p3/config-generated)
@@ -519,6 +521,32 @@ Add:
         (should (looking-at ";; p3-config-source-sha256: [0-9a-f]\\{64\\}$"))
         (should (search-forward "p3-config-loader-test--replacement" nil t)))
       (should-not (p3-config-loader-test--stage-files directory)))))
+
+(ert-deftest p3-config-loader-mismatched-cache-rebuilds-before-load ()
+  (p3-config-loader-test--with-files
+      "#+begin_src emacs-lisp\n(setq p3-config-loader-test--loaded 'fresh)\n#+end_src\n"
+    (with-temp-file p3/config-generated
+      (insert ";; p3-config-source-sha256: "
+              (make-string 64 ?0)
+              "\n(setq p3-config-loader-test--loaded 'stale)\n"))
+    (setq p3-config-loader-test--loaded nil)
+    (p3/config-load)
+    (should (eq p3-config-loader-test--loaded 'fresh))
+    (should-not (p3/config-cache-stale-p))))
+
+(ert-deftest p3-config-loader-explicit-build-rebuilds-current-cache ()
+  (p3-config-loader-test--with-files
+      "#+begin_src emacs-lisp\n(setq p3-config-loader-test--explicit-build t)\n#+end_src\n"
+    (p3/config-build)
+    (should-not (p3/config-cache-stale-p))
+    (let ((original-tangle (symbol-function 'org-babel-tangle-file))
+          (calls 0))
+      (cl-letf (((symbol-function 'org-babel-tangle-file)
+                 (lambda (&rest args)
+                   (setq calls (1+ calls))
+                   (apply original-tangle args))))
+        (p3/config-build))
+      (should (= calls 1)))))
 ```
 
 - [ ] **Step 8: Run the complete loader test file**
@@ -800,7 +828,7 @@ Put the loader test file before `p3-config-test.el` so its module-load snapshot 
             -f ert-run-tests-batch-and-exit
 ```
 
-Do not split the Ubuntu workflow or add a second matrix.
+Keep the remainder of the existing test-file list unchanged; do not split the Ubuntu workflow or add a second matrix.
 
 - [ ] **Step 4: Extend the existing Windows workflow path filter narrowly**
 
