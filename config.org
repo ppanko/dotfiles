@@ -297,6 +297,7 @@ Process latex pdf with bibtex [[https://tex.stackexchange.com/questions/197707/u
 
 Git subprocess/synchronization behavior lives in =lisp/p3-git.el=; Magit,
 git-gutter, and bindings live in =lisp/p3-config-git.el=.
+
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-git)
 #+END_SRC
@@ -595,6 +596,7 @@ Do presentations with org-present
   (use-package visual-fill-column)
 
   (require 'face-remap)
+
   (defvar-local p3/org-present--state nil
     "Saved buffer state while `org-present' is active.")
 
@@ -854,6 +856,7 @@ Set ashes theme
 #+END_SRC
 
 Telephone line mode-line
+
 #+BEGIN_SRC emacs-lisp
   ;; (use-package telephone-line
   ;;   :after all-the-icons
