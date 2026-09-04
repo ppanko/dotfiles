@@ -257,7 +257,6 @@ Flycheck mode (but not for org/latex).
     :hook (after-init . global-flycheck-mode)
     :config
     (setq flycheck-global-modes '(not LaTeX-mode latex-mode org-mode))
-    (setq flycheck-python-flake8-executable "flake8")
     (setq flycheck-checker-error-threshold 1000))
 #+END_SRC
 
@@ -298,7 +297,6 @@ Process latex pdf with bibtex [[https://tex.stackexchange.com/questions/197707/u
 
 Git subprocess/synchronization behavior lives in =lisp/p3-git.el=; Magit,
 git-gutter, and bindings live in =lisp/p3-config-git.el=.
-
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-git)
 #+END_SRC
@@ -597,7 +595,6 @@ Do presentations with org-present
   (use-package visual-fill-column)
 
   (require 'face-remap)
-
   (defvar-local p3/org-present--state nil
     "Saved buffer state while `org-present' is active.")
 
@@ -713,54 +710,13 @@ Do presentations with org-present
 
 ** Python
 
-Python-specific behavior is implemented in =lisp/p3-python.el=. Package
-configuration and keybindings remain here so the literate config still shows
-how Python support is enabled.
+Python package wiring, mode hooks, keybindings, Eglot integration, and
+Python-specific diagnostic configuration live in =lisp/p3-config-python.el=.
+Reusable interpreter, language-server, and REPL behavior remains in
+=lisp/p3-python.el=.
 
 #+BEGIN_SRC emacs-lisp
-  (use-package p3-python
-    :ensure nil
-    :demand t)
-
-  (use-package python
-    :ensure nil
-    :bind (:map python-mode-map
-                ("C-<return>" . nil)
-                ("S-<return>" . python-shell-send-statement)
-                ("C-c C-c" . p3/python-send-region-or-paragraph-and-step)
-                ("C-<up>" . backward-paragraph)
-                ("C-<down>" . forward-paragraph)
-                ("C-c C-z" . p3/python-display-shell))
-    :hook ((python-mode . p3/python-setup-project-interpreter)
-           (python-mode . p3/python-eglot-ensure)
-           (python-mode . p3/python-disable-flycheck))
-    :custom
-    (python-indent-guess-indent-offset t)
-    (python-indent-guess-indent-offset-verbose nil)
-    (python-shell-interpreter (if (eq system-type 'windows-nt) "python" "python3"))
-    (python-shell-interpreter-args "-i"))
-
-  ;; Emacs 29+ uses the tree-sitter mode when it is available.
-  (when (fboundp 'python-ts-mode)
-    (add-to-list 'auto-mode-alist '("\\.py\\'" . python-ts-mode))
-    (add-hook 'python-ts-mode-hook #'p3/python-setup-project-interpreter)
-    (add-hook 'python-ts-mode-hook #'p3/python-eglot-ensure)
-    (add-hook 'python-ts-mode-hook #'p3/python-disable-flycheck)
-    (with-eval-after-load 'python
-      (define-key python-ts-mode-map (kbd "C-<return>") nil)
-      (define-key python-ts-mode-map (kbd "S-<return>") #'python-shell-send-statement)
-      (define-key python-ts-mode-map (kbd "C-c C-c") #'p3/python-send-region-or-paragraph-and-step)
-      (define-key python-ts-mode-map (kbd "C-<up>") #'backward-paragraph)
-      (define-key python-ts-mode-map (kbd "C-<down>") #'forward-paragraph)
-      (define-key python-ts-mode-map (kbd "C-c C-z") #'p3/python-display-shell)))
-
-  (use-package eglot
-    :ensure t
-    :commands eglot-ensure
-    :bind (:map eglot-mode-map
-                ("C-c l r" . eglot-rename)
-                ("C-c l a" . eglot-code-actions)
-                ("C-c l f" . eglot-format)))
+  (p3/config-load-module 'p3-config-python)
 #+END_SRC
 
 ** Rainbow
@@ -898,7 +854,6 @@ Set ashes theme
 #+END_SRC
 
 Telephone line mode-line
-
 #+BEGIN_SRC emacs-lisp
   ;; (use-package telephone-line
   ;;   :after all-the-icons
