@@ -201,7 +201,7 @@
 (ert-deftest p3-config-generated-artifacts-remain-ignored-and-untracked ()
   (skip-unless (executable-find "git"))
   (let ((default-directory p3-config-test--root))
-    (dolist (generated '("config.el" "example.elc"))
+    (dolist (generated '("config.el" "lisp/example.elc"))
       (should (zerop (process-file "git" nil nil nil
                                    "check-ignore" "-q" generated))))
     (with-temp-buffer
