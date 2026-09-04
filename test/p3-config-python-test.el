@@ -56,7 +56,7 @@
     (nreverse values)))
 
 (defun p3-config-python-test--function-symbol (value)
-  "Normalize VALUE from `#\='symbol' syntax to SYMBOL."
+  "Normalize VALUE from function-quoted syntax to a symbol."
   (if (and (consp value)
            (eq (car value) 'function)
            (symbolp (cadr value)))
@@ -106,7 +106,7 @@
       (lambda (entry)
         (and (consp entry)
              (eq (car entry) 'add-hook)
-             (eq (cadr entry) 'python-ts-mode-hook)))
+             (equal (cadr entry) '(quote python-ts-mode-hook))))
       (cddr form)))))
 
 (defun p3-config-python-test--ts-bindings ()
@@ -117,7 +117,7 @@
            (lambda (entry)
              (and (consp entry)
                   (eq (car entry) 'with-eval-after-load)
-                  (eq (cadr entry) 'python)))
+                  (equal (cadr entry) '(quote python))))
            (cddr form))))
     (mapcar
      (lambda (entry)
