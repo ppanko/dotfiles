@@ -6,6 +6,7 @@
 
 (defvar git-gutter-fr+-side)
 (declare-function global-git-gutter+-mode "git-gutter-fringe+" (&optional arg))
+(declare-function close-magit-buffers "p3-git" ())
 
 (global-set-key (kbd "C-c C-g") #'p3/git-commit-and-push-emacs-config)
 
