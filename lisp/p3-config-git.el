@@ -5,6 +5,7 @@
 (p3/config-load-module 'p3-git)
 
 (defvar git-gutter-fr+-side)
+(declare-function p3/git-commit-and-push-emacs-config "p3-git" (&optional commit-message))
 (declare-function global-git-gutter+-mode "git-gutter-fringe+" (&optional arg))
 (declare-function close-magit-buffers "p3-git" ())
 (declare-function magit-stage-files "magit" (files))
