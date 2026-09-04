@@ -94,6 +94,35 @@
     (p3/config-load-generated)
     (should (eq p3-config-loader-test--loaded 'source))))
 
+(ert-deftest p3-config-loader-load-module-reloads-exact-source ()
+  (let* ((directory (make-temp-file "p3-config-module-test-" t))
+         (p3/config-lisp-directory directory)
+         (source (expand-file-name "p3-test-module.el" directory)))
+    (unwind-protect
+        (progn
+          (with-temp-file source
+            (insert "(setq p3-config-loader-test--module-value 'one)\n"
+                    "(provide 'p3-test-module)\n"))
+          (setq p3-config-loader-test--module-value nil)
+          (provide 'p3-test-module)
+          (p3/config-load-module 'p3-test-module)
+          (should (eq p3-config-loader-test--module-value 'one))
+          (with-temp-file source
+            (insert "(setq p3-config-loader-test--module-value 'two)\n"
+                    "(provide 'p3-test-module)\n"))
+          (p3/config-load-module 'p3-test-module)
+          (should (eq p3-config-loader-test--module-value 'two)))
+      (setq features (delq 'p3-test-module features))
+      (delete-directory directory t))))
+
+(ert-deftest p3-config-loader-load-module-rejects-missing-source ()
+  (let ((p3/config-lisp-directory
+         (make-temp-file "p3-config-module-test-" t)))
+    (unwind-protect
+        (should-error (p3/config-load-module 'p3-missing-module)
+                      :type 'file-missing)
+      (delete-directory p3/config-lisp-directory t))))
+
 (ert-deftest p3-config-loader-current-cache-loads-without-build-or-org-require ()
   (p3-config-loader-test--with-files "source"
     (p3-config-loader-test--write-current-cache
