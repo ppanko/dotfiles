@@ -23,7 +23,7 @@
     (width . 3.0)
     (height . 1.0)))
 
-(ert-deftest p3-pptx-spike-edit-previews-immediately-without-sync-render ()
+(ert-deftest p3-pptx-spike-edit-is-memory-only-on-hot-path ()
   (with-temp-buffer
     (setq-local p3-pptx-spike--working "/tmp/working.pptx"
                 p3-pptx-spike--slide 1
@@ -34,24 +34,41 @@
                   (shapes . (,(p3-pptx-spike-test--shape)))))
     (let ((bridge-called nil)
           (render-called nil)
-          (render-scheduled nil)
+          (persist-scheduled nil)
           (redisplayed nil))
       (cl-letf (((symbol-function 'p3-pptx-spike--run)
                  (lambda (&rest _args) (setq bridge-called t) ""))
                 ((symbol-function 'p3-pptx-spike--render)
                  (lambda () (setq render-called t)))
-                ((symbol-function 'p3-pptx-spike--schedule-render)
-                 (lambda () (setq render-scheduled t)))
+                ((symbol-function 'p3-pptx-spike--schedule-persist)
+                 (lambda () (setq persist-scheduled t)))
                 ((symbol-function 'p3-pptx-spike--redisplay)
                  (lambda () (setq redisplayed t))))
         (p3-pptx-spike--edit 0.5 -0.25)
         (let ((shape (car (alist-get 'shapes p3-pptx-spike--model))))
           (should (= (alist-get 'left shape) 1.5))
           (should (= (alist-get 'top shape) 1.75)))
-        (should bridge-called)
         (should redisplayed)
-        (should render-scheduled)
+        (should persist-scheduled)
+        (should-not bridge-called)
         (should-not render-called)))))
+
+(ert-deftest p3-pptx-spike-repeated-edits-aggregate-before-persistence ()
+  (with-temp-buffer
+    (setq-local p3-pptx-spike--selected-id 7
+                p3-pptx-spike--model
+                `((slide_width . 10.0)
+                  (slide_height . 7.5)
+                  (shapes . (,(p3-pptx-spike-test--shape)))))
+    (cl-letf (((symbol-function 'p3-pptx-spike--schedule-persist) #'ignore)
+              ((symbol-function 'p3-pptx-spike--redisplay) #'ignore))
+      (p3-pptx-spike--edit 0.05 0.0)
+      (p3-pptx-spike--edit 0.05 0.0)
+      (p3-pptx-spike--edit 0.0 -0.05)
+      (let ((pending (gethash 7 p3-pptx-spike--pending-edits)))
+        (should pending)
+        (should (< (abs (- (plist-get pending :dx) 0.10)) 1e-9))
+        (should (< (abs (- (plist-get pending :dy) -0.05)) 1e-9))))))
 
 (ert-deftest p3-pptx-spike-render-snapshot-is-complete-before-use ()
   (let ((directory (make-temp-file "p3-pptx-spike-test-" t)))
