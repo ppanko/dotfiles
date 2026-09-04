@@ -178,7 +178,7 @@
                  (with-temp-file target (insert "(setq p3-test t)\n"))
                  (list target
                        (expand-file-name "unexpected.el"
-                                         (file-name-directory target)))))))
+                                         (file-name-directory target))))))
       (should-error (p3/config-build)))
     (should (equal (with-temp-buffer
                      (insert-file-contents p3/config-generated)
