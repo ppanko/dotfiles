@@ -35,6 +35,7 @@ The result is a clear remaining violation of the architecture established by the
 
 New tracked configuration module. It owns ESS/R-mode configuration and glue:
 
+- requiring `p3-config-loader` and `use-package`, following the existing `p3-config-*` module pattern;
 - loading/configuring `p3-ess`;
 - loading `p3-r-tools` so R workflow bindings have an explicit dependency rather than relying on unrelated source ordering;
 - the existing global `C-c R` binding for `p3-r-command-map`;
@@ -58,7 +59,7 @@ New tracked configuration module. It owns ESS/R-mode configuration and glue:
 
 The moved forms should remain semantically equivalent to their current versions. The PR must not opportunistically rename commands, change keybindings, alter values, simplify font-lock, change lint rules, or replace anonymous hooks merely for style.
 
-`p3-config-ess.el` may use `p3/config-load-module` to load `p3-ess` and `p3-r-tools`, matching the exact-source reload pattern already used by the other `p3-config-*` modules.
+`p3-config-ess.el` should use `p3/config-load-module` to load `p3-ess` and `p3-r-tools`, matching the exact-source reload pattern already used by the other `p3-config-*` modules.
 
 ### `p3-ess.el`
 
@@ -120,6 +121,8 @@ It should:
 
 The standalone `p3-r-tools` loading/binding stanza elsewhere in `config.org` should be removed once `p3-config-ess.el` explicitly owns that configuration dependency and binding.
 
+That changes when `p3-r-tools.el` is loaded during startup: instead of loading in the earlier generic “Functions” section, it loads as an explicit dependency of the ESS configuration module. This is an intentional ordering normalization, not a behavior redesign. The implementation must verify that no earlier startup form depends on `p3-r-tools` or `p3-r-command-map`, and the final configuration must still install `C-c R` before user interaction begins.
+
 The Windows R executable selection remains in `config.org` because its startup position is intentional and was explicitly preserved by the previous module-architecture design.
 
 ## Dependency direction
@@ -130,6 +133,7 @@ The intended dependency shape is:
 config.org
   |
   +-- p3-config-ess
+  |     +-- p3-config-loader
   |     +-- p3-ess
   |     |     +-- p3-project
   |     +-- p3-r-tools
@@ -190,7 +194,7 @@ The PR must preserve:
 - `C-.` pipe insertion in ESS buffers;
 - `C-c i`, `C-c v`, `C-c m`, `C-c d`, and `C-c l` bindings;
 - corresponding inferior-ESS bindings;
-- `p3-r-post-run` / `view_df` helper loading behavior (currently `p3-r-load-view-data-frame` on `ess-r-post-run`);
+- `view_df` helper loading behavior (`p3-r-load-view-data-frame` on `ess-r-post-run`);
 - project-root `default-directory` setup in ESS R buffers;
 - underscore word-syntax behavior;
 - Company backend contents;
@@ -248,12 +252,15 @@ Add focused coverage for the new ownership boundary. The tests should verify at 
 
 - `config.org` exact-source loads `p3-config-ess`;
 - `config.org` no longer contains the full `use-package ess-r-mode` implementation block;
+- the old standalone `p3-r-tools` load/bind stanza is gone from the earlier generic section;
+- no earlier startup/configuration form depends on `p3-r-tools` before `p3-config-ess` loads it;
 - `p3/windows-configure-r-program` remains after the ESS module load;
 - `p3-config-completion.el` no longer contains `p3/r-company-backends` or `p3/ess-company-config`;
 - `p3-config-ess.el` contains the ESS-specific Company definitions;
 - `p3-config-ess.el` owns the current ESS hooks and keybindings;
+- `p3-config-ess.el` owns the `C-c R` binding;
 - `p3-config-ess.el` owns `compile-rmd` and both current hooks;
-- `p3-config-ess.el` explicitly loads/configures `p3-ess` and `p3-r-tools`;
+- `p3-config-ess.el` explicitly loads `p3-ess` and `p3-r-tools` through the local module loader;
 - the narrow ESS display policy remains in `p3-config-workspace.el` and is not duplicated in the new module.
 
 Because CI does not install/load every optional third-party package in a normal interactive session, boundary tests may inspect the tracked source structurally rather than requiring the complete `p3-config-ess.el` module at test runtime. Behavioral code remains covered by the existing `p3-ess` and `p3-r-tools` tests.
@@ -274,13 +281,14 @@ The PR is complete when:
 3. `p3-r-tools.el` retains the existing R workflow and has no intentional semantic changes.
 4. `p3-config-completion.el` contains no ESS-specific Company state or hook function.
 5. `config.org` contains a concise ESS orchestration stanza rather than the current large implementation block.
-6. Windows R executable selection remains immediately after ESS configuration in the orchestration layer.
-7. Existing ESS/R keybindings and configuration values are unchanged.
-8. The existing narrow ESS display policy remains unchanged in `p3-config-workspace.el`.
-9. The Company `company-dabbrev` error is not addressed in this PR.
-10. Focused tests, full ERT, and required Ubuntu/Windows gates pass with no unexpected failures.
-11. Generated `config.el` and `.elc` artifacts remain ignored and untracked.
-12. No unrelated subsystem cleanup is included.
+6. The old standalone `p3-r-tools` load/binding stanza is removed, with its load and `C-c R` binding explicitly owned by `p3-config-ess.el`.
+7. Windows R executable selection remains immediately after ESS configuration in the orchestration layer.
+8. Existing ESS/R keybindings and configuration values are unchanged.
+9. The existing narrow ESS display policy remains unchanged in `p3-config-workspace.el`.
+10. The Company `company-dabbrev` error is not addressed in this PR.
+11. Focused tests, full ERT, and required Ubuntu/Windows gates pass with no unexpected failures.
+12. Generated `config.el` and `.elc` artifacts remain ignored and untracked.
+13. No unrelated subsystem cleanup is included.
 
 ## Follow-up
 
