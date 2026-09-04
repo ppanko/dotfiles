@@ -2,6 +2,9 @@
 
 (require 'use-package)
 
+(defvar company-backends)
+(defvar company-dabbrev-downcase)
+
 (declare-function vertico-mode "vertico" (&optional arg))
 (declare-function vertico-repeat-save "vertico-repeat" ())
 (declare-function marginalia-mode "marginalia" (&optional arg))
