@@ -1,208 +1,22 @@
 * Startup
 
-Start up in fullscreen
-
-#+BEGIN_SRC emacs-lisp
-  (add-to-list 'default-frame-alist '(fullscreen . maximized))
-#+END_SRC
-
-#+BEGIN_SRC emacs-lisp
-  (use-package dashboard
-    :config
-    (dashboard-setup-startup-hook)
-    (setq dashboard-startup-banner 'official
-          dashboard-center-content t
-          dashboard-icon-type 'all-the-icons
-          dashboard-path-style 'truncate-end
-          dashboard-path-max-length 60
-          dashboard-projects-show-base 'align
-          dashboard-recentf-show-base 'align
-          dashboard-recentf-item-format "%s  %s"
-          dashboard-projects-item-format "%s  %s"
-          dashboard-items '((recents . 10))))
-#+END_SRC
-
-The rest of the stuff in this section was stolen from [[https://github.com/hrs/dotfiles/blob/master/emacs/.emacs.d/configuration.org][here]];
-thanks to Harry Schwartz.
-
 Package bootstrap and dependency recovery are handled in =init.el= before this
-literate configuration is loaded.
-
-Look up keybinds in relevant mode buffers
-
-#+BEGIN_SRC emacs-lisp
-  (use-package which-key
-    :diminish which-key-mode
-    :init
-    (which-key-mode 1)
-    :custom
-    (which-key-idle-delay 0.5)
-    (which-key-sort-order 'which-key-key-order-alpha)
-    :bind ("C-c ?" . p3/keybinding-atlas)
-    :config
-    (which-key-add-key-based-replacements
-     "C-c ?" "show keybindings"
-     "C-c a" "align region"
-     "C-c e" "visit config"
-     "C-c E" "export Org file"
-     "C-c g" "GPTel tasks"
-     "C-c h" "R documentation search"
-     "C-c k" "kill buffer and window"
-     "C-c m" "Magit commands"
-     "C-c n" "Org-roam"
-     "C-c q" "force quotes"
-     "C-c r" "reload config"
-     "C-c R" "R commands"
-     "C-c s" "region suffix"
-     "C-c t" "transpose frame"
-     "C-c C-g" "commit and push config"
-     "C-c C-SPC" "insert newline after comma"
-     "C-c g l" "send current line"
-     "C-c g r" "refactor region"
-     "C-c g d" "generate documentation"
-     "C-c g t" "write tests"
-     "C-c g c" "translate code"
-     "C-c g w" "write code"
-     "C-c m s" "stage files"
-     "C-c m c" "commit"
-     "C-c m f" "pull"
-     "C-c m m" "merge"
-     "C-c m P" "push"
-     "C-c m a" "add remote"
-     "C-c m g" "status"
-     "C-c m l" "log"
-     "C-c m d" "diff"
-     "C-c m b" "blame"
-     "C-c m q" "close Magit buffers"
-     "C-c n l" "Org-roam buffer"
-     "C-c n f" "find node"
-     "C-c n g" "graph"
-     "C-c n i" "insert node"
-     "C-c n c" "capture node"
-     "C-c R p" "new R project"
-     "C-c R h" "R script header"
-     "C-c R w" "Word report header"
-     "C-c R c" "insert R chunk"
-     "C-c R i" "insert pipe"
-     "C-c R m" "targets make"
-     "C-c R v" "view data frame"))
-
-  (defconst p3/keybinding-sections
-    '(("Global"
-       ("C-s / C-r" . "search forward/backward"
-        ) ("M-x" . "run a command")
-       ("C-x b" . "switch buffer")
-       ("C-c e" . "visit config")
-       ("C-c r" . "reload config")
-       ("C-c ?" . "open this atlas")
-       ("C-h B" . "show context-sensitive bindings")
-       ("M-o" . "select window"))
-      ("R / ESS"
-       ("C-c R" . "R project, templates, and tools")
-       ("C-c i" . "evaluate library section")
-       ("C-c v" . "view data frame")
-       ("C-c m" . "run targets make")
-       ("C-c d" . "debug targets make")
-       ("C-c l" . "load targets object")
-       ("S-RET" . "evaluate and step"))
-      ("Org"
-       ("C-c b" . "insert citation")
-       ("C-c s" . "insert source block")
-       ("C-c C-o" . "open link at point")
-       ("C-c E" . "export Org file")
-       ("C-c C-x C-o" . "sort TODO entries")
-       ("C-c P" . "start presentation"))
-      ("Presentation"
-       ("SPC / right" . "next slide")
-       ("DEL / left" . "previous slide")
-       ("n / p" . "next/previous slide")
-       ("f" . "toggle fullscreen")
-       ("q" . "quit presentation"))
-      ("Python"
-       ("S-RET" . "send statement")
-       ("C-c C-c" . "send region/paragraph")
-       ("C-c C-z" . "show Python shell")
-       ("C-c l r" . "rename symbol")
-       ("C-c l a" . "code actions")
-       ("C-c l f" . "format buffer"))
-      ("GPTel"
-       ("C-c g l" . "send current line")
-       ("C-c g r" . "refactor region")
-       ("C-c g d" . "generate documentation")
-       ("C-c g t" . "write tests")
-       ("C-c g c" . "translate code")
-       ("C-c g w" . "write code"))
-      ("Magit"
-       ("C-c m g" . "status")
-       ("C-c m s" . "stage files")
-       ("C-c m c" . "commit")
-       ("C-c m f" . "pull")
-       ("C-c m P" . "push")
-       ("C-c m d" . "diff")
-       ("C-c m l" . "log")
-       ("C-c m b" . "blame"))
-      ("Org-roam"
-       ("C-c n l" . "toggle roam buffer")
-       ("C-c n f" . "find node")
-       ("C-c n g" . "graph")
-       ("C-c n i" . "insert node")
-       ("C-c n c" . "capture node")
-       ("C-c n d" . "daily note"))
-      ("Terminal"
-       ("C-c T" . "terminal commands")
-       ("C-x C-u" . "open shell")
-       ("C-S-c" . "copy from vterm")))
-    "Sections shown by `p3/keybinding-atlas'.")
-
-  (defun p3/keybinding-atlas ()
-    "Display the personal keybinding guide, organized by workflow."
-    (interactive)
-    (with-help-window "*P3 Keybinding Atlas*"
-      (princ "P3 KEYBINDING ATLAS\n")
-      (princ "=====================\n\n")
-      (princ "These are the workflow bindings worth remembering.\n")
-      (princ "For every binding active in the current buffer, use C-h b.\n")
-      (princ "For prefix hints, press the prefix and wait for which-key.\n")
-      (dolist (section p3/keybinding-sections)
-        (princ (format "\n%s\n%s\n"
-                       (car section)
-                       (make-string (length (car section)) ?-)))
-        (dolist (binding (cdr section))
-          (princ (format "  %-16s %s\n"
-                         (car binding) (cdr binding)))))))
-#+END_SRC
-
-Missing packages are installed automatically by =use-package=. Upgrades are
-never applied during startup. Run =M-x p3/package-update= to review available
-upgrades in the package menu and apply only the ones you select.
+literate configuration is loaded. Keep source selection, compilation, secrets,
+and Windows Rtools/MSYS2 discovery explicit here because their order affects
+all later local modules and subprocesses.
 
 #+BEGIN_SRC emacs-lisp
-  (use-package package
-    :ensure nil
-    :commands package-upgrade-all)
+  (setq load-prefer-newer t)
 
-  (defun p3/package-update ()
-    "Open the package menu to review and selectively apply upgrades."
-    (interactive)
-    (package-refresh-contents)
-    (setq p3/package-refresh-attempted t)
-    (package-list-packages t)
-    (message "Review upgrades with U, then execute selected actions with x."))
-#+END_SRC
-
-Always compile, and use the newest version available.
-
-#+BEGIN_SRC emacs-lisp
   (use-package auto-compile
     :demand t
     :config
-    (progn
-      (auto-compile-on-load-mode)
-      (auto-compile-on-save-mode)))
-  (setq load-prefer-newer t)
+    (auto-compile-on-load-mode)
+    (auto-compile-on-save-mode))
 #+END_SRC
 
-Load secrets if they exist
+Load machine-local secrets before platform discovery so Windows Rtools and R
+overrides are available when their respective setup stages run.
 
 #+BEGIN_SRC emacs-lisp
   (defconst p3/secrets-file
@@ -228,273 +42,28 @@ original subsystem sections below.
     (p3/windows-configure-rtools))
 #+END_SRC
 
-* General
+* Base
 
-Default web browser
+Broad global configuration, startup UI, package-update wiring, process defaults,
+backups, Dired, and the keybinding atlas live in =lisp/p3-config-base.el=.
 
 #+BEGIN_SRC emacs-lisp
-  ;; (setq browse-url-browser-function 'eww-browse-url)
+  (p3/config-load-module 'p3-config-base)
 #+END_SRC
 
-Set font and size
+* Editing
+
+Generic editing semantics and packages live in =lisp/p3-config-editing.el=.
+This loads before completion so Consult retains the final =C-s= and =C-r=
+bindings below.
 
 #+BEGIN_SRC emacs-lisp
-  (when (eq system-type 'windows-nt)
-    (set-face-attribute 'default nil :family "Consolas" :height 125))
-  (when (eq system-type 'gnu/linux)
-    (set-face-attribute 'default nil :family "Inconsolata" :height 140))
-    ;; (setq-default line-spacing 20))
-
-  (setq-default cursor-type 'bar)
-#+END_SRC
-
-Delete seleted text when typing over it.
-
-#+BEGIN_SRC emacs-lisp
-  (delete-selection-mode t)
-#+END_SRC
-
-Clean up white-space before each save
-
-#+BEGIN_SRC emacs-lisp
-  (add-hook 'before-save-hook 'whitespace-cleanup)
-#+END_SRC
-
-Use CUA mode where C-Enter is rectangle select,
-and our old Windows favorites C-x, C-v, C-c, C-z
-work like as expected.
-
-#+BEGIN_SRC emacs-lisp
-  (cua-mode t)
-#+END_SRC
-
-But don't tabify after rectangle commands!
-
-#+BEGIN_SRC emacs-lisp
-  (setq cua-auto-tabify-rectangles nil)
-#+END_SRC
-
-Answer yes-or-no prompts with y/n or RET as shown [[https://emacs.stackexchange.com/questions/17269/how-configure-the-confirmation-minibuffer-to-use-enter-instead-y][here]].
-
-#+BEGIN_SRC emacs-lisp
-  (fset 'yes-or-no-p 'y-or-n-p)
-  (defun y-or-n-p-with-return (orig-func &rest args)
-    (let ((query-replace-map (copy-keymap query-replace-map)))
-      (define-key query-replace-map (kbd "<return>") 'act)
-      (apply orig-func args)))
-  (advice-add 'y-or-n-p :around #'y-or-n-p-with-return)
-#+END_SRC
-
-Make sure processes go through y-or-n-p on terminate
-
-#+BEGIN_SRC emacs-lisp
-    ;; Replace process kill prompt with y-or-n-p
-  (defun p3/process-kill-query (process)
-    "Ask using `y-or-n-p` whether to kill PROCESS."
-    (y-or-n-p (format "Kill process %s? " (process-name process))))
-
-  ;; Remove the default function that uses yes-or-no-p
-  (setq kill-buffer-query-functions
-        (remq 'process-kill-buffer-query-function
-              kill-buffer-query-functions))
-
-  ;; Add our custom function
-  (add-hook 'kill-buffer-query-functions
-            (lambda ()
-              (if (get-buffer-process (current-buffer))
-                  (p3/process-kill-query (get-buffer-process (current-buffer)))
-                t)))
-#+END_SRC
-
-Make sure process buffer reacts to input/output.
-
-#+BEGIN_SRC emacs-lisp
-  (setq comint-scroll-to-bottom-on-input t)
-  (setq comint-scroll-to-bottom-on-output t)
-#+END_SRC
-
-Scrolling quality of life stuff
-
-#+BEGIN_SRC emacs-lisp
-  (setq scroll-conservatively 1)
-  (setq mouse-wheel-scroll-amount '(5))
-  (setq mouse-wheel-progressive-speed nil)
-#+END_SRC
-
-Move to trash when deleting files
-
-#+BEGIN_SRC emacs-lisp
-  (setq delete-by-moving-to-trash t)
-#+END_SRC
-
-Utilize asynchronous processing for dired and package installation
-
-#+BEGIN_SRC emacs-lisp
-  (use-package async
-          :init
-          (dired-async-mode 1)
-          (async-bytecomp-package-mode 1))
-#+END_SRC
-* Global settings
-
-Turn on syntax highlighting.
-
-#+BEGIN_SRC emacs-lisp
-  (global-font-lock-mode t)
-#+END_SRC
-
-Re-read updated buffers automatically.
-
-#+BEGIN_SRC emacs-lisp
-  (global-auto-revert-mode t)
-#+END_SRC
-
-Set compile shortcut.
-
-#+BEGIN_SRC emacs-lisp
-  (global-set-key "\C-xc" 'compile)
-#+END_SRC
-
-Remove "Suspend" key combo
-
-#+BEGIN_SRC emacs-lisp
-  (global-unset-key (kbd "C-x C-z"))
-#+END_SRC
-
-Auto-pair parenthesis.
-
-#+BEGIN_SRC emacs-lisp
-  (use-package smartparens
-    :hook (prog-mode . smartparens-mode))
-#+END_SRC
-
-Line numbers for several modes
-
-#+BEGIN_SRC emacs-lisp
-    (defun p3/set-line-numbers ()
-      (interactive)
-      (column-number-mode)
-      ;; Enable line numbers for some modes
-      (dolist (mode '(text-mode-hook
-                      prog-mode-hook
-                      conf-mode-hook))
-        (add-hook mode (lambda ()
-                       (progn
-                         (display-line-numbers-mode 1)
-                         (set-face-foreground 'line-number-current-line "#FFD700"))))))
-
-    (p3/set-line-numbers)
-#+END_SRC
-
-Resize window with Shift + Control + <direction>.
-
-#+BEGIN_SRC emacs-lisp
-  (when (eq system-type 'windows-nt)
-    (progn
-      (global-set-key (kbd "C-M-<left>") 'shrink-window-horizontally)
-      (global-set-key (kbd "C-M-<right>") 'enlarge-window-horizontally)
-      (global-set-key (kbd "C-M-<down>") 'shrink-window)
-      (global-set-key (kbd "C-M-<up>") 'enlarge-window)))
-  (when (eq system-type 'gnu/linux)
-    (progn
-      (global-set-key (kbd "C-s-<left>") 'shrink-window-horizontally)
-      (global-set-key (kbd "C-s-<right>") 'enlarge-window-horizontally)
-      (global-set-key (kbd "C-s-<down>") 'shrink-window)
-      (global-set-key (kbd "C-s-<up>") 'enlarge-window)))
-#+end_SRC
-
-Set forward-search and backward-search to be regex-aware
-
-#+BEGIN_SRC emacs-lisp
-  (global-set-key (kbd "C-s") 'isearch-forward-regexp)
-  (global-set-key (kbd "C-r") 'isearch-backward-regexp)
-  (global-set-key (kbd "C-M-s") 'isearch-forward)
-  (global-set-key (kbd "C-M-r") 'isearch-backward)
-#+END_SRC
-
-Increase font size with mouse wheel
-
-#+BEGIN_SRC emacs-lisp
-  (global-set-key (kbd "<C-wheel-down>") 'text-scale-decrease)
-  (global-set-key (kbd "<C-wheel-up>") 'text-scale-increase)
-#+END_SRC
-
-Kill buffer and window instead of just the buffer
-
-#+BEGIN_SRC emacs-lisp
-  (global-set-key (kbd "C-c k") 'kill-buffer-and-window)
-#+END_SRC
-
-
-Align equal signs (nice!) as shown [[https://stackoverflow.com/questions/3633120/emacs-hotkey-to-align-equal-signs][here]], and ` <-` too (very nice!).
-
-#+BEGIN_SRC emacs-lisp
-  (global-set-key (kbd "C-c a")
-    (lambda () (interactive)
-      (align-regexp (region-beginning) (region-end) "\\(\\s-*\\)\\(<-\\|=\\)" 1 1 nil)))
-#+END_SRC
-
-Put backup files neatly away.
-
-#+BEGIN_SRC emacs-lisp
-(let ((backup-dir "~/.cache/tmp/emacs/backups")
-      (auto-saves-dir "~/.cache/tmp/emacs/auto-saves/"))
-  (dolist (dir (list backup-dir auto-saves-dir))
-    (when (not (file-directory-p dir))
-      (make-directory dir t)))
-  (setq backup-directory-alist `(("." . ,backup-dir))
-        auto-save-file-name-transforms `((".*" ,auto-saves-dir t))
-        tramp-backup-directory-alist `((".*" . ,backup-dir))
-        tramp-auto-save-directory auto-saves-dir))
-
-(setq backup-by-copying t    ; Don't delink hardlinks
-      delete-old-versions t  ; Clean up the backups
-      version-control t      ; Use version numbers on backups,
-      kept-new-versions 5    ; keep some new versions
-      kept-old-versions 2)   ; and some old ones, too
-#+END_SRC
-
-dired settings
-
-#+BEGIN_SRC emacs-lisp
-  (use-package dired
-    :ensure nil
-    :after all-the-icons-dired
-    :hook (dired-mode . all-the-icons-dired-mode)
-    :custom
-    (dired-auto-revert-buffer t)
-    (dired-kill-when-opening-new-dired-buffer t))
-#+END_SRC
-
-[[https://stackoverflow.com/a/1012871/6249236][Do not replace white space with tabs!]]
-
-#+BEGIN_SRC emacs-lisp
-  (setq-default indent-tabs-mode nil)
-#+END_SRC
-
-Graphical icons?
-
-#+BEGIN_SRC emacs-lisp
-  (use-package all-the-icons
-    :if (display-graphic-p)
-    :config
-    (unless (find-font (font-spec :name "all-the-icons"))
-      (all-the-icons-install-fonts t))
-    (setq all-the-icons-scale-factor 1))
-
-  (use-package all-the-icons-dired
-    :after all-the-icons)
-#+END_SRC
-
-Input method configuration.
-
-#+BEGIN_SRC emacs-lisp
-  (setq default-input-method "cyrillic-translit")
+  (p3/config-load-module 'p3-config-editing)
 #+END_SRC
 
 * Functions
 
-Shared project and configuration commands live in =lisp/p3-core.el=.  Keep the
+Shared project and configuration commands live in =lisp/p3-core.el=. Keep the
 literate file responsible for loading the module and exposing its bindings.
 
 #+BEGIN_SRC emacs-lisp
@@ -503,33 +72,6 @@ literate file responsible for loading the module and exposing its bindings.
     :demand t
     :bind (("C-c e" . p3/config-visit)
            ("C-c r" . p3/config-reload)))
-#+END_SRC
-
-Save and kill all buffers (for emacs daemon).
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/save-kill-other-buffers ()
-        "Save and kill all other buffers."
-        (interactive)
-        (save-some-buffers)
-        (mapc 'kill-buffer (buffer-list)))
-  (global-set-key (kbd "C-x C-k") 'p3/save-kill-other-buffers)
-#+END_SRC
-
-Sudo edit a file, as shown [[https://emacsredux.com/blog/2013/04/21/edit-files-as-root/][here]]!
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/sudo-edit (&optional arg)
-         "Edit currently visited file as root.
-
-  With a prefix ARG prompt for a file to visit.
-  Will also prompt for a file to visit if current
-  buffer is not visiting a file."
-         (interactive "p")
-         (if (or arg (not buffer-file-name))
-             (find-file (concat "/sudo:root@localhost:"
-                                (read-file-name "Find file(as root): ")))
-           (find-alternate-file (concat "/sudo:root@localhost:" buffer-file-name))))
 #+END_SRC
 
 Load the personal R workflow module. Its project templates live under
@@ -542,128 +84,6 @@ the complete R command prefix.
     :demand t
     :config
     (keymap-global-set "C-c R" p3-r-command-map))
-#+END_SRC
-
-Add suffix to a region (not necessary with multiple cursors)
-
-#+BEGIN_SRC emacs-lisp
-(defun p3/region-suffix (r1 r2)
-  (interactive "r")
-  (perform-replace " *$"
-              (read-string "Enter suffix:")
-              nil 'regexp nil nil nil r1 r2 nil  nil))
-(global-set-key (kbd "C-c s") 'p3/region-suffix)
-#+END_SRC
-
-Put each word on a newline on either a space or comma
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/newline-after-comma-or-space ()
-    (interactive)
-    (perform-replace "\\(?1:[^,][[:punct:]]?+\\)\\(,\\|[[:space:]]+\\)" "\\1
-" nil t nil nil nil (region-beginning) (region-end)))
-    (global-set-key (kbd "C-c C-SPC") 'p3/newline-after-comma-or-space)
-#+END_SRC
-
-Put quotes around each word (work-in-progress)
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/force-quotes ()
-    (interactive)
-    (perform-replace "\\(?1:\\([[:punct:]]\|[[:space:]]\\)\\)+\\(?2:[A-z]?+\_?+\\.?+[0-9]?+[A-z]?+\\)\\(?3:\\([[:punct:]]\|[[:space:]]\\)\\)+" "\\1\"\\2\"\\3" nil t nil nil nil (region-beginning) (region-end)))
-    (global-set-key (kbd "C-c q") 'p3/force-quotes)
-#+END_SRC
-
-Byte-compile emacs directory
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/byte-compile-init-dir ()
-    "Byte-compile all your dotfiles."
-    (interactive)
-    (byte-recompile-directory user-emacs-directory 0))
-#+END_SRC
-
-Open Windows shell when using Windows
-
-#+BEGIN_SRC emacs-lisp
-  (when (eq system-type 'windows-nt)
-    (defun p3/windows-shell ()
-      "Open a new Windows cmd.exe window."
-      (interactive)
-      (let ((proc (start-process "cmd" nil "cmd.exe" "/C" "start" "cmd.exe")))
-        (set-process-query-on-exit-flag proc nil)))
-    (global-set-key (kbd "C-x C-i") #'p3/windows-shell))
-#+END_SRC
-
-Move lines from [[https://www.emacswiki.org/emacs/MoveLine][emacswiki]]
-
-#+BEGIN_SRC emacs-lisp
-  (defun move-line (n)
-    "Move the current line up or down by N lines."
-    (interactive "p")
-    (let ((column (current-column))
-          (start (line-beginning-position))
-          (end (line-beginning-position 2)))
-      (let ((line-text (delete-and-extract-region start end)))
-        (forward-line n)
-        (insert line-text)
-        ;; Restore point to its original column in the moved line.
-        (forward-line -1)
-        (move-to-column column))))
-
-  (defun move-line-up (n)
-    "Move the current line up by N lines."
-    (interactive "p")
-    (move-line (if (null n) -1 (- n))))
-
-  (defun move-line-down (n)
-    "Move the current line down by N lines."
-    (interactive "p")
-    (move-line (if (null n) 1 n)))
-
-  (global-set-key (kbd "M-<up>") #'move-line-up)
-  (global-set-key (kbd "M-<down>") #'move-line-down)
-#+END_SRC
-
-Open files using default external programs via dired as shown [[https://stackoverflow.com/questions/25109968/in-emacs-how-to-open-file-in-external-program-without-errors][here]].
-
-#+BEGIN_SRC emacs-lisp
-    (defun p3/open-in-external-app (&optional file)
-    "Open the current file or dired marked files in external app.
-
-  The app is chosen from your OS's preference."
-    (interactive)
-    (let ( doIt
-           (myFileList
-            (cond
-             ((string-equal major-mode "dired-mode") (dired-get-marked-files))
-             ((not file) (list (buffer-file-name)))
-             (file (list file)))))
-
-      (setq doIt (if (<= (length myFileList) 5)
-                     t
-                   (y-or-n-p "Open more than 5 files? ") ) )
-
-      (when doIt
-        (cond
-         ((string-equal system-type "windows-nt")
-          (mapc (lambda (fPath) (w32-shell-execute "open" (replace-regexp-in-string "/" "\\" fPath t t)) ) myFileList))
-         ((string-equal system-type "darwin")
-          (mapc (lambda (fPath) (shell-command (format "open \"%s\"" fPath)) )  myFileList) )
-         ((string-equal system-type "gnu/linux")
-          (mapc (lambda (fPath) (let ((process-connection-type nil)) (start-process "" nil "xdg-open" fPath)) ) myFileList))))))
-#+END_SRC
-
-Get the curl version, just for fun
-
-#+BEGIN_SRC emacs-lisp
-  (defun check-curl-version ()
-  "Check the version of curl being used by Emacs."
-  (interactive)
-  (let ((curl-version (shell-command-to-string "curl --version")))
-    (if (string-match "^curl \\([0-9.]+\\)" curl-version)
-        (message "Curl version: %s" (match-string 1 curl-version))
-      (message "Could not determine curl version"))))
 #+END_SRC
 
 * Modes
@@ -747,107 +167,11 @@ Set reftex format as shown [[https://stackoverflow.com/questions/13607156/autoco
 
 ** Completion-related
 
-Use the standard Emacs completion API with an Ivy-like interface. Vertico
-provides the vertical candidate list, Orderless provides flexible matching,
-Consult replaces Counsel and Swiper commands, and Embark adds contextual
-actions. Command history keeps frequently used =M-x= entries near the top.
+Vertico, Orderless, Consult, Embark, Company, and their existing helper wiring
+live in =lisp/p3-config-completion.el=.
 
 #+BEGIN_SRC emacs-lisp
-  (use-package savehist
-    :ensure nil
-    :custom
-    (history-length 100)
-    :init
-    (savehist-mode 1))
-
-  (use-package vertico
-    :custom
-    (vertico-cycle t)
-    (vertico-sort-function #'vertico-sort-history-length-alpha)
-    :init
-    (vertico-mode 1)
-    :config
-    (require 'vertico-repeat)
-    (add-hook 'minibuffer-setup-hook #'vertico-repeat-save))
-
-  (use-package orderless
-    :custom
-    (completion-styles '(orderless basic))
-    (completion-category-defaults nil)
-    (completion-category-overrides
-     '((file (styles partial-completion)))))
-
-  (use-package marginalia
-    :bind (:map minibuffer-local-map
-                ("M-A" . marginalia-cycle))
-    :init
-    (marginalia-mode 1))
-
-  (declare-function consult-line "consult" (&optional initial start))
-  (declare-function consult-line-multi "consult" (query &optional initial))
-  (declare-function consult-ripgrep "consult" (&optional directory initial))
-
-  (defun p3/consult-r-doc-chapter-search ()
-    "Search the current buffer for an R documentation chapter marker."
-    (interactive)
-    (consult-line "#' ### [0-9]+\\."))
-
-  (defun p3/consult-line-all ()
-    "Search for a matching line across all live buffers."
-    (interactive)
-    (consult-line-multi t))
-
-  (use-package consult
-    :bind (("M-x" . execute-extended-command)
-           ("M-X" . execute-extended-command-for-buffer)
-           ("C-s" . consult-line)
-           ("C-r" . p3/consult-line-all)
-           ("C-c C-r" . vertico-repeat)
-           ("C-c h" . p3/consult-r-doc-chapter-search)
-           ("C-x b" . consult-buffer)
-           ("C-x B" . consult-buffer-other-window)
-           ("M-y" . consult-yank-pop))
-    :init
-    (setq register-preview-delay 0.5
-          register-preview-function #'consult-register-format
-          xref-show-xrefs-function #'consult-xref
-          xref-show-definitions-function #'consult-xref))
-
-  (use-package embark
-    :bind (("C-." . embark-act)
-           ("C-;" . embark-dwim)
-           ("C-h B" . embark-bindings))
-    :init
-    (setq prefix-help-command #'embark-prefix-help-command))
-
-  (use-package embark-consult
-    :after (embark consult)
-    :hook (embark-collect-mode . consult-preview-at-point-mode))
-#+END_SRC
-
-Inline auto-complete mode w/company.
-
-#+BEGIN_SRC emacs-lisp
-  (use-package company
-    :hook (after-init . global-company-mode)
-    :init
-    (defvar p3/r-company-backends
-      '((:separate
-         ;; Help and objects.
-         company-R-library company-R-args company-R-objects
-         company-dabbrev-code
-         :with company-yasnippet)
-        ;; Filenames and other completion-at-point providers.
-        company-capf)
-      "Company completion backends used in ESS R buffers.")
-
-    (defun p3/ess-company-config ()
-      "Configuration for ESS."
-      (setq-local company-backends p3/r-company-backends))
-    :config
-    (setq company-dabbrev-downcase nil))
-  ;; for debugging
-  ;; (setq company-idle-delay nil)
+  (p3/config-load-module 'p3-config-completion)
 #+END_SRC
 
 Thesaurus
@@ -880,43 +204,6 @@ Special compile command for C++
     :hook (c++-mode lambda ()
         (set (make-local-variable 'compile-command)
           (format "g++ %s" (file-name-nondirectory buffer-file-name)))))
-#+END_SRC
-** Editing-related
-
-Google things
-
-#+BEGIN_SRC emacs-lisp
-  (use-package google-this)
-#+END_SRC
-
-Interactive regex editing
-
-#+BEGIN_SRC emacs-lisp
-  (use-package wgrep)
-#+END_SRC
-
-Undo tree-style
-
-#+BEGIN_SRC emacs-lisp
-  (use-package undo-tree
-    :diminish undo-tree-mode
-    :config
-    (progn
-      (global-undo-tree-mode)
-      (setq undo-tree-visualizer-timestamps t)
-      (setq undo-tree-visualizer-diff t)
-      (setq undo-tree-history-directory-alist '(("." . "~/.emacs.d/undo")))))
-#+END_SRC
-
-auto-save changed files
-
-#+BEGIN_SRC emacs-lisp
-(use-package super-save
-  :defer 1
-  :diminish super-save-mode
-  :config
-  (super-save-mode +1)
-  (setq super-save-auto-save-when-idle t))
 #+END_SRC
 
 ** ESS
@@ -1032,7 +319,7 @@ Prevent emacs from mangling the path to gpg on Windows, as shown [[https://emacs
 
 ** GPT
 
-A GPT (and other LLM) co-pilot for Emacs.  The package declaration stays here;
+A GPT (and other LLM) co-pilot for Emacs. The package declaration stays here;
 the task prompts, streaming/rollback behavior, and task command map live in
 =lisp/p3-gptel.el=.
 
@@ -1064,67 +351,12 @@ Flycheck mode (but not for org/latex).
 #+END_SRC
 
 ** Buffers, Windows, and Frames
-Transpose horizontal/vertical split
+
+Window selection, navigation, resizing, and the existing narrow ESS process
+side-window rule live in =lisp/p3-config-workspace.el=.
 
 #+BEGIN_SRC emacs-lisp
-  (use-package transpose-frame
-    :defer t
-    :bind ("C-c t" . transpose-frame))
-#+END_SRC
-
-Display R process buffers in a reusable side window on the right, as shown
-[[https://lambdaland.org/posts/2022-12-27_repl_buffer_on_the_right/][here]].
-
-#+BEGIN_SRC emacs-lisp
-  (add-to-list
-   'display-buffer-alist
-   '((major-mode . inferior-ess-r-mode)
-     (display-buffer-reuse-mode-window
-      display-buffer-in-side-window)
-     (side . right)
-     (slot . 1)
-     (window-width . 0.5)
-     (reusable-frames . visible)))
-#+END_SRC
-
-Set ace-window shortcut
-
-#+BEGIN_SRC emacs-lisp
-  (use-package ace-window
-    :bind ("M-o" . ace-window))
-#+END_SRC
-
-Cycle through history of window configurations
-
-#+BEGIN_SRC emacs-lisp
-  (use-package winner
-    :ensure nil
-    :init
-    (winner-mode 1))
-#+END_SRC
-
-Restart emacs (and emacs-daemon)
-
-#+BEGIN_SRC emacs-lisp
-  (use-package restart-emacs)
-#+END_SRC
-
-#+BEGIN_SRC emacs-lisp
-  (use-package avy
-    :bind (("M-s" . avy-goto-word-1)))
-#+END_SRC
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/get-local-buffer-mode ()
-    (interactive)
-    (buffer-local-value 'major-mode (get-buffer (frame-parameter nil 'name))))
-#+END_SRC
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/is-current-buffer-mode-inferior-ess-r-mode ()
-    (interactive)
-    (eq 'inferior-ess-r-mode (p3/get-local-buffer-mode)))
-
+  (p3/config-load-module 'p3-config-workspace)
 #+END_SRC
 
 ** LaTeX
@@ -1153,147 +385,13 @@ Process latex pdf with bibtex [[https://tex.stackexchange.com/questions/197707/u
 
 ** Git
 
-#+BEGIN_SRC emacs-lisp
-  (require 'subr-x)
-
-  (defun p3/check-git-installed ()
-    "Check if Git is installed."
-    (unless (executable-find "git")
-      (error "Git is not installed. Please install Git first.")))
-
-  (defun p3/get-commit-message ()
-    "Prompt the user for a commit message. If empty, use the current date and time."
-    (let ((commit-message (read-string "Commit message (leave blank for default): ")))
-      (if (string= commit-message "")
-          (format "Update: %s" (format-time-string "%Y-%m-%d %H:%M:%S"))
-        commit-message)))
-
-  (defun p3/git-call (directory &rest arguments)
-    "Run Git with ARGUMENTS in DIRECTORY and return (STATUS . OUTPUT)."
-    (with-temp-buffer
-      (let ((default-directory (file-name-as-directory directory)))
-        (cons (apply #'process-file "git" nil (current-buffer) nil arguments)
-              (buffer-string)))))
-
-  (defun p3/git-run (directory &rest arguments)
-    "Run Git with ARGUMENTS in DIRECTORY, signaling an error on failure."
-    (pcase-let ((`(,status . ,output)
-                 (apply #'p3/git-call directory arguments)))
-      (unless (zerop status)
-        (user-error "Git %s failed in %s: %s"
-                    (string-join arguments " ")
-                    directory
-                    (string-trim output)))
-      output))
-
-  (defun p3/git-commit-and-push-repository
-      (directory add-arguments commit-message)
-    "Stage ADD-ARGUMENTS, commit changes, and push DIRECTORY safely."
-    (apply #'p3/git-run directory "add" add-arguments)
-    (pcase-let ((`(,status . ,output)
-                 (p3/git-call directory "diff" "--cached" "--quiet" "--exit-code")))
-      (cond
-       ((zerop status)
-        (message "No staged changes in %s" directory))
-       ((= status 1)
-        (p3/git-run directory "commit" "-m" commit-message))
-       (t
-        (user-error "Could not inspect staged changes in %s: %s"
-                    directory (string-trim output)))))
-    (p3/git-run directory "push" "--set-upstream" "origin" "HEAD"))
-
-  (defun p3/git-commit-and-push-emacs-config (&optional commit-message)
-    "Commit and push the Emacs configuration and Org notes repositories.
-If COMMIT-MESSAGE is nil or empty, use a timestamped default message."
-    (interactive
-     (progn
-       (p3/check-git-installed)
-       (list (p3/get-commit-message))))
-    (let* ((config-dir (file-name-as-directory user-emacs-directory))
-           (config-file (expand-file-name "config.org" config-dir))
-           (notes-dir (expand-file-name "~/org/notes"))
-           (final-message
-            (if (and commit-message (not (string= commit-message "")))
-                commit-message
-              (p3/get-commit-message))))
-      (cond
-       ((not (file-exists-p config-file))
-        (message "The config file %s does not exist." config-file))
-       ((not (file-directory-p notes-dir))
-        (message "The notes directory %s does not exist." notes-dir))
-       (t
-        (p3/check-git-installed)
-        (p3/git-commit-and-push-repository
-         config-dir '("-A") final-message)
-        (p3/git-commit-and-push-repository
-         notes-dir '("-u") final-message)
-        (message "Committed and pushed changes to config and notes repositories.")))))
-
-  ;; Bind the function to a key for easy access
-  (global-set-key (kbd "C-c C-g") #'p3/git-commit-and-push-emacs-config)
-#+END_SRC
-
-Use magit to manage git
+Git subprocess/synchronization behavior lives in =lisp/p3-git.el=; Magit,
+git-gutter, and bindings live in =lisp/p3-config-git.el=.
 
 #+BEGIN_SRC emacs-lisp
-  (defvar p3/magit-command-map
-    (let ((map (make-sparse-keymap)))
-      ;; Keep the shortcuts from the personal Magit notes, with a few
-      ;; read-only/navigation commands alongside them.
-      (define-key map (kbd "s") #'magit-stage-files)
-      (define-key map (kbd "c") #'magit-commit-create)
-      (define-key map (kbd "f") #'magit-pull)
-      (define-key map (kbd "m") #'magit-merge)
-      (define-key map (kbd "P") #'magit-push-current-to-pushremote)
-      (define-key map (kbd "a") #'magit-remote-add)
-      (define-key map (kbd "g") #'magit-status)
-      (define-key map (kbd "l") #'magit-log-current)
-      (define-key map (kbd "d") #'magit-diff)
-      (define-key map (kbd "b") #'magit-blame)
-      (define-key map (kbd "q") #'close-magit-buffers)
-      map)
-    "Personal shortcuts for common Magit commands.")
-
-  (use-package magit
-    :defer t
-    :bind ("C-c m" . p3/magit-command-map)
-    :config
-    (with-eval-after-load 'magit-mode
-      (add-hook 'after-save-hook 'magit-after-save-refresh-status t)))
+  (p3/config-load-module 'p3-config-git)
 #+END_SRC
 
-Close all magit-related buffers
-
-#+BEGIN_SRC emacs-lisp
-  (defun close-magit-buffers ()
-    "Close all Magit related buffers."
-    (interactive)
-    (dolist (buffer (buffer-list))
-      (when (or (string-prefix-p "magit-" (buffer-name buffer))
-                (string-prefix-p "*magit" (buffer-name buffer)))
-        (kill-buffer buffer))))
-#+END_SRC
-
-Git changes in the fringe
-
-#+BEGIN_SRC emacs-lisp
-  (use-package git-gutter-fringe+
-    :init (global-git-gutter+-mode)
-    :diminish git-gutter+-mode
-    :config (setq git-gutter-fr+-side 'right-fringe))
-
-  (setq-default right-fringe-width 20)
-#+END_SRC
-
-** Multiple cursors
-
-#+BEGIN_SRC emacs-lisp
-  (use-package multiple-cursors
-  :bind (("C-S-c C-S-c" . mc/edit-lines)
-         ("C-{" . mc/mark-next-like-this)
-         ("C-}" . mc/mark-previous-like-this)
-         ("C-|" . mc/mark-all-like-this)))
-#+END_SRC
 ** MySQL
 
 Setup default connections, as seen [[https://truongtx.me/2014/08/23/setup-emacs-as-an-sql-database-client][here]].
@@ -1326,6 +424,7 @@ Interactive commands to connect to default connection.
   (defalias 'my-sql-connect #'p3/sql-connect)
   (defalias 'my-sql-ttuSql #'p3/sql-ttu-sql)
 #+END_SRC
+
 ** org
 
 Set org default startup display for bullets globally
@@ -1475,7 +574,6 @@ org-agenda defaults, as shown [[https://orgmode.org/worg/org-tutorials/org-custo
           (apply #'org-roam-node-insert args)))
 #+END_SRC
 
-
 [[https://www.reddit.com/r/orgmode/comments/vvx54j/comment/ifn434u/?utm_source=share&utm_medium=web2x&context=3][Search roam for...]] anything
 
 #+BEGIN_SRC emacs-lisp
@@ -1576,6 +674,7 @@ Require poly-R
             polymode-display-output-file nil
             polymode-display-process-buffers nil))
 #+END_SRC
+
 ** Presentation
 
 Do presentations with org-present
@@ -1703,7 +802,7 @@ Do presentations with org-present
 
 ** Python
 
-Python-specific behavior is implemented in =lisp/p3-python.el=.  Package
+Python-specific behavior is implemented in =lisp/p3-python.el=. Package
 configuration and keybindings remain here so the literate config still shows
 how Python support is enabled.
 
@@ -1759,6 +858,7 @@ how Python support is enabled.
     :config
     (add-hook 'prog-mode-hook #'rainbow-mode))
 #+END_SRC
+
 ** Shell
 
 Windows shell implementation lives in =p3-platform=, but setup remains here to
@@ -1806,6 +906,7 @@ preserve its original startup timing. Project-aware vterm behavior remains in
                      (expand-file-name "vterm-bashrc"
                                        user-emacs-directory))))))
 #+END_SRC
+
 ** Spelling
 
 #+BEGIN_SRC emacs-lisp
@@ -1828,6 +929,7 @@ preserve its original startup timing. Project-aware vterm behavior remains in
           ispell-local-dictionary-alist
           '(("en_US" "[[:alpha:]]" "[^[:alpha:]]" "[']" nil ("-d" "en_US") nil utf-8))))
 #+END_SRC
+
 ** TRAMP
 
 TRAMP default settings
@@ -1839,6 +941,7 @@ TRAMP default settings
     (when (eq system-type 'gnu/linux)
       (setq tramp-default-method "ssh"))
 #+END_SRC
+
 ** workgroups
 
 #+BEGIN_SRC emacs-lisp
@@ -1848,6 +951,7 @@ TRAMP default settings
           wg-session-load-on-start nil)
     (workgroups-mode 1))
 #+END_SRC
+
 * Themes
 
 Remove toolbar, scrollbar margins & menu bar.
@@ -1938,6 +1042,7 @@ Light-up matching parens.
   (show-paren-mode t)
   (setq show-paren-when-point-inside-paren t)
 #+END_SRC
+
 * Encoding & fonts
 
 Use utf-8 everywhere all the time
