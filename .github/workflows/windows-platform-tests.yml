@@ -5,9 +5,11 @@ on:
     paths:
       - "lisp/p3-platform.el"
       - "lisp/p3-project.el"
+      - "lisp/p3-config-loader.el"
       - "test/p3-platform-test.el"
       - "test/p3-project-test.el"
       - "test/p3-project-windows-test.el"
+      - "test/p3-config-loader-test.el"
       - ".github/workflows/windows-platform-tests.yml"
   workflow_dispatch:
 
@@ -47,6 +49,7 @@ jobs:
           -f batch-byte-compile
           lisp/p3-platform.el
           lisp/p3-project.el
+          lisp/p3-config-loader.el
 
       - name: Run Windows platform and project tests
         shell: powershell
@@ -54,4 +57,11 @@ jobs:
           emacs -Q --batch -L lisp
           -l test/p3-platform-test.el
           -l test/p3-project-windows-test.el
+          -f ert-run-tests-batch-and-exit
+
+      - name: Run Windows config-cache tests
+        shell: powershell
+        run: >-
+          emacs -Q --batch -L lisp
+          -l test/p3-config-loader-test.el
           -f ert-run-tests-batch-and-exit

@@ -1,21 +1,18 @@
 ;;; p3-core.el --- Shared helpers for the personal Emacs config -*- lexical-binding: t; -*-
 
-(declare-function p3/load-config nil (&optional quiet))
+(require 'p3-config-loader)
 
 (defun p3/config-visit ()
   "Visit the authoritative literate Emacs configuration."
   (interactive)
-  (find-file
-   (if (boundp 'p3/config-source)
-       p3/config-source
-     (expand-file-name "config.org" user-emacs-directory))))
+  (find-file p3/config-source))
 
 (defun p3/config-reload ()
-  "Tangle and reload the authoritative literate Emacs configuration."
+  "Rebuild and reload the authoritative literate Emacs configuration."
   (interactive)
-  (unless (fboundp 'p3/load-config)
-    (user-error "Config loader is unavailable"))
-  (p3/load-config))
+  (p3/config-build)
+  (p3/config-load-generated)
+  (message "Reloaded %s" p3/config-source))
 
 (provide 'p3-core)
 

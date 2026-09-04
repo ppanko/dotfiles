@@ -1,6 +1,7 @@
 ;;; p3-core-test.el --- Tests for p3-core -*- lexical-binding: t; -*-
 
 (require 'ert)
+(require 'cl-lib)
 
 (defconst p3-core-test--root
   (file-name-directory
@@ -15,6 +16,15 @@
 (ert-deftest p3-core-config-commands-remain-commands ()
   (should (commandp #'p3/config-visit))
   (should (commandp #'p3/config-reload)))
+
+(ert-deftest p3-core-config-reload-builds-once-then-loads-directly ()
+  (let (calls)
+    (cl-letf (((symbol-function 'p3/config-build)
+               (lambda () (push 'build calls)))
+              ((symbol-function 'p3/config-load-generated)
+               (lambda () (push 'load calls))))
+      (p3/config-reload))
+    (should (equal (nreverse calls) '(build load)))))
 
 (provide 'p3-core-test)
 
