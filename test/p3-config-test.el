@@ -199,15 +199,15 @@
       (should-not (string-match-p broad contents)))))
 
 (ert-deftest p3-config-generated-artifacts-remain-ignored-and-untracked ()
-  (let ((ignore (p3-config-test--contents ".gitignore")))
-    (should (string-match-p (regexp-quote "*.elc") ignore))
-    (should (string-match-p (regexp-quote "/config.el") ignore)))
-  (when (executable-find "git")
-    (let ((default-directory p3-config-test--root))
-      (with-temp-buffer
-        (should (zerop (process-file "git" nil (current-buffer) nil
-                                     "ls-files" "config.el" "*.elc")))
-        (should (string-empty-p (string-trim (buffer-string))))))))
+  (skip-unless (executable-find "git"))
+  (let ((default-directory p3-config-test--root))
+    (dolist (generated '("config.el" "example.elc"))
+      (should (zerop (process-file "git" nil nil nil
+                                   "check-ignore" "-q" generated))))
+    (with-temp-buffer
+      (should (zerop (process-file "git" nil (current-buffer) nil
+                                   "ls-files" "config.el" "*.elc")))
+      (should (string-empty-p (string-trim (buffer-string)))))))
 
 (ert-deftest p3-init-loads-project-and-loader-before-literate-config ()
   (let* ((contents (p3-config-test--contents "init.el"))
