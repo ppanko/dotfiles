@@ -13,6 +13,7 @@
 (declare-function consult-line "consult" (&optional initial start))
 (declare-function consult-line-multi "consult" (query &optional initial))
 (declare-function consult-ripgrep "consult" (&optional directory initial))
+(declare-function consult-xref "consult" (&rest args))
 (declare-function embark-prefix-help-command "embark" ())
 
 (use-package savehist
