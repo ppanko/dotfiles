@@ -70,12 +70,25 @@
     (seq-partition (cdr setq-form) 2)))
 
 (ert-deftest p3-config-ess-load-order-is-explicit ()
-  (let ((forms (p3-config-ess-test--forms "lisp/p3-config-ess.el")))
-    (should (member '(require 'p3-config-loader) forms))
-    (should (member '(p3/config-load-module 'p3-ess) forms))
-    (should (member '(p3/ess-setup) forms))
-    (should (member '(p3/config-load-module 'p3-r-tools) forms))
-    (should (member '(keymap-global-set "C-c R" p3-r-command-map) forms))))
+  (let* ((forms (p3-config-ess-test--forms "lisp/p3-config-ess.el"))
+         (loader-position
+          (seq-position forms '(require 'p3-config-loader) #'equal))
+         (ess-position
+          (seq-position forms '(p3/config-load-module 'p3-ess) #'equal))
+         (setup-position
+          (seq-position forms '(p3/ess-setup) #'equal))
+         (r-tools-position
+          (seq-position forms '(p3/config-load-module 'p3-r-tools) #'equal))
+         (binding-position
+          (seq-position forms
+                        '(keymap-global-set "C-c R" p3-r-command-map)
+                        #'equal)))
+    (dolist (position
+             (list loader-position ess-position setup-position
+                   r-tools-position binding-position))
+      (should (integerp position)))
+    (should (< loader-position ess-position setup-position
+               r-tools-position binding-position))))
 
 (ert-deftest p3-config-ess-preserves-company-backends-exactly ()
   (should
