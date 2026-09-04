@@ -23,7 +23,7 @@ The main ownership problem is therefore declarative configuration rather than Py
 `lisp/p3-config-python.el` becomes the single declarative owner for Python support. It will:
 
 1. require the configuration loader and `use-package` support needed by the module;
-2. exact-source load `p3-python.el` through `p3/config-load-module`;
+2. exact-source load `p3-python.el` through `p3/config-load-module` before applying Python package wiring, preserving the current behavior-first load order;
 3. preserve the existing `use-package python` declaration, including:
    - all current `python-mode-map` bindings;
    - hooks for project interpreter setup, Eglot startup, and Flycheck suppression;
@@ -58,7 +58,7 @@ No behavior function is to be moved out of this file. No function semantics are 
 
 ### `config.org`
 
-The current full Python block is replaced with a short orchestration stanza:
+The current full Python section is replaced with a short orchestration stanza:
 
 ```elisp
 (p3/config-load-module 'p3-config-python)
@@ -67,6 +67,8 @@ The current full Python block is replaced with a short orchestration stanza:
 The stanza remains in the current Python section and therefore preserves the existing relative startup position between Projectile, Rainbow, and Shell configuration.
 
 `config.org` should no longer contain direct `use-package python` or `use-package eglot` forms, Python mode hook wiring, `python-ts-mode` keybinding setup, or `flycheck-python-flake8-executable`.
+
+Other legitimate Python references outside the Python configuration section remain untouched. In particular, Org Babel's existing `(python . t)` language enablement is explicitly out of scope and should remain in `config.org`.
 
 ### Generic Flycheck configuration
 
@@ -77,6 +79,14 @@ The existing generic Flycheck block remains in `config.org` and keeps:
 - `flycheck-checker-error-threshold`.
 
 Only the Python-specific `flycheck-python-flake8-executable` setting moves to `p3-config-python.el`.
+
+## Startup Timing and Flake8 Relocation
+
+The Flake8 executable assignment currently occurs in the generic Flycheck block, which appears earlier in `config.org` than the Python section. Moving that assignment into `p3-config-python.el` therefore changes the point during startup at which the same value is assigned.
+
+This relocation is accepted only as a configuration-ownership change, not a behavior change. The final value must remain exactly `"flake8"`, and the normal startup path must still assign it before any user Python buffer can initialize. No hook, package declaration, or eager Python-buffer creation may be introduced between the Flycheck block and the Python module loader as part of this PR.
+
+Configuration reload preserves the same whole-file order: generic Flycheck configuration is evaluated before the Python module loader, after which the Python-specific executable value is reapplied.
 
 ## Behavior Freeze
 
@@ -129,7 +139,9 @@ This contract is called out explicitly because asymmetry between the two modes i
 
 `p3-config-python.el` must exact-source load `p3-python.el` through `p3/config-load-module`, matching the module-owner pattern established by other configuration modules.
 
-Reloading the configuration should therefore reload current `p3-python.el` source before reapplying declarative Python package configuration.
+This preserves the current ordering in which `p3-python` is loaded before the declarative `python` package form. Since `p3-python.el` itself requires built-in `python.el`, the extraction must not introduce an additional delayed-load boundary that changes when Python functions or maps become available.
+
+Reloading the configuration should reload current `p3-python.el` source before reapplying declarative Python package configuration.
 
 The refactor must not add package scanning, module registries, autodiscovery, or a second Python configuration owner.
 
@@ -141,7 +153,7 @@ Add `test/p3-config-python-test.el` to parse and verify the new module structura
 
 Tests should assert at minimum:
 
-1. `p3-config-python.el` exact-source loads `p3-python.el`;
+1. `p3-config-python.el` exact-source loads `p3-python.el` before its declarative Python package wiring;
 2. the `python` declaration preserves the current `python-mode` bindings exactly;
 3. the `python-mode` hooks remain exactly the three current Python hooks;
 4. Python custom values remain semantically identical:
@@ -156,7 +168,8 @@ Tests should assert at minimum:
    - `C-c l a` -> `eglot-code-actions`;
    - `C-c l f` -> `eglot-format`;
 8. `flycheck-python-flake8-executable` is set to `"flake8"` in `p3-config-python.el` and is absent from the generic Flycheck block;
-9. `config.org` contains one Python configuration owner, `(p3/config-load-module 'p3-config-python)`, and no longer owns direct Python/Eglot package wiring.
+9. `config.org` contains one Python configuration owner, `(p3/config-load-module 'p3-config-python)`, and no longer owns direct Python/Eglot package wiring;
+10. structural checks for moved Python configuration are targeted and do not reject legitimate unrelated Python references such as Org Babel's `(python . t)` entry.
 
 ### Existing behavior tests
 
@@ -180,7 +193,7 @@ Update `test/p3-config-test.el` so its structural expectations reflect the new o
 - configuration-module count increases from six to seven;
 - Python is represented by `(p3/config-load-module 'p3-config-python)` rather than inline `use-package p3-python`, `use-package python`, or `use-package eglot` forms;
 - existing startup-order expectations preserve the Python section's current relative location;
-- moved Python configuration is asserted absent from `config.org`.
+- moved Python configuration is asserted absent from `config.org` without treating unrelated Python references as configuration ownership.
 
 ### CI
 
@@ -221,12 +234,13 @@ Any such change should be a separate bounded or architectural follow-up after th
 
 The refactor is complete when:
 
-1. `p3-config-python.el` is the single declarative Python configuration owner;
+1. `p3-config-python.el` is the single declarative owner of Python mode/package configuration;
 2. `p3-python.el` remains the reusable Python behavior owner with unchanged runtime semantics;
-3. `config.org` contains only the Python module-loader stanza for this subsystem;
+3. the Python section of `config.org` contains only the Python module-loader stanza, while unrelated Python references elsewhere remain untouched;
 4. the generic Flycheck block no longer owns Python-specific executable configuration;
-5. `python-mode` and `python-ts-mode` preserve their current hook and keybinding symmetry;
-6. all frozen Python settings and Eglot bindings are semantically unchanged;
-7. existing Python behavior tests remain green;
-8. new Python configuration-boundary tests pass on the intended CI platforms;
-9. no unrelated subsystem, display policy, or package architecture changes are included.
+5. the Flake8 setting relocation preserves the same final value before normal user Python-buffer initialization;
+6. `python-mode` and `python-ts-mode` preserve their current hook and keybinding symmetry;
+7. all frozen Python settings and Eglot bindings are semantically unchanged;
+8. existing Python behavior tests remain green;
+9. new Python configuration-boundary tests pass on the intended CI platforms;
+10. no unrelated subsystem, display policy, or package architecture changes are included.
