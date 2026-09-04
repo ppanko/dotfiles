@@ -10,7 +10,7 @@
   "Root of the Emacs configuration under test.")
 
 (load-file
- (expand-file-name "spikes/pptx-editor/p3-pptx-spike.el"
+ (expand-file-name "spikes/pptx-editor/p3-pptx-spike-fast.el"
                    p3-pptx-spike-test--config-directory))
 
 (defun p3-pptx-spike-test--shape ()
@@ -41,7 +41,7 @@
                 ((symbol-function 'p3-pptx-spike--render)
                  (lambda () (setq render-called t)))
                 ((symbol-function 'p3-pptx-spike--schedule-persist)
-                 (lambda () (setq persist-scheduled t)))
+                 (lambda (&optional _delay) (setq persist-scheduled t)))
                 ((symbol-function 'p3-pptx-spike--redisplay)
                  (lambda () (setq redisplayed t))))
         (p3-pptx-spike--edit 0.5 -0.25)
