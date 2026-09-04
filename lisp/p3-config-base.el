@@ -31,6 +31,7 @@
 (declare-function all-the-icons-install-fonts "all-the-icons" (&optional pfx))
 (declare-function package-refresh-contents "package" (&optional async))
 (declare-function package-list-packages "package" (&optional no-fetch))
+(declare-function p3/windows-shell "p3-commands" ())
 
 (add-to-list 'default-frame-alist '(fullscreen . maximized))
 
