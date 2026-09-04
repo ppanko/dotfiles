@@ -60,175 +60,7 @@
 
 - [ ] **Step 1: Write failing semantic source tests**
 
-Create `test/p3-config-ess-test.el`:
-
-```elisp
-;;; p3-config-ess-test.el --- ESS configuration boundary tests -*- lexical-binding: t; -*-
-
-(require 'ert)
-(require 'seq)
-
-(defconst p3-config-ess-test--root
-  (file-name-directory
-   (directory-file-name
-    (file-name-directory (or load-file-name buffer-file-name))))
-  "Root of the Emacs configuration under test.")
-
-(defun p3-config-ess-test--path (relative)
-  (expand-file-name relative p3-config-ess-test--root))
-
-(defun p3-config-ess-test--contents (relative)
-  (with-temp-buffer
-    (insert-file-contents (p3-config-ess-test--path relative))
-    (buffer-string)))
-
-(defun p3-config-ess-test--forms (relative)
-  (with-temp-buffer
-    (insert-file-contents (p3-config-ess-test--path relative))
-    (goto-char (point-min))
-    (let (forms)
-      (condition-case nil
-          (while t (push (read (current-buffer)) forms))
-        (end-of-file nil))
-      (nreverse forms))))
-
-(defun p3-config-ess-test--find-top-level (relative predicate)
-  (seq-find predicate (p3-config-ess-test--forms relative)))
-
-(defun p3-config-ess-test--use-package-form ()
-  (p3-config-ess-test--find-top-level
-   "lisp/p3-config-ess.el"
-   (lambda (form)
-     (and (consp form)
-          (eq (car form) 'use-package)
-          (eq (cadr form) 'ess-r-mode)))))
-
-(defun p3-config-ess-test--defvar-form (symbol)
-  (p3-config-ess-test--find-top-level
-   "lisp/p3-config-ess.el"
-   (lambda (form)
-     (and (consp form) (eq (car form) 'defvar) (eq (cadr form) symbol)))))
-
-(defun p3-config-ess-test--defun-form (symbol)
-  (p3-config-ess-test--find-top-level
-   "lisp/p3-config-ess.el"
-   (lambda (form)
-     (and (consp form) (eq (car form) 'defun) (eq (cadr form) symbol)))))
-
-(defun p3-config-ess-test--setq-pairs ()
-  (let* ((form (p3-config-ess-test--use-package-form))
-         (setq-form (plist-get (cddr form) :config)))
-    (should (eq (car-safe setq-form) 'setq))
-    (seq-partition (cdr setq-form) 2)))
-
-(ert-deftest p3-config-ess-load-order-is-explicit ()
-  (let ((forms (p3-config-ess-test--forms "lisp/p3-config-ess.el")))
-    (should (member '(require 'p3-config-loader) forms))
-    (should (member '(p3/config-load-module 'p3-ess) forms))
-    (should (member '(p3/ess-setup) forms))
-    (should (member '(p3/config-load-module 'p3-r-tools) forms))
-    (should (member '(keymap-global-set "C-c R" p3-r-command-map) forms))))
-
-(ert-deftest p3-config-ess-preserves-company-backends-exactly ()
-  (should
-   (equal
-    (nth 2 (p3-config-ess-test--defvar-form 'p3/r-company-backends))
-    '(quote
-      ((:separate
-        company-R-library company-R-args company-R-objects
-        company-dabbrev-code
-        :with company-yasnippet)
-       company-capf)))))
-
-(ert-deftest p3-config-ess-preserves-company-buffer-hook ()
-  (should
-   (equal
-    (cddddr (p3-config-ess-test--defun-form 'p3/ess-company-config))
-    '((setq-local company-backends p3/r-company-backends)))))
-
-(ert-deftest p3-config-ess-preserves-inferior-buffer-setup ()
-  (should
-   (equal
-    (cddddr (p3-config-ess-test--defun-form 'p3/ess-inferior-mode-setup))
-    '((setq-local ansi-color-for-comint-mode 'filter)
-      (smartparens-mode 1)))))
-
-(ert-deftest p3-config-ess-preserves-hooks-and-bindings ()
-  (let* ((form (p3-config-ess-test--use-package-form))
-         (args (cddr form)))
-    (should
-     (equal
-      (plist-get args :hook)
-      '((inferior-ess-mode . p3/ess-inferior-mode-setup)
-        (ess-r-post-run . p3-r-load-view-data-frame)
-        (ess-r-mode . p3/ess-company-config)
-        (ess-r-mode . p3/use-project-root-as-default-dir)
-        (ess-mode . (lambda () (modify-syntax-entry ?_ "w"))))))
-    (should
-     (equal
-      (plist-get args :bind)
-      '(:map ess-mode-map
-        ("C-<return>" . nil)
-        ("S-<return>" . ess-eval-region-or-line-visibly-and-step)
-        ("C-." . p3-r-insert-pipe)
-        ("C-c i" . p3-r-evaluate-library-section)
-        ("C-c v" . p3-r-view-data-frame-at-point)
-        ("C-c m" . p3-r-targets-make)
-        ("C-c d" . p3-r-targets-make-debug)
-        ("C-c l" . p3-r-targets-load-at-point)
-        :map inferior-ess-r-mode-map
-        ("C-c v" . p3-r-view-data-frame-at-point)
-        ("C-c m" . p3-r-targets-make)
-        ("C-c d" . p3-r-targets-make-debug)
-        ("C-c l" . p3-r-targets-load-at-point))))))
-
-(ert-deftest p3-config-ess-preserves-sensitive-settings ()
-  (let ((pairs (p3-config-ess-test--setq-pairs)))
-    (dolist (pair
-             '((ess-ask-for-ess-directory nil)
-               (ess-style 'RStudio)
-               (ess-eval-visibly t)
-               (ess-toggle-underscore nil)
-               (ess-use-flymake nil)
-               (ess--command-default-timeout 1)
-               (inferior-R-args "--no-save")
-               (ess-gen-proc-buffer-name-function
-                'ess-gen-proc-buffer-name:project-or-directory)))
-      (should (member pair pairs)))
-    (should
-     (member
-      '(flycheck-lintr-linters
-        "linters_with_defaults(object_name_linter(c('snake_case','camelCase')), commented_code_linter = NULL, line_length_linter(90), single_quotes_linter=NULL)")
-      pairs))
-    (should
-     (member
-      '(ess-R-font-lock-keywords
-        '((ess-R-fl-keyword:modifiers . t)
-          (ess-R-fl-keyword:fun-defs . t)
-          (ess-R-fl-keyword:keywords . t)
-          (ess-R-fl-keyword:assign-ops)
-          (ess-R-fl-keyword:constants . t)
-          (ess-fl-keyword:fun-calls . t)
-          (ess-fl-keyword:numbers . t)
-          (ess-fl-keyword:operators . t)
-          (ess-fl-keyword:delimiters . t)
-          (ess-fl-keyword:= . t)
-          (ess-R-fl-keyword:F&T . t)
-          (ess-R-fl-keyword:%op% . t)))
-      pairs))))
-
-(ert-deftest p3-config-ess-preserves-rmarkdown-compile-hook ()
-  (let ((contents (p3-config-ess-test--contents "lisp/p3-config-ess.el")))
-    (should (string-match-p (regexp-quote "(defun compile-rmd ()") contents))
-    (should (string-match-p
-             (regexp-quote "R -e \"rmarkdown::render('") contents))
-    (should (string-match-p
-             (regexp-quote "(add-hook 'ess-mode-hook 'compile-rmd)") contents))
-    (should (string-match-p
-             (regexp-quote "(add-hook 'markdown-mode-hook 'compile-rmd)") contents))))
-
-(provide 'p3-config-ess-test)
-```
+Create `test/p3-config-ess-test.el` to read Lisp forms from the tracked source without loading optional ESS/Company packages. It must assert the exact Company backend value, exact ESS hook/binding lists, explicit `p3/ess-setup`, the sensitive `setq` pairs, `compile-rmd` hooks, and inferior-buffer setup.
 
 - [ ] **Step 2: Verify RED**
 
@@ -240,110 +72,19 @@ Expected: failure because `lisp/p3-config-ess.el` does not yet exist.
 
 - [ ] **Step 3: Create `lisp/p3-config-ess.el` with the current ESS configuration values**
 
-```elisp
-;;; p3-config-ess.el --- ESS and R-mode configuration -*- lexical-binding: t; -*-
+The module must:
 
+```elisp
 (require 'use-package)
 (require 'p3-config-loader)
-
 (p3/config-load-module 'p3-ess)
 (declare-function p3/ess-setup "p3-ess" ())
 (p3/ess-setup)
-
 (p3/config-load-module 'p3-r-tools)
-
-(defvar ansi-color-for-comint-mode)
-(defvar company-backends)
-(defvar ess-ask-for-ess-directory)
-(defvar ess-style)
-(defvar ess-eval-visibly)
-(defvar ess-toggle-underscore)
-(defvar ess-use-flymake)
-(defvar flycheck-lintr-linters)
-(defvar ess--command-default-timeout)
-(defvar inferior-R-args)
-(defvar ess-R-font-lock-keywords)
-(defvar ess-gen-proc-buffer-name-function)
-(defvar p3-r-command-map)
-
-(declare-function smartparens-mode "smartparens" (&optional arg))
-
 (keymap-global-set "C-c R" p3-r-command-map)
-
-(defvar p3/r-company-backends
-  '((:separate
-     company-R-library company-R-args company-R-objects
-     company-dabbrev-code
-     :with company-yasnippet)
-    company-capf)
-  "Company completion backends used in ESS R buffers.")
-
-(defun p3/ess-company-config ()
-  "Configure Company completion for an ESS R buffer."
-  (setq-local company-backends p3/r-company-backends))
-
-(defun p3/ess-inferior-mode-setup ()
-  "Apply personal defaults to an inferior ESS buffer."
-  (setq-local ansi-color-for-comint-mode 'filter)
-  (smartparens-mode 1))
-
-(use-package ess-r-mode
-  :ensure ess
-  :hook ((inferior-ess-mode . p3/ess-inferior-mode-setup)
-         (ess-r-post-run . p3-r-load-view-data-frame)
-         (ess-r-mode . p3/ess-company-config)
-         (ess-r-mode . p3/use-project-root-as-default-dir)
-         (ess-mode . (lambda () (modify-syntax-entry ?_ "w"))))
-  :bind (:map ess-mode-map
-              ("C-<return>" . nil)
-              ("S-<return>" . ess-eval-region-or-line-visibly-and-step)
-              ("C-." . p3-r-insert-pipe)
-              ("C-c i" . p3-r-evaluate-library-section)
-              ("C-c v" . p3-r-view-data-frame-at-point)
-              ("C-c m" . p3-r-targets-make)
-              ("C-c d" . p3-r-targets-make-debug)
-              ("C-c l" . p3-r-targets-load-at-point)
-         :map inferior-ess-r-mode-map
-              ("C-c v" . p3-r-view-data-frame-at-point)
-              ("C-c m" . p3-r-targets-make)
-              ("C-c d" . p3-r-targets-make-debug)
-              ("C-c l" . p3-r-targets-load-at-point))
-  :config
-  (setq ess-ask-for-ess-directory nil
-        ess-style 'RStudio
-        ess-eval-visibly t
-        ess-toggle-underscore nil
-        ess-use-flymake nil
-        flycheck-lintr-linters "linters_with_defaults(object_name_linter(c('snake_case','camelCase')), commented_code_linter = NULL, line_length_linter(90), single_quotes_linter=NULL)"
-        ess--command-default-timeout 1
-        inferior-R-args "--no-save"
-        ess-R-font-lock-keywords
-        '((ess-R-fl-keyword:modifiers . t)
-          (ess-R-fl-keyword:fun-defs . t)
-          (ess-R-fl-keyword:keywords . t)
-          (ess-R-fl-keyword:assign-ops)
-          (ess-R-fl-keyword:constants . t)
-          (ess-fl-keyword:fun-calls . t)
-          (ess-fl-keyword:numbers . t)
-          (ess-fl-keyword:operators . t)
-          (ess-fl-keyword:delimiters . t)
-          (ess-fl-keyword:= . t)
-          (ess-R-fl-keyword:F&T . t)
-          (ess-R-fl-keyword:%op% . t))
-        ess-gen-proc-buffer-name-function
-        'ess-gen-proc-buffer-name:project-or-directory))
-
-(defun compile-rmd ()
-  (set (make-local-variable 'compile-command)
-       (concat "R -e \"rmarkdown::render('" buffer-file-name "')\"")))
-
-(add-hook 'ess-mode-hook 'compile-rmd)
-(add-hook 'markdown-mode-hook 'compile-rmd)
-
-(provide 'p3-config-ess)
 ```
 
-The old definitions remain in their current owners until Task 2; this module is not yet loaded by `config.org`.
+It then defines the exact `p3/r-company-backends`, `p3/ess-company-config`, `p3/ess-inferior-mode-setup`, the existing `use-package ess-r-mode` hook/bind/config values, and unchanged `compile-rmd` hooks.
 
 - [ ] **Step 4: Verify GREEN and compile closure**
 
@@ -377,26 +118,7 @@ git commit -m "Add ESS configuration module"
 
 - [ ] **Step 1: Add failing ownership tests**
 
-Append:
-
-```elisp
-(ert-deftest p3-ess-library-has-no-buffer-configuration-glue ()
-  (let ((contents (p3-config-ess-test--contents "lisp/p3-ess.el")))
-    (dolist (forbidden '("p3/ess-inferior-mode-setup"
-                         "ansi-color-for-comint-mode"
-                         "smartparens-mode"))
-      (should-not (string-match-p (regexp-quote forbidden) contents)))))
-
-(ert-deftest p3-generic-completion-has-no-ess-company-owner ()
-  (let ((contents (p3-config-ess-test--contents
-                   "lisp/p3-config-completion.el")))
-    (dolist (forbidden '("p3/r-company-backends"
-                         "p3/ess-company-config"
-                         "company-R-library"
-                         "company-R-args"
-                         "company-R-objects"))
-      (should-not (string-match-p (regexp-quote forbidden) contents)))))
-```
+Append tests asserting `p3-ess.el` no longer contains `p3/ess-inferior-mode-setup`, `ansi-color-for-comint-mode`, or `smartparens-mode`; and `p3-config-completion.el` no longer contains `p3/r-company-backends`, `p3/ess-company-config`, or the ESS Company backend symbols.
 
 - [ ] **Step 2: Verify RED**
 
@@ -404,7 +126,7 @@ Append:
 emacs -Q --batch -L lisp -l test/p3-config-ess-test.el -f ert-run-tests-batch-and-exit
 ```
 
-Expected: the two ownership tests fail on the current old owners.
+Expected: the ownership tests fail on the current old owners.
 
 - [ ] **Step 3: Remove only buffer configuration from `p3-ess.el`**
 
@@ -413,24 +135,17 @@ Delete:
 ```elisp
 (declare-function smartparens-mode "smartparens" (&optional arg))
 (defvar ansi-color-for-comint-mode)
-
 (defun p3/ess-inferior-mode-setup ()
   "Apply personal defaults to an inferior ESS buffer."
   (setq-local ansi-color-for-comint-mode 'filter)
   (smartparens-mode 1))
 ```
 
-Do not alter `p3/ess-project-root`, process registration, lazy R creation, advice installation, or `p3/ess-setup`.
+Do not alter project/process behavior or `p3/ess-setup`.
 
 - [ ] **Step 4: Remove only ESS-specific Company ownership from completion**
 
-Remove the now-unused top-level declaration:
-
-```elisp
-(defvar company-backends)
-```
-
-Replace the Company declaration with:
+Remove the now-unused `company-backends` declaration and replace the Company block with:
 
 ```elisp
 (use-package company
@@ -442,13 +157,8 @@ Replace the Company declaration with:
 - [ ] **Step 5: Verify GREEN plus existing ESS behavior**
 
 ```bash
-emacs -Q --batch -L lisp \
-  -l test/p3-config-ess-test.el \
-  -l test/p3-ess-test.el \
-  -f ert-run-tests-batch-and-exit
+emacs -Q --batch -L lisp -l test/p3-config-ess-test.el -l test/p3-ess-test.el -f ert-run-tests-batch-and-exit
 ```
-
-Expected: all tests pass; existing process/session tests are unchanged.
 
 - [ ] **Step 6: Commit**
 
@@ -471,76 +181,15 @@ git commit -m "Separate ESS behavior from configuration"
 
 - [ ] **Step 1: Update tests before changing `config.org`**
 
-In `p3-config-org-delegates-custom-subsystems-to-modules`, use:
+Update `p3-config-org-delegates-custom-subsystems-to-modules` so `p3-ess` and `ess-r-mode` are no longer expected inline, and assert:
 
 ```elisp
-(dolist (module '("p3-platform" "p3-core" "p3-python" "p3-terminal"
-                  "p3-gptel"))
-  (should (string-match-p (regexp-quote (format "(use-package %s" module))
-                          contents)))
-(dolist (package '("python" "eglot" "vterm" "gptel"))
-  (should (string-match-p (regexp-quote (format "(use-package %s" package))
-                          contents)))
-(should
- (string-match-p
-  (regexp-quote "(p3/config-load-module 'p3-config-ess)") contents))
+(should (string-match-p
+         (regexp-quote "(p3/config-load-module 'p3-config-ess)")
+         contents))
 ```
 
-In `p3-config-early-orchestration-order-is-explicit`, bind:
-
-```elisp
-(ess (p3-config-test--position
-      "(p3/config-load-module 'p3-config-ess)" contents))
-```
-
-and assert:
-
-```elisp
-(should (< completion ess))
-(should (< ess r-program))
-```
-
-In `p3-config-platform-setup-preserves-subsystem-timing`, replace the old ESS needle with:
-
-```elisp
-(p3-config-test--position "(p3/config-load-module 'p3-config-ess)" contents)
-```
-
-Rename `p3-config-org-source-loads-five-config-modules` to `p3-config-org-source-loads-six-config-modules` and use:
-
-```elisp
-(dolist (module '(p3-config-base p3-config-editing p3-config-completion
-                  p3-config-ess p3-config-workspace p3-config-git))
-  (should
-   (string-match-p
-    (regexp-quote (format "(p3/config-load-module '%s)" module))
-    contents)))
-```
-
-Add these forbidden inline forms to `p3-config-moved-implementation-is-not-inline`:
-
-```elisp
-"(use-package p3-r-tools"
-"(use-package p3-ess"
-"(use-package ess-r-mode"
-"(defun compile-rmd"
-```
-
-Add:
-
-```elisp
-(ert-deftest p3-config-ess-orchestration-has-one-owner ()
-  (let* ((contents (p3-config-test--contents "config.org"))
-         (ess (p3-config-test--position
-               "(p3/config-load-module 'p3-config-ess)" contents))
-         (r-program (p3-config-test--position
-                     "(p3/windows-configure-r-program)" contents)))
-    (should-not (string-match-p "(use-package p3-r-tools" contents))
-    (should-not
-     (string-match-p
-      (regexp-quote "(keymap-global-set \"C-c R\"") contents))
-    (should (< ess r-program))))
-```
+Add `p3-config-ess` to ordering checks, rename the five-module test to six modules, add old ESS/R-tools inline forms to the forbidden list, and add a one-owner test that rejects `(use-package p3-r-tools` and the old `C-c R` binding in `config.org` while asserting ESS load precedes `p3/windows-configure-r-program`.
 
 - [ ] **Step 2: Verify RED**
 
@@ -548,25 +197,13 @@ Add:
 emacs -Q --batch -L lisp -l test/p3-config-test.el -f ert-run-tests-batch-and-exit
 ```
 
-Expected: failures because ESS is still inline and `p3-config-ess` is not yet loaded by `config.org`.
-
 - [ ] **Step 3: Remove the early R-tools configuration stanza**
 
-Delete from `* Functions`:
-
-```elisp
-(use-package p3-r-tools
-  :ensure nil
-  :demand t
-  :config
-  (keymap-global-set "C-c R" p3-r-command-map))
-```
-
-Leave `p3-core` unchanged.
+Delete the existing `use-package p3-r-tools` block and its `C-c R` binding from `* Functions`; leave `p3-core` unchanged.
 
 - [ ] **Step 4: Replace the inline ESS implementation**
 
-Replace the current `use-package p3-ess`, `use-package ess-r-mode`, and `compile-rmd` blocks with:
+Use:
 
 ```org
 ** ESS
@@ -588,27 +225,19 @@ startup boundary.
 #+END_SRC
 ```
 
-- [ ] **Step 5: Verify there is no earlier executable R-tools dependency**
+- [ ] **Step 5: Verify no earlier executable R-tools dependency**
 
 ```bash
 git grep -n "p3-r-\|p3-r-command-map\|p3-r-tools" -- config.org
 ```
 
-Expected: any match before the ESS section is prose/commentary only; no earlier Lisp source block loads `p3-r-tools`, binds `p3-r-command-map`, or invokes `p3-r-*`.
+Expected: any match before the ESS section is prose/commentary only.
 
-- [ ] **Step 6: Verify GREEN across the affected suites**
+- [ ] **Step 6: Verify GREEN across affected suites**
 
 ```bash
-emacs -Q --batch -L lisp \
-  -l test/p3-config-loader-test.el \
-  -l test/p3-config-test.el \
-  -l test/p3-config-ess-test.el \
-  -l test/p3-ess-test.el \
-  -l test/p3-r-tools-test.el \
-  -f ert-run-tests-batch-and-exit
+emacs -Q --batch -L lisp -l test/p3-config-loader-test.el -l test/p3-config-test.el -l test/p3-config-ess-test.el -l test/p3-ess-test.el -l test/p3-r-tools-test.el -f ert-run-tests-batch-and-exit
 ```
-
-Expected: zero unexpected failures; the R parser test may keep its existing environment-dependent skip.
 
 - [ ] **Step 7: Commit**
 
@@ -631,53 +260,18 @@ git commit -m "Route ESS configuration through its module"
 
 - [ ] **Step 1: Add Ubuntu compile/test entries**
 
-Add:
-
-```yaml
-            lisp/p3-config-completion.el \
-            lisp/p3-config-ess.el \
-            lisp/p3-config-workspace.el \
-```
-
-and:
-
-```yaml
-            -l test/p3-config-test.el \
-            -l test/p3-config-ess-test.el \
-            -l test/p3-project-test.el \
-```
+Add `lisp/p3-config-ess.el` to byte compilation and `test/p3-config-ess-test.el` to the ERT load list.
 
 - [ ] **Step 2: Extend Windows path triggers and source tests**
 
-Add triggers:
+Add triggers for `lisp/p3-config-ess.el`, `lisp/p3-ess.el`, `lisp/p3-r-tools.el`, `test/p3-config-ess-test.el`, `test/p3-ess-test.el`, and `test/p3-r-tools-test.el`. Keep Windows byte compilation limited to existing boundary modules; add only `test/p3-config-ess-test.el` to the Windows config architecture ERT command.
 
-```yaml
-      - "lisp/p3-config-ess.el"
-      - "lisp/p3-ess.el"
-      - "lisp/p3-r-tools.el"
-      - "test/p3-config-ess-test.el"
-      - "test/p3-ess-test.el"
-      - "test/p3-r-tools-test.el"
-```
-
-Keep Windows byte compilation limited to the existing boundary modules. Add only the source-level ESS boundary test to the Windows architecture command:
-
-```yaml
-          -l test/p3-config-loader-test.el
-          -l test/p3-config-test.el
-          -l test/p3-config-ess-test.el
-          -l test/p3-commands-test.el
-          -l test/p3-git-test.el
-```
-
-- [ ] **Step 3: Static-check the workflow diff**
+- [ ] **Step 3: Static-check workflow diff**
 
 ```bash
 git diff --check
 git diff -- .github/workflows/emacs-tests.yml .github/workflows/windows-platform-tests.yml
 ```
-
-Expected: no whitespace errors and no unrelated workflow changes.
 
 - [ ] **Step 4: Commit**
 
@@ -690,12 +284,9 @@ git commit -m "Cover ESS configuration boundary in CI"
 
 ### Task 5: Final verification and adversarial review
 
-**Files:**
-- Verify all changed files; do not expand scope.
+**Files:** Verify all changed files; do not expand scope.
 
-**Interfaces:**
-- Consumes: Tasks 1-4.
-- Produces: merge-ready branch; merge still requires explicit user approval.
+**Interfaces:** Consumes Tasks 1-4; produces a merge-ready branch, with merge still requiring explicit approval.
 
 - [ ] **Step 1: Check scope and whitespace**
 
@@ -704,58 +295,15 @@ git diff --check master...HEAD
 git diff --stat master...HEAD
 ```
 
-Expected changed implementation/test files only:
-
-```text
-config.org
-lisp/p3-config-ess.el
-lisp/p3-ess.el
-lisp/p3-config-completion.el
-test/p3-config-ess-test.el
-test/p3-config-test.el
-.github/workflows/emacs-tests.yml
-.github/workflows/windows-platform-tests.yml
-```
-
-plus the approved spec/plan documents.
+Only the approved spec/plan plus ESS boundary implementation/tests/workflows may differ.
 
 - [ ] **Step 2: Compare moved forms with `master`**
 
-```bash
-git show master:config.org | grep -n -A90 -B10 "use-package ess-r-mode"
-git show HEAD:lisp/p3-config-ess.el
+Compare old inline ESS, Company backend, and inferior-buffer helper forms against `HEAD:lisp/p3-config-ess.el`; reject semantic drift.
 
-git show master:lisp/p3-config-completion.el | grep -n -A25 -B5 "p3/r-company-backends"
-git show HEAD:lisp/p3-config-ess.el | grep -n -A25 -B5 "p3/r-company-backends"
+- [ ] **Step 3: Run complete local ERT gate if Emacs is available**
 
-git show master:lisp/p3-ess.el | grep -n -A8 -B4 "p3/ess-inferior-mode-setup"
-git show HEAD:lisp/p3-config-ess.el | grep -n -A8 -B4 "p3/ess-inferior-mode-setup"
-```
-
-Expected: settings, hooks, bindings, Company backend contents, `compile-rmd`, and inferior-buffer setup are semantically unchanged.
-
-- [ ] **Step 3: Run the complete local ERT gate if Emacs is available**
-
-```bash
-emacs -Q --batch -L lisp \
-  -l test/p3-config-loader-test.el \
-  -l test/p3-config-test.el \
-  -l test/p3-config-ess-test.el \
-  -l test/p3-project-test.el \
-  -l test/p3-core-test.el \
-  -l test/p3-platform-test.el \
-  -l test/p3-python-test.el \
-  -l test/p3-terminal-test.el \
-  -l test/p3-ess-test.el \
-  -l test/p3-gptel-test.el \
-  -l test/p3-r-tools-test.el \
-  -l test/p3-org-export-test.el \
-  -l test/p3-commands-test.el \
-  -l test/p3-git-test.el \
-  -f ert-run-tests-batch-and-exit
-```
-
-Expected: zero unexpected failures; existing environment-dependent skips may remain.
+Use the Ubuntu CI suite plus `test/p3-config-ess-test.el`; expect zero unexpected failures and only existing environment-dependent skips.
 
 - [ ] **Step 4: Confirm generated artifacts remain ignored/untracked**
 
@@ -765,32 +313,12 @@ git check-ignore -q lisp/example.elc
 test -z "$(git ls-files 'config.el' '*.elc')"
 ```
 
-- [ ] **Step 5: Push once and verify the final PR merge-ref CI**
+- [ ] **Step 5: Push once and verify final PR merge-ref CI**
 
-Required final gates:
-
-```text
-Ubuntu: Emacs tests — byte compilation succeeds; full ERT has zero unexpected failures.
-Windows: Windows platform tests — platform/project and config architecture tests have zero unexpected failures.
-```
-
-If CI fails, retrieve the exact job log and fix the root cause without adding diagnostic machinery or repeated probe pushes.
+Ubuntu `Emacs tests` must compile successfully and have zero unexpected ERT failures. Windows `Windows platform tests` must have zero unexpected failures. If CI fails, retrieve the exact job log and fix the root cause without diagnostic machinery or repeated probe pushes.
 
 - [ ] **Step 6: Final rejection-oriented review**
 
-Reject if any of the following is true:
-
-```text
-p3-ess.el still owns Smartparens/ANSI buffer configuration.
-p3-config-completion.el still owns ESS-specific Company state.
-p3-config-ess.el does not explicitly call p3/ess-setup.
-p3-r-tools.el public behavior changed.
-Any ESS binding/setting/backend value differs from master without approval.
-Windows R selection moved or changed order.
-The narrow ESS display rule moved or broadened.
-The Company compatibility bug was mixed into this PR.
-Generated artifacts are tracked.
-CI has an unexpected failure.
-```
+Reject if `p3-ess.el` still owns buffer configuration, generic completion still owns ESS Company state, `p3/ess-setup` is not called explicitly, `p3-r-tools.el` behavior changed, any ESS binding/setting/backend value drifts, Windows R ordering changes, the narrow display rule moves/broadens, the Company bug is mixed in, generated artifacts are tracked, or CI has an unexpected failure.
 
 If none apply, report merge-ready; do not merge without explicit user approval.
