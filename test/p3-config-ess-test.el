@@ -179,6 +179,23 @@
      (string-match-p
       (regexp-quote "(add-hook 'markdown-mode-hook 'compile-rmd)") contents))))
 
+(ert-deftest p3-ess-library-has-no-buffer-configuration-glue ()
+  (let ((contents (p3-config-ess-test--contents "lisp/p3-ess.el")))
+    (dolist (forbidden '("p3/ess-inferior-mode-setup"
+                         "ansi-color-for-comint-mode"
+                         "smartparens-mode"))
+      (should-not (string-match-p (regexp-quote forbidden) contents)))))
+
+(ert-deftest p3-generic-completion-has-no-ess-company-owner ()
+  (let ((contents
+         (p3-config-ess-test--contents "lisp/p3-config-completion.el")))
+    (dolist (forbidden '("p3/r-company-backends"
+                         "p3/ess-company-config"
+                         "company-R-library"
+                         "company-R-args"
+                         "company-R-objects"))
+      (should-not (string-match-p (regexp-quote forbidden) contents)))))
+
 (provide 'p3-config-ess-test)
 
 ;;; p3-config-ess-test.el ends here

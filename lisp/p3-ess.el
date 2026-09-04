@@ -10,9 +10,7 @@
 (require 'p3-project)
 
 (declare-function R "ess-r-mode")
-(declare-function smartparens-mode "smartparens" (&optional arg))
 
-(defvar ansi-color-for-comint-mode)
 (defvar ess-local-process-name nil)
 
 (defvar p3/ess-project-processes
@@ -67,11 +65,6 @@
     (unless process
       (user-error "Unable to create ESS process"))
     (setq-local ess-local-process-name process)))
-
-(defun p3/ess-inferior-mode-setup ()
-  "Apply personal defaults to an inferior ESS buffer."
-  (setq-local ansi-color-for-comint-mode 'filter)
-  (smartparens-mode 1))
 
 (defun p3/ess-force-buffer-current-symbol ()
   "Return the ESS function guarded by project-process advice."
