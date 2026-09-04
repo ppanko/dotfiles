@@ -48,14 +48,24 @@
     (setq buffer-file-name p3/config-source)
     (org-mode)
     (goto-char (point-min))
-    (while (org-babel-next-src-block 1)
-      (let* ((info (org-babel-get-src-block-info 'light))
-             (params (nth 2 info))
-             (tangle (cdr (assq :tangle params))))
-        (unless (or (null tangle)
-                    (equal (format "%s" tangle) "no"))
-          (user-error "Unsupported :tangle setting %S in %s"
-                      tangle p3/config-source))))))
+    (let ((done nil))
+      (while (not done)
+        (condition-case err
+            (progn
+              (org-babel-next-src-block 1)
+              (let* ((info (org-babel-get-src-block-info 'light))
+                     (params (nth 2 info))
+                     (tangle (cdr (assq :tangle params))))
+                (unless (or (null tangle)
+                            (equal (format "%s" tangle) "no"))
+                  (user-error "Unsupported :tangle setting %S in %s"
+                              tangle p3/config-source))))
+          (user-error
+           (if (string-match-p
+                "\\`No \\(?:further \\)?code blocks\\'"
+                (error-message-string err))
+               (setq done t)
+             (signal (car err) (cdr err)))))))))
 
 (defun p3/config--assert-single-tangle-output (outputs staged)
   "Require OUTPUTS to contain only STAGED."
