@@ -4,6 +4,8 @@
 
 (defvar company-backends)
 (defvar company-dabbrev-downcase)
+(defvar xref-show-xrefs-function)
+(defvar xref-show-definitions-function)
 
 (declare-function vertico-mode "vertico" (&optional arg))
 (declare-function vertico-repeat-save "vertico-repeat" ())
