@@ -170,11 +170,12 @@
   (let ((forms (p3-config-ess-test--forms "lisp/p3-config-ess.el")))
     (should
      (equal
-      (cddddr (p3-config-ess-test--defun-form 'compile-rmd))
-      '((set (make-local-variable 'compile-command)
-             (concat "R -e \"rmarkdown::render('"
-                     buffer-file-name
-                     "')\"")))))
+      (p3-config-ess-test--defun-form 'compile-rmd)
+      '(defun compile-rmd ()
+         (set (make-local-variable 'compile-command)
+              (concat "R -e \"rmarkdown::render('"
+                      buffer-file-name
+                      "')\"")))))
     (should (member '(add-hook 'ess-mode-hook 'compile-rmd) forms))
     (should (member '(add-hook 'markdown-mode-hook 'compile-rmd) forms))))
 
