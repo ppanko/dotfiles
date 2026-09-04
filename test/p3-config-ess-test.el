@@ -167,17 +167,16 @@
       pairs))))
 
 (ert-deftest p3-config-ess-preserves-rmarkdown-compile-hook ()
-  (let ((contents (p3-config-ess-test--contents "lisp/p3-config-ess.el")))
-    (should (string-match-p (regexp-quote "(defun compile-rmd ()") contents))
+  (let ((forms (p3-config-ess-test--forms "lisp/p3-config-ess.el")))
     (should
-     (string-match-p
-      (regexp-quote "R -e \"rmarkdown::render('") contents))
-    (should
-     (string-match-p
-      (regexp-quote "(add-hook 'ess-mode-hook 'compile-rmd)") contents))
-    (should
-     (string-match-p
-      (regexp-quote "(add-hook 'markdown-mode-hook 'compile-rmd)") contents))))
+     (equal
+      (cddddr (p3-config-ess-test--defun-form 'compile-rmd))
+      '((set (make-local-variable 'compile-command)
+             (concat "R -e \"rmarkdown::render('"
+                     buffer-file-name
+                     "')\"")))))
+    (should (member '(add-hook 'ess-mode-hook 'compile-rmd) forms))
+    (should (member '(add-hook 'markdown-mode-hook 'compile-rmd) forms))))
 
 (ert-deftest p3-ess-library-has-no-buffer-configuration-glue ()
   (let ((contents (p3-config-ess-test--contents "lisp/p3-ess.el")))
