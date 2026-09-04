@@ -1,14 +1,15 @@
 ;;; p3-config-test.el --- Smoke tests for the Emacs config -*- lexical-binding: t; -*-
 
 (require 'ert)
-(require 'org)
-(require 'ob-tangle)
 
 (defconst p3-config-test--root
   (file-name-directory
    (directory-file-name
     (file-name-directory (or load-file-name buffer-file-name))))
   "Root of the Emacs configuration under test.")
+
+(add-to-list 'load-path (expand-file-name "lisp" p3-config-test--root))
+(require 'p3-config-loader)
 
 (defun p3-config-test--assert-readable-elisp (path)
   "Fail when PATH does not contain syntactically readable Emacs Lisp."
@@ -17,8 +18,6 @@
     (emacs-lisp-mode)
     (condition-case err
         (progn
-          ;; `check-parens' distinguishes an incomplete form from the normal
-          ;; end-of-file signal produced by repeatedly calling `read'.
           (check-parens)
           (goto-char (point-min))
           (condition-case nil
@@ -33,17 +32,24 @@
   (p3-config-test--assert-readable-elisp
    (expand-file-name "init.el" p3-config-test--root)))
 
-(ert-deftest p3-config-org-tangles-to-readable-elisp ()
-  (let ((target (make-temp-file "p3-config-test-" nil ".el")))
+(ert-deftest p3-config-org-builds-through-production-cache-contract ()
+  (let* ((directory (make-temp-file "p3-config-real-build-" t))
+         (p3/config-source
+          (expand-file-name "config.org" p3-config-test--root))
+         (p3/config-generated
+          (expand-file-name "config.el" directory)))
     (unwind-protect
         (progn
-          (org-babel-tangle-file
-           (expand-file-name "config.org" p3-config-test--root)
-           target
-           "emacs-lisp")
-          (should (> (file-attribute-size (file-attributes target)) 0))
-          (p3-config-test--assert-readable-elisp target))
-      (delete-file target))))
+          (should (equal (p3/config-build) p3/config-generated))
+          (should-not (p3/config-cache-stale-p))
+          (with-temp-buffer
+            (insert-file-contents p3/config-generated)
+            (goto-char (point-min))
+            (should
+             (looking-at
+              ";; p3-config-source-sha256: [0-9a-f]\\{64\\}$")))
+          (p3-config-test--assert-readable-elisp p3/config-generated))
+      (delete-directory directory t))))
 
 (ert-deftest p3-config-org-owns-org-export-integration ()
   (with-temp-buffer
@@ -63,11 +69,9 @@
                       "p3-ess" "p3-gptel"))
       (goto-char (point-min))
       (should (search-forward (format "(use-package %s" module) nil t)))
-    ;; Package declarations and wiring stay visible in the literate config.
     (dolist (package '("python" "eglot" "ess-r-mode" "vterm" "gptel"))
       (goto-char (point-min))
       (should (search-forward (format "(use-package %s" package) nil t)))
-    ;; Subsystem implementations belong to independently testable libraries.
     (dolist (implementation '("(defun p3/windows-rtools-version"
                                "(defun p3/windows-latest-r-program"
                                "(defun p3/project-root"
@@ -122,7 +126,7 @@
       (should (< terminal-position shell-position))
       (should (< shell-position shell-binding-position)))))
 
-(ert-deftest p3-init-loads-project-foundation-before-literate-config ()
+(ert-deftest p3-init-loads-project-and-loader-before-literate-config ()
   (with-temp-buffer
     (insert-file-contents (expand-file-name "init.el" p3-config-test--root))
     (let ((load-path-position
@@ -130,17 +134,32 @@
              (should (search-forward "(add-to-list 'load-path p3/lisp-directory)" nil t))
              (point)))
           project-position
+          loader-position
           config-position)
       (setq project-position
             (progn
               (should (search-forward "(require 'p3-project)" nil t))
               (point)))
+      (setq loader-position
+            (progn
+              (should (search-forward "(require 'p3-config-loader)" nil t))
+              (point)))
       (setq config-position
             (progn
-              (should (search-forward "(p3/load-config t)" nil t))
+              (should (search-forward "(p3/config-load)" nil t))
               (point)))
       (should (< load-path-position project-position))
-      (should (< project-position config-position)))))
+      (should (< project-position loader-position))
+      (should (< loader-position config-position)))))
+
+(ert-deftest p3-init-does-not-unconditionally-load-org-for-tangling ()
+  (with-temp-buffer
+    (insert-file-contents (expand-file-name "init.el" p3-config-test--root))
+    (should-not (search-forward "(require 'ob-tangle)" nil t))
+    (goto-char (point-min))
+    (should-not (search-forward "(org-babel-tangle-file" nil t))
+    (goto-char (point-min))
+    (should-not (search-forward "(defun p3/load-config" nil t))))
 
 (ert-deftest p3-init-does-not-special-case-org-export ()
   (with-temp-buffer
