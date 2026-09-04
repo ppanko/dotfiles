@@ -16,6 +16,8 @@
 (defvar ess-eval-visibly)
 (defvar ess-toggle-underscore)
 (defvar ess-use-flymake)
+(defvar ess-mode-map)
+(defvar inferior-ess-r-mode-map)
 (defvar flycheck-lintr-linters)
 (defvar ess--command-default-timeout)
 (defvar inferior-R-args)
