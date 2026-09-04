@@ -4,7 +4,7 @@
 
 **Goal:** Move declarative Python package wiring into `p3-config-python.el` while preserving the current Python/Eglot/basedpyright workflow exactly and leaving `p3-python.el` as the reusable behavior library.
 
-**Architecture:** `config.org` will exact-source load one new configuration owner, `p3-config-python.el`. That module exact-source loads `p3-python.el`, owns the existing built-in Python package declaration, `python-ts-mode` routing/hooks/bindings, Eglot package wiring, and the Python-specific Flake8 executable setting. `p3-python.el` remains behavior-only and unchanged unless compiler-only declarations are needed.
+**Architecture:** `config.org` will exact-source load one new configuration owner, `p3-config-python.el`. That module exact-source loads `p3-python.el`, owns the existing built-in Python package declaration, `python-ts-mode` routing/hooks/bindings, Eglot package wiring, and the Python-specific Flake8 executable setting. `p3-python.el` remains behavior-only and unchanged.
 
 **Tech Stack:** Emacs Lisp, Emacs 29+, built-in `python.el`, `python-ts-mode`, Eglot, Flycheck, ERT, Org Babel config cache, `use-package`, GitHub Actions on Ubuntu and Windows.
 
@@ -14,7 +14,7 @@
 
 - Preserve current Python behavior exactly; this is an ownership/extraction PR only.
 - Do not change project interpreter discovery, `.venv`/`venv` precedence, Windows/Linux interpreter paths, managed basedpyright bootstrap, Eglot server registration, REPL behavior, diagnostics ownership, tree-sitter policy, Python keybindings, or package-management behavior.
-- Keep `p3-python.el` as the single reusable Python behavior library; do not split it into additional files.
+- Keep `p3-python.el` as the single reusable Python behavior library and do not modify it in this PR.
 - `p3-config-python.el` is the single declarative Python configuration owner.
 - Preserve `python-mode` and `python-ts-mode` symmetry for the three hooks and six source-buffer bindings specified in the design.
 - Move only `flycheck-python-flake8-executable` out of the generic Flycheck block; leave global Flycheck enablement, exclusions, and checker threshold unchanged.
@@ -35,7 +35,7 @@
 - Modify `test/p3-config-test.el` — update ownership/module-count/startup-order structural assertions.
 - Modify `.github/workflows/emacs-tests.yml` — compile the new module and load the new test file.
 - Modify `.github/workflows/windows-platform-tests.yml` — trigger on Python boundary files and run the new source-level boundary tests.
-- Do not modify `lisp/p3-python.el` or `test/p3-python-test.el` unless warnings-as-errors compilation proves a declaration-only adjustment is required.
+- Leave `lisp/p3-python.el` and `test/p3-python-test.el` unchanged.
 
 ---
 
@@ -135,7 +135,7 @@ Expected: failure because `lisp/p3-config-python.el` does not yet exist.
 
 - [ ] **Step 3: Create `lisp/p3-config-python.el` by moving current forms without redesign**
 
-Start the module with:
+Start the module with the exact compiler-safe declarations and owner load:
 
 ```elisp
 ;;; p3-config-python.el --- Python configuration -*- lexical-binding: t; -*-
@@ -144,7 +144,14 @@ Start the module with:
 (require 'p3-config-loader)
 
 (p3/config-load-module 'p3-python)
+
+(defvar python-mode-map)
+(defvar python-ts-mode-map)
+(defvar eglot-mode-map)
+(defvar flycheck-python-flake8-executable)
 ```
+
+These `defvar` forms have no initializer and exist only to make external map/option ownership explicit to the byte compiler; they must not initialize or replace package state.
 
 Then copy the current `use-package python`, `python-ts-mode` conditional block, and `use-package eglot` forms from `config.org` semantically unchanged. Add:
 
@@ -185,7 +192,7 @@ emacs -Q --batch -L lisp \
 rm -f lisp/p3-config-python.elc
 ```
 
-Expected: zero warnings/errors and no basedpyright bootstrap. If built-in map variables still need declarations in this compile mode, add only `defvar`/`declare-function` forms that do not alter runtime semantics.
+Expected: zero warnings/errors, no optional package installation, and no basedpyright bootstrap. A compile failure at this point is a real implementation issue to investigate; do not broaden the declarations speculatively.
 
 - [ ] **Step 6: Commit**
 
@@ -228,8 +235,8 @@ In `test/p3-config-test.el`:
 "flycheck-python-flake8-executable"
 ```
 
-4. add a Python one-owner test that asserts the module load occurs exactly in the existing Python section and that legitimate Org Babel `(python . t)` remains allowed;
-5. extend startup-order assertions so the Python module remains after the existing Projectile configuration and before Rainbow/Shell configuration.
+4. add a Python one-owner test that asserts the module load occurs in the existing Python section and that legitimate Org Babel `(python . t)` remains allowed;
+5. extend startup-order assertions so the generic Flycheck block remains before the Python module, the Python module remains after the existing Projectile configuration, and the Python module remains before Rainbow/Shell configuration. This protects the Flake8 relocation timing without changing the final value.
 
 - [ ] **Step 2: Add ownership assertions to `test/p3-config-python-test.el`**
 
@@ -425,7 +432,7 @@ test/p3-config-test.el
 .github/workflows/windows-platform-tests.yml
 ```
 
-plus the approved Python spec and plan. `lisp/p3-python.el` and `test/p3-python-test.el` must remain unchanged unless a declaration-only compiler fix was proven necessary.
+plus the approved Python spec and plan. `lisp/p3-python.el` and `test/p3-python-test.el` must remain unchanged.
 
 - [ ] **Step 2: Compare moved forms against `master`**
 
@@ -481,7 +488,7 @@ Reject the PR if any of the following are true:
 
 - `config.org` still owns direct Python/Eglot package wiring;
 - `p3-config-python.el` does not exact-source load `p3-python.el`;
-- `p3-python.el` runtime behavior changed without an explicit design change;
+- `p3-python.el` or its existing behavioral test suite changed;
 - `.venv`/`venv`, basedpyright, Eglot, REPL, diagnostics, or tree-sitter behavior changed;
 - `python-mode` and `python-ts-mode` hooks/bindings are no longer intentionally symmetrical;
 - generic Flycheck still owns `flycheck-python-flake8-executable` or unrelated Flycheck policy moved;
