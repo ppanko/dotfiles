@@ -47,7 +47,8 @@ jobs:
             lisp/p3-ess.el \
             lisp/p3-r-tools.el \
             lisp/p3-gptel.el \
-            spikes/pptx-editor/p3-pptx-spike.el
+            spikes/pptx-editor/p3-pptx-spike.el \
+            spikes/pptx-editor/p3-pptx-spike-fast.el
 
       - name: Run ERT test suite
         run: |
