@@ -1,6 +1,7 @@
 ;;; p3-config-test.el --- Smoke tests for the Emacs config -*- lexical-binding: t; -*-
 
 (require 'ert)
+(require 'subr-x)
 
 (defconst p3-config-test--root
   (file-name-directory
@@ -10,6 +11,16 @@
 
 (add-to-list 'load-path (expand-file-name "lisp" p3-config-test--root))
 (require 'p3-config-loader)
+
+(defun p3-config-test--path (relative)
+  "Return RELATIVE under the repository root."
+  (expand-file-name relative p3-config-test--root))
+
+(defun p3-config-test--contents (relative)
+  "Return contents of repository file RELATIVE."
+  (with-temp-buffer
+    (insert-file-contents (p3-config-test--path relative))
+    (buffer-string)))
 
 (defun p3-config-test--assert-readable-elisp (path)
   "Fail when PATH does not contain syntactically readable Emacs Lisp."
@@ -28,16 +39,20 @@
        (ert-fail
         (format "Could not read %s: %s" path (error-message-string err)))))))
 
+(defun p3-config-test--position (needle contents)
+  "Return one-based end position of NEEDLE in CONTENTS, failing if absent."
+  (let ((position (string-match (regexp-quote needle) contents)))
+    (should position)
+    (+ position (length needle))))
+
 (ert-deftest p3-init-el-is-readable ()
   (p3-config-test--assert-readable-elisp
-   (expand-file-name "init.el" p3-config-test--root)))
+   (p3-config-test--path "init.el")))
 
 (ert-deftest p3-config-org-builds-through-production-cache-contract ()
   (let* ((directory (make-temp-file "p3-config-real-build-" t))
-         (p3/config-source
-          (expand-file-name "config.org" p3-config-test--root))
-         (p3/config-generated
-          (expand-file-name "config.el" directory)))
+         (p3/config-source (p3-config-test--path "config.org"))
+         (p3/config-generated (expand-file-name "config.el" directory)))
     (unwind-protect
         (progn
           (should (equal (p3/config-build) p3/config-generated))
@@ -52,26 +67,19 @@
       (delete-directory directory t))))
 
 (ert-deftest p3-config-org-owns-org-export-integration ()
-  (with-temp-buffer
-    (insert-file-contents (expand-file-name "config.org" p3-config-test--root))
-    (should (search-forward "(use-package p3-org-export" nil t))
-    (goto-char (point-min))
-    (should-not (search-forward "(defun p3/org-export-to-office" nil t))
-    (goto-char (point-min))
-    (should (search-forward "(\"C-c C-o\" . \"open link at point\")" nil t))
-    (goto-char (point-min))
-    (should (search-forward "(\"C-c E\" . \"export Org file\")" nil t))))
+  (let ((contents (p3-config-test--contents "config.org")))
+    (should (string-match-p "(use-package p3-org-export" contents))
+    (should-not (string-match-p "(defun p3/org-export-to-office" contents))))
 
 (ert-deftest p3-config-org-delegates-custom-subsystems-to-modules ()
-  (with-temp-buffer
-    (insert-file-contents (expand-file-name "config.org" p3-config-test--root))
+  (let ((contents (p3-config-test--contents "config.org")))
     (dolist (module '("p3-platform" "p3-core" "p3-python" "p3-terminal"
                       "p3-ess" "p3-gptel"))
-      (goto-char (point-min))
-      (should (search-forward (format "(use-package %s" module) nil t)))
+      (should (string-match-p (regexp-quote (format "(use-package %s" module))
+                              contents)))
     (dolist (package '("python" "eglot" "ess-r-mode" "vterm" "gptel"))
-      (goto-char (point-min))
-      (should (search-forward (format "(use-package %s" package) nil t)))
+      (should (string-match-p (regexp-quote (format "(use-package %s" package))
+                              contents)))
     (dolist (implementation '("(defun p3/windows-rtools-version"
                                "(defun p3/windows-latest-r-program"
                                "(defun p3/project-root"
@@ -80,91 +88,151 @@
                                "(defun p3/ess-project-root"
                                "(defun p3/ess-ensure-project-process"
                                "(defun p3/gptel-send-task"))
-      (goto-char (point-min))
-      (should-not (search-forward implementation nil t)))))
+      (should-not (string-match-p (regexp-quote implementation) contents)))))
+
+(ert-deftest p3-config-early-orchestration-order-is-explicit ()
+  (let* ((contents (p3-config-test--contents "config.org"))
+         (newer (p3-config-test--position "(setq load-prefer-newer t)" contents))
+         (auto (p3-config-test--position "(auto-compile-on-load-mode)" contents))
+         (secrets (p3-config-test--position "(load-file p3/secrets-file)" contents))
+         (rtools (p3-config-test--position "(p3/windows-configure-rtools)" contents))
+         (base (p3-config-test--position
+                "(p3/config-load-module 'p3-config-base)" contents))
+         (editing (p3-config-test--position
+                   "(p3/config-load-module 'p3-config-editing)" contents))
+         (completion (p3-config-test--position
+                      "(p3/config-load-module 'p3-config-completion)" contents))
+         (r-program (p3-config-test--position
+                     "(p3/windows-configure-r-program)" contents))
+         (shell (p3-config-test--position
+                 "(p3/windows-configure-shell)" contents)))
+    (should (< newer auto))
+    (should (< auto secrets))
+    (should (< secrets rtools))
+    (should (< rtools base))
+    (should (< base editing))
+    (should (< editing completion))
+    (should (< completion r-program))
+    (should (< r-program shell))))
 
 (ert-deftest p3-config-platform-setup-preserves-subsystem-timing ()
-  (with-temp-buffer
-    (insert-file-contents (expand-file-name "config.org" p3-config-test--root))
-    (goto-char (point-min))
-    (should-not (search-forward "(p3/platform-setup)" nil t))
-    (goto-char (point-min))
-    (let ((rtools-position
-           (progn
-             (should (search-forward "(p3/windows-configure-rtools)" nil t))
-             (point)))
-          ess-position
-          r-position
-          terminal-position
-          shell-position
-          shell-binding-position)
-      (setq ess-position
-            (progn
-              (should (search-forward "(use-package ess-r-mode" nil t))
-              (point)))
-      (setq r-position
-            (progn
-              (should (search-forward "(p3/windows-configure-r-program)" nil t))
-              (point)))
-      (setq terminal-position
-            (progn
-              (should (search-forward "(use-package p3-terminal" nil t))
-              (point)))
-      (setq shell-position
-            (progn
-              (should (search-forward "(p3/windows-configure-shell)" nil t))
-              (point)))
-      (setq shell-binding-position
-            (progn
-              (should
-               (search-forward
-                "(global-set-key (kbd \"C-x C-u\") #'shell)" nil t))
-              (point)))
-      (should (< rtools-position ess-position))
-      (should (< ess-position r-position))
-      (should (< r-position terminal-position))
-      (should (< terminal-position shell-position))
-      (should (< shell-position shell-binding-position)))))
+  (let* ((contents (p3-config-test--contents "config.org"))
+         (rtools (p3-config-test--position "(p3/windows-configure-rtools)" contents))
+         (ess (p3-config-test--position "(use-package ess-r-mode" contents))
+         (r-program (p3-config-test--position
+                     "(p3/windows-configure-r-program)" contents))
+         (terminal (p3-config-test--position "(use-package p3-terminal" contents))
+         (shell (p3-config-test--position "(p3/windows-configure-shell)" contents))
+         (shell-binding (p3-config-test--position
+                         "(global-set-key (kbd \"C-x C-u\") #'shell)" contents)))
+    (should-not (string-match-p "(p3/platform-setup)" contents))
+    (should (< rtools ess))
+    (should (< ess r-program))
+    (should (< r-program terminal))
+    (should (< terminal shell))
+    (should (< shell shell-binding))))
+
+(ert-deftest p3-config-org-source-loads-five-config-modules ()
+  (let ((contents (p3-config-test--contents "config.org")))
+    (dolist (module '(p3-config-base p3-config-editing p3-config-completion
+                      p3-config-workspace p3-config-git))
+      (should
+       (string-match-p
+        (regexp-quote (format "(p3/config-load-module '%s)" module))
+        contents)))))
+
+(ert-deftest p3-config-moved-implementation-is-not-inline ()
+  (let ((contents (p3-config-test--contents "config.org")))
+    (dolist (implementation
+             '("(defconst p3/keybinding-sections"
+               "(defun p3/keybinding-atlas"
+               "(defun p3/save-kill-other-buffers"
+               "(defun p3/sudo-edit"
+               "(defun p3/region-suffix"
+               "(defun p3/newline-after-comma-or-space"
+               "(defun p3/force-quotes"
+               "(defun p3/byte-compile-init-dir"
+               "(defun p3/windows-shell"
+               "(defun move-line"
+               "(defun move-line-up"
+               "(defun move-line-down"
+               "(defun p3/open-in-external-app"
+               "(defun check-curl-version"
+               "(defun p3/get-local-buffer-mode"
+               "(defun p3/is-current-buffer-mode-inferior-ess-r-mode"
+               "(defun p3/check-git-installed"
+               "(defun p3/get-commit-message"
+               "(defun p3/git-call"
+               "(defun p3/git-run"
+               "(defun p3/git-commit-and-push-repository"
+               "(defun p3/git-commit-and-push-emacs-config"
+               "(defun close-magit-buffers"
+               "(defun p3/consult-r-doc-chapter-search"
+               "(defun p3/consult-line-all"
+               "(defun p3/ess-company-config"
+               "(defvar p3/r-company-backends"))
+      (should-not (string-match-p (regexp-quote implementation) contents)))
+    (dolist (package '(dashboard which-key vertico company undo-tree super-save
+                       multiple-cursors magit git-gutter-fringe+ transpose-frame
+                       ace-window restart-emacs avy))
+      (should-not
+       (string-match-p (regexp-quote (format "(use-package %s" package))
+                       contents)))))
+
+(ert-deftest p3-config-behavior-library-owner-pattern-is-explicit ()
+  (let ((base (p3-config-test--contents "lisp/p3-config-base.el"))
+        (git (p3-config-test--contents "lisp/p3-config-git.el"))
+        (commands (p3-config-test--contents "lisp/p3-commands.el"))
+        (git-behavior (p3-config-test--contents "lisp/p3-git.el")))
+    (should (string-match-p
+             (regexp-quote "(p3/config-load-module 'p3-commands)") base))
+    (should (string-match-p
+             (regexp-quote "(p3/config-load-module 'p3-git)") git))
+    (should-not (string-match-p "p3-config-" commands))
+    (should-not (string-match-p "p3-config-" git-behavior))))
+
+(ert-deftest p3-config-workspace-keeps-only-narrow-ess-display-policy ()
+  (let ((contents (p3-config-test--contents "lisp/p3-config-workspace.el")))
+    (should (string-match-p
+             (regexp-quote "(major-mode . inferior-ess-r-mode)") contents))
+    (dolist (broad '("python" "vterm" "shell-mode" "repl"))
+      (should-not (string-match-p broad contents)))))
+
+(ert-deftest p3-config-generated-artifacts-remain-ignored-and-untracked ()
+  (let ((ignore (p3-config-test--contents ".gitignore")))
+    (should (string-match-p (regexp-quote "*.elc") ignore))
+    (should (string-match-p (regexp-quote "/config.el") ignore)))
+  (when (executable-find "git")
+    (let ((default-directory p3-config-test--root))
+      (with-temp-buffer
+        (should (zerop (process-file "git" nil (current-buffer) nil
+                                     "ls-files" "config.el" "*.elc")))
+        (should (string-empty-p (string-trim (buffer-string))))))))
 
 (ert-deftest p3-init-loads-project-and-loader-before-literate-config ()
-  (with-temp-buffer
-    (insert-file-contents (expand-file-name "init.el" p3-config-test--root))
-    (let ((load-path-position
-           (progn
-             (should (search-forward "(add-to-list 'load-path p3/lisp-directory)" nil t))
-             (point)))
-          project-position
-          loader-position
-          config-position)
-      (setq project-position
-            (progn
-              (should (search-forward "(require 'p3-project)" nil t))
-              (point)))
-      (setq loader-position
-            (progn
-              (should (search-forward "(require 'p3-config-loader)" nil t))
-              (point)))
-      (setq config-position
-            (progn
-              (should (search-forward "(p3/config-load)" nil t))
-              (point)))
-      (should (< load-path-position project-position))
-      (should (< project-position loader-position))
-      (should (< loader-position config-position)))))
+  (let* ((contents (p3-config-test--contents "init.el"))
+         (load-path-position
+          (p3-config-test--position
+           "(add-to-list 'load-path p3/lisp-directory)" contents))
+         (project-position
+          (p3-config-test--position "(require 'p3-project)" contents))
+         (loader-position
+          (p3-config-test--position "(require 'p3-config-loader)" contents))
+         (config-position
+          (p3-config-test--position "(p3/config-load)" contents)))
+    (should (< load-path-position project-position))
+    (should (< project-position loader-position))
+    (should (< loader-position config-position))))
 
 (ert-deftest p3-init-does-not-unconditionally-load-org-for-tangling ()
-  (with-temp-buffer
-    (insert-file-contents (expand-file-name "init.el" p3-config-test--root))
-    (should-not (search-forward "(require 'ob-tangle)" nil t))
-    (goto-char (point-min))
-    (should-not (search-forward "(org-babel-tangle-file" nil t))
-    (goto-char (point-min))
-    (should-not (search-forward "(defun p3/load-config" nil t))))
+  (let ((contents (p3-config-test--contents "init.el")))
+    (should-not (string-match-p "(require 'ob-tangle)" contents))
+    (should-not (string-match-p "(org-babel-tangle-file" contents))
+    (should-not (string-match-p "(defun p3/load-config" contents))))
 
 (ert-deftest p3-init-does-not-special-case-org-export ()
-  (with-temp-buffer
-    (insert-file-contents (expand-file-name "init.el" p3-config-test--root))
-    (should-not (search-forward "(load \"p3-org-export\"" nil t))))
+  (let ((contents (p3-config-test--contents "init.el")))
+    (should-not (string-match-p "(load \"p3-org-export\"" contents))))
 
 (provide 'p3-config-test)
 
