@@ -88,13 +88,12 @@
 
 (ert-deftest p3-config-org-delegates-custom-subsystems-to-modules ()
   (let ((contents (p3-config-test--contents "config.org")))
-    (dolist (module '("p3-platform" "p3-core" "p3-gptel"))
+    (dolist (module '("p3-platform" "p3-core"))
       (should (string-match-p (regexp-quote (format "(use-package %s" module))
                               contents)))
-    (should (string-match-p (regexp-quote "(use-package gptel") contents))
-    (dolist (module '(p3-config-ess p3-config-org p3-config-org-roam
-                      p3-config-org-present p3-config-python
-                      p3-config-terminal))
+    (dolist (module '(p3-config-ess p3-config-gptel p3-config-org
+                      p3-config-org-roam p3-config-org-present
+                      p3-config-python p3-config-terminal))
       (should
        (string-match-p
         (regexp-quote (format "(p3/config-load-module '%s)" module))
@@ -194,14 +193,14 @@
     (should (< python rainbow))
     (should (< rainbow terminal))))
 
-(ert-deftest p3-config-org-source-loads-eleven-config-modules ()
+(ert-deftest p3-config-org-source-loads-twelve-config-modules ()
   (let ((contents (p3-config-test--contents "config.org")))
-    (should (= 11
+    (should (= 12
                (p3-config-test--count-occurrences
                 "(p3/config-load-module 'p3-config-" contents)))
     (dolist (module '(p3-config-base p3-config-editing p3-config-completion
-                      p3-config-ess p3-config-org p3-config-org-roam
-                      p3-config-org-present p3-config-python
+                      p3-config-ess p3-config-gptel p3-config-org
+                      p3-config-org-roam p3-config-org-present p3-config-python
                       p3-config-terminal p3-config-workspace p3-config-git))
       (should
        (string-match-p
@@ -269,7 +268,9 @@
                "(use-package org-present"
                "(use-package p3-terminal"
                "(p3/windows-configure-shell)"
-               "(use-package vterm"))
+               "(use-package vterm"
+               "(use-package gptel"
+               "(use-package p3-gptel"))
       (should-not (string-match-p (regexp-quote implementation) contents)))
     (dolist (package '(dashboard which-key vertico company undo-tree super-save
                        multiple-cursors magit git-gutter-fringe+ transpose-frame
@@ -311,15 +312,25 @@
       (should-not (string-match-p (regexp-quote forbidden) contents)))
     (should (string-match-p (regexp-quote "(python . t)") org-config))))
 
+(ert-deftest p3-config-gptel-orchestration-has-one-owner ()
+  (let* ((contents (p3-config-test--contents "config.org"))
+         (owner "(p3/config-load-module 'p3-config-gptel)"))
+    (should (= 1 (p3-config-test--count-occurrences owner contents)))
+    (dolist (forbidden '("(use-package gptel"
+                          "(use-package p3-gptel"))
+      (should-not (string-match-p (regexp-quote forbidden) contents)))))
+
 (ert-deftest p3-config-behavior-library-owner-pattern-is-explicit ()
   (let ((base (p3-config-test--contents "lisp/p3-config-base.el"))
         (git (p3-config-test--contents "lisp/p3-config-git.el"))
+        (gptel (p3-config-test--contents "lisp/p3-config-gptel.el"))
         (org (p3-config-test--contents "lisp/p3-config-org.el"))
         (roam (p3-config-test--contents "lisp/p3-config-org-roam.el"))
         (present (p3-config-test--contents "lisp/p3-config-org-present.el"))
         (terminal (p3-config-test--contents "lisp/p3-config-terminal.el"))
         (commands (p3-config-test--contents "lisp/p3-commands.el"))
         (git-behavior (p3-config-test--contents "lisp/p3-git.el"))
+        (gptel-behavior (p3-config-test--contents "lisp/p3-gptel.el"))
         (org-behavior (p3-config-test--contents "lisp/p3-org.el"))
         (roam-behavior (p3-config-test--contents "lisp/p3-org-roam.el"))
         (present-behavior (p3-config-test--contents "lisp/p3-org-present.el"))
@@ -329,6 +340,8 @@
     (should (string-match-p
              (regexp-quote "(p3/config-load-module 'p3-git)") git))
     (should (string-match-p
+             (regexp-quote "(p3/config-load-module 'p3-gptel)") gptel))
+    (should (string-match-p
              (regexp-quote "(p3/config-load-module 'p3-org)") org))
     (should (string-match-p
              (regexp-quote "(p3/config-load-module 'p3-org-roam)") roam))
@@ -336,7 +349,7 @@
              (regexp-quote "(p3/config-load-module 'p3-org-present)") present))
     (should (string-match-p
              (regexp-quote "(p3/config-load-module 'p3-terminal)") terminal))
-    (dolist (behavior (list commands git-behavior org-behavior
+    (dolist (behavior (list commands git-behavior gptel-behavior org-behavior
                             roam-behavior present-behavior terminal-behavior))
       (should-not (string-match-p "p3-config-" behavior)))))
 
