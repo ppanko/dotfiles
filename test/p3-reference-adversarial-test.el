@@ -102,6 +102,17 @@
         (should (funcall seen-filter "alpha2020"))
         (should-not (funcall seen-filter "local-only"))))))
 
+(ert-deftest p3-reference-key-at-point-is-confined-to-canonical-bibliography ()
+  (p3-reference-adversarial-test--with-library
+      "@article{alpha2020, title={Canonical}}\n"
+    (let ((key-at-point "alpha2020"))
+      (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
+                ((symbol-function 'citar-key-at-point)
+                 (lambda () key-at-point)))
+        (should (equal "alpha2020" (p3/reference--key-at-point)))
+        (setq key-at-point "local-only")
+        (should-not (p3/reference--key-at-point))))))
+
 (ert-deftest p3-reference-display-title-prefers-canonical-entry ()
   (p3-reference-adversarial-test--with-library
       "@article{alpha2020, title={Canonical title}}\n"
