@@ -78,9 +78,10 @@
           (p3/reference-remove-project-association "smith2024" 'project-node)
           (with-temp-buffer
             (insert-file-contents file)
-            (should (search-forward "[cite:@Smith2024]" nil t))
-            (goto-char (point-min))
-            (should-not (search-forward "[cite:@smith2024]" nil t))))
+            (let ((case-fold-search nil))
+              (should (search-forward "[cite:@Smith2024]" nil t))
+              (goto-char (point-min))
+              (should-not (search-forward "[cite:@smith2024]" nil t)))))
       (delete-file file))))
 
 (ert-deftest p3-reference-selector-is-confined-to-canonical-bibliography ()
