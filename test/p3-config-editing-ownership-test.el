@@ -13,6 +13,10 @@
      (expand-file-name relative p3-config-editing-ownership-test--root))
     (buffer-string)))
 
+(defun p3-config-editing-ownership-test--position (needle contents)
+  (or (string-match (regexp-quote needle) contents)
+      (ert-fail (format "Missing expected form: %s" needle))))
+
 (ert-deftest p3-config-editing-owns-generic-editing-packages ()
   (let ((config (p3-config-editing-ownership-test--contents "config.org"))
         (editing
@@ -46,16 +50,56 @@
                "ispell-dictionary \"english\""))
       (should (string-match-p (regexp-quote setting) editing)))))
 
-(ert-deftest p3-config-editing-preserves-original-activation-boundaries ()
+(ert-deftest p3-config-editing-does-not-depend-on-other-config-modules ()
   (let ((editing
          (p3-config-editing-ownership-test--contents
           "lisp/p3-config-editing.el")))
-    (dolist (boundary
-             '("(with-eval-after-load 'p3-config-completion"
-               "(with-eval-after-load 'p3-config-gptel"
-               "(with-eval-after-load 'p3-config-python"
-               "(with-eval-after-load 'p3-config-terminal"))
-      (should (string-match-p (regexp-quote boundary) editing)))))
+    (dolist (feature '(p3-config-completion
+                       p3-config-gptel
+                       p3-config-python
+                       p3-config-terminal))
+      (should-not
+       (string-match-p (regexp-quote (symbol-name feature)) editing)))))
+
+(ert-deftest p3-config-editing-preserves-activation-order-in-orchestration ()
+  (let* ((config (p3-config-editing-ownership-test--contents "config.org"))
+         (completion
+          (p3-config-editing-ownership-test--position
+           "(p3/config-load-module 'p3-config-completion)" config))
+         (thesaurus-snippets
+          (p3-config-editing-ownership-test--position
+           "(p3/config-editing-setup-thesaurus-and-snippets)" config))
+         (cpp
+          (p3-config-editing-ownership-test--position
+           "(use-package compile" config))
+         (gptel
+          (p3-config-editing-ownership-test--position
+           "(p3/config-load-module 'p3-config-gptel)" config))
+         (diagnostics
+          (p3-config-editing-ownership-test--position
+           "(p3/config-editing-setup-diagnostics)" config))
+         (workspace
+          (p3-config-editing-ownership-test--position
+           "(p3/config-load-module 'p3-config-workspace)" config))
+         (python
+          (p3-config-editing-ownership-test--position
+           "(p3/config-load-module 'p3-config-python)" config))
+         (color-helper
+          (p3-config-editing-ownership-test--position
+           "(p3/config-editing-setup-color-helper)" config))
+         (terminal
+          (p3-config-editing-ownership-test--position
+           "(p3/config-load-module 'p3-config-terminal)" config))
+         (spelling
+          (p3-config-editing-ownership-test--position
+           "(p3/config-editing-setup-spelling)" config))
+         (tramp
+          (p3-config-editing-ownership-test--position
+           "(require 'tramp)" config)))
+    (should (< completion thesaurus-snippets cpp))
+    (should (< gptel diagnostics workspace))
+    (should (< python color-helper terminal))
+    (should (< terminal spelling tramp))))
 
 (ert-deftest p3-config-editing-remains-early-owner ()
   (let* ((config (p3-config-editing-ownership-test--contents "config.org"))
