@@ -4,27 +4,27 @@
 
 **Goal:** Replace the split appearance stack with one focused appearance owner, a lean Unicode + `nerd-icons` visual layer, and a modern native Emacs mode line without config-module coupling or redisplay latency.
 
-**Architecture:** `config.org` remains the top-level composition map. `lisp/p3-config-appearance.el` becomes the visual owner for theme, fonts, frame chrome, mode-line formatting, icon availability, and Dashboard/Dired icon presentation; `lisp/p3-config-base.el` retains Dashboard/Dired/line-number behavior. The mode line reads already-available buffer/VC/Flycheck state and buffer-local project context derived outside redisplay.
+**Architecture:** `config.org` remains the composition map. `lisp/p3-config-appearance.el` owns theme, fonts, frame chrome, native mode-line formatting, icon availability, and Dashboard/Dired icon presentation; `lisp/p3-config-base.el` retains Dashboard/Dired/line-number behavior. Mode-line redisplay reads existing buffer/VC/Flycheck state and buffer-local project context derived outside redisplay.
 
-**Tech Stack:** Emacs Lisp; `use-package`; built-in `mode-line-format`, `project.el`, VC, coding-system APIs and TRAMP path parsing; Flycheck state variables; `doom-themes`; `nerd-icons`; `nerd-icons-dired`; ERT; GitHub Actions on Ubuntu and Windows.
+**Tech Stack:** Emacs Lisp; `use-package`; built-in `mode-line-format`, `project.el`, VC, coding-system APIs and TRAMP path parsing; Flycheck state; `doom-themes`; `nerd-icons`; `nerd-icons-dired`; ERT; GitHub Actions on Ubuntu and Windows.
 
 **Spec:** `docs/superpowers/specs/2026-09-05-appearance-config-design.md`
 
 ## Global Constraints
 
-- Keep `doom-palenight` as the active theme.
+- Keep `doom-palenight`.
 - Keep Windows `Consolas` height `125` and GNU/Linux `Inconsolata` height `140`.
-- Preserve maximized startup, bar cursor semantics, line-number activation, frame-title intent, matching-paren highlighting, Dashboard content, Dired behavior, UTF-8/process coding, and the `.Rmd` CRLF rule.
+- Preserve maximized startup, bar cursor semantics, line-number activation, frame title, matching-paren highlighting, Dashboard content, Dired behavior, UTF-8/process coding, and `.Rmd` CRLF policy.
 - Remove active `doom-modeline`, `all-the-icons`, `all-the-icons-dired`, and `unicode-fonts`; add only `nerd-icons` and `nerd-icons-dired` for this cleanup.
-- File identity and major-mode identity must retain textual labels and use associated Nerd Font icons when available.
-- Remote buffers must show textual host identity without initiating remote access.
-- Do not recreate Doom-modeline environment/version probing. Existing mode-provided `mode-line-process` text may remain.
-- Keep rendered VC payload bounded to 12 columns before ellipsis unless graphical acceptance demonstrates a nearby fixed bound is clearer.
+- File and major-mode identity always keep text; Nerd Font icons supplement them when available.
+- Remote buffers show host text without remote filesystem access.
+- Do not recreate Doom-modeline environment/version probing. Existing `mode-line-process` text may remain.
+- Bound VC payload to 12 columns before ellipsis unless graphical acceptance justifies a nearby fixed bound.
 - Emacs 30 uses `mode-line-format-right-align`; Emacs 29 uses one `space :align-to` fallback.
-- No configuration module may require or call another `p3-config-*` module.
+- No `p3-config-*` module may require/call another `p3-config-*` module.
 - No refresh timer, segment registry, extension protocol, generalized cache, or status-bar framework.
-- Redisplay formatters must not call `project-current`, perform file/remote I/O, refresh VC, load packages, run subprocesses, or repeatedly scan fonts.
-- Missing Nerd Font must leave mode line, Dashboard, and Dired text-safe. Never install fonts automatically at startup.
+- Redisplay must not call `project-current`, perform file/remote I/O, refresh VC, load packages, run subprocesses, or repeatedly scan fonts.
+- Missing Nerd Font must leave mode line, Dashboard, and Dired text-safe. Never install fonts automatically.
 - Do not merge without explicit approval.
 
 ---
@@ -36,8 +36,8 @@
 - Modify: `test/p3-config-test.el`
 
 **Interfaces:**
-- Consumes: repository source files through the source-reading test pattern already used by `test/p3-config-test.el`.
-- Produces: structural regressions for the new owner, fifteenth explicit config module, removed legacy appearance packages, and no cross-config-module coupling.
+- Consumes: repository source files through the existing source-reading test pattern.
+- Produces: structural regressions for the new owner, fifteenth explicit config module, legacy-package removal, and no config-module coupling.
 
 - [ ] **Step 1: Create the focused structural test file**
 
@@ -83,8 +83,7 @@ Create `test/p3-config-appearance-test.el`:
     (dolist (needle '("(use-package doom-themes"
                        "(use-package nerd-icons"
                        "nerd-icons-dired"
-                       "doom-palenight"
-                       "mode-line-format"))
+                       "doom-palenight"))
       (should (string-match-p (regexp-quote needle) appearance)))
     (dolist (forbidden '("doom-modeline" "all-the-icons" "unicode-fonts"))
       (should-not (string-match-p forbidden appearance))
@@ -103,14 +102,22 @@ Create `test/p3-config-appearance-test.el`:
 ;;; p3-config-appearance-test.el ends here
 ```
 
-- [ ] **Step 2: Update the global module count and readable order**
+- [ ] **Step 2: Update global module count/order**
 
 In `test/p3-config-test.el`:
 
 - rename `p3-config-org-source-loads-fourteen-config-modules` to `p3-config-org-source-loads-fifteen-config-modules`;
-- change the expected config-loader count from `14` to `15`;
-- add `p3-config-appearance` to the explicit module list;
-- add `appearance` to `p3-config-early-orchestration-order-is-explicit` and assert:
+- change `14` to `15`;
+- add `p3-config-appearance` to the explicit list;
+- in `p3-config-early-orchestration-order-is-explicit`, add:
+
+```elisp
+(appearance
+ (p3-config-test--position
+  "(p3/config-load-module 'p3-config-appearance)" contents))
+```
+
+and assert:
 
 ```elisp
 (should (< rtools base))
@@ -118,9 +125,7 @@ In `test/p3-config-test.el`:
 (should (< appearance editing))
 ```
 
-This order is only the human-readable top-level map. The focused test separately forbids module dependency/calls.
-
-- [ ] **Step 3: Run the focused RED gate**
+- [ ] **Step 3: Verify RED**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -129,9 +134,9 @@ emacs -Q --batch -L lisp \
   -f ert-run-tests-batch-and-exit
 ```
 
-Expected: FAIL because `lisp/p3-config-appearance.el` and its loader do not yet exist and the module count is still 14.
+Expected: FAIL because the Appearance owner/loader does not exist and the module count is still 14.
 
-- [ ] **Step 4: Commit the RED tests**
+- [ ] **Step 4: Commit RED tests**
 
 ```bash
 git add test/p3-config-test.el test/p3-config-appearance-test.el
@@ -150,12 +155,12 @@ git commit -m "Add appearance ownership regressions"
 - Modify: `test/p3-config-test.el`
 
 **Interfaces:**
-- Consumes: `use-package`; built-in face/frame APIs; Dashboard variables; `nerd-icons-font-family`; `nerd-icons-dired-mode`.
-- Produces: `p3/appearance--icons-available`, `p3/appearance-refresh-icon-availability`, `p3/appearance-configure-dashboard-icons`, `p3/appearance-sync-dired-icons`, and feature `p3-config-appearance`.
+- Consumes: `use-package`, frame/face APIs, Dashboard variables, `nerd-icons-font-family`, `nerd-icons-dired-mode`.
+- Produces: `p3/appearance--icons-available`, `p3/appearance-refresh-icon-availability`, `p3/appearance-configure-dashboard-icons`, `p3/appearance-sync-dired-icons`, feature `p3-config-appearance`.
 
-- [ ] **Step 1: Extend the RED structural assertions**
+- [ ] **Step 1: Extend structural tests and verify RED**
 
-Add to `p3-config-appearance-owns-visual-stack`:
+Add inside `p3-config-appearance-owns-visual-stack`:
 
 ```elisp
 (should (string-match-p "dashboard-icon-type" appearance))
@@ -168,11 +173,11 @@ Add to `p3-config-appearance-owns-visual-stack`:
 (should (string-match-p "\\\\.Rmd" config))
 ```
 
-Run the Task 1 gate again. Expected: FAIL on current inline/icon ownership.
+Run the Task 1 command. Expected: FAIL on current inline/icon ownership.
 
-- [ ] **Step 2: Create the Appearance owner and warning-clean declarations**
+- [ ] **Step 2: Create warning-clean Appearance owner**
 
-Start `lisp/p3-config-appearance.el` with:
+Create `lisp/p3-config-appearance.el`:
 
 ```elisp
 ;;; p3-config-appearance.el --- Visual presentation configuration -*- lexical-binding: t; -*-
@@ -198,8 +203,7 @@ Start `lisp/p3-config-appearance.el` with:
 (declare-function nerd-icons-dired-mode "nerd-icons-dired" (&optional arg))
 (declare-function flycheck-count-errors "flycheck" (errors))
 
-(defvar p3/appearance--icons-available nil
-  "Non-nil when the configured Nerd Font can be rendered graphically.")
+(defvar p3/appearance--icons-available nil)
 
 (defun p3/appearance-refresh-icon-availability ()
   "Refresh whether Nerd Font icons are safe to render."
@@ -210,13 +214,7 @@ Start `lisp/p3-config-appearance.el` with:
                          (or (and (boundp 'nerd-icons-font-family)
                                   nerd-icons-font-family)
                              "Symbols Nerd Font Mono"))))))
-```
 
-- [ ] **Step 3: Move frame/theme/font presentation into Appearance**
-
-Add:
-
-```elisp
 (add-to-list 'default-frame-alist '(fullscreen . maximized))
 
 (when (eq system-type 'windows-nt)
@@ -243,15 +241,7 @@ Add:
 (set-face-attribute 'mode-line nil :box nil :weight 'semi-bold)
 (set-face-attribute 'mode-line-inactive nil :box nil :weight 'normal)
 (set-face-attribute 'line-number-current-line nil :weight 'bold)
-```
 
-Do not set literal foreground/background colors.
-
-- [ ] **Step 4: Add the single icon framework and text-safe reconciliation**
-
-Add:
-
-```elisp
 (use-package nerd-icons
   :demand t
   :custom
@@ -279,21 +269,18 @@ Add:
     (add-hook 'dired-mode-hook #'nerd-icons-dired-mode)))
 
 (p3/appearance-sync-dired-icons)
+
+(provide 'p3-config-appearance)
+;;; p3-config-appearance.el ends here
 ```
 
-Do not call `nerd-icons-install-fonts`.
+No literal palette colors and no `nerd-icons-install-fonts`.
 
-- [ ] **Step 5: Reduce Base to nonvisual behavior**
+- [ ] **Step 3: Reduce Base to nonvisual behavior**
 
-In `lisp/p3-config-base.el`:
+In `lisp/p3-config-base.el` remove maximized-frame/font/cursor settings, `all-the-icons*` declarations and Dired icon hook, Dashboard `dashboard-icon-type`, and the line-number `set-face-foreground` call. Keep Dashboard content/setup, Dired behavior, and line-number activation.
 
-- remove maximized-frame, platform font, and cursor settings;
-- remove `all-the-icons-scale-factor`, `all-the-icons-install-fonts`, `all-the-icons`, and `all-the-icons-dired`;
-- remove Dashboard's `dashboard-icon-type` assignment;
-- remove `:after all-the-icons-dired` and the `all-the-icons-dired-mode` Dired hook;
-- keep Dashboard content/setup and Dired behavior;
-- keep `p3/set-line-numbers`, removing only its hard-coded `set-face-foreground` call;
-- add:
+Add exactly:
 
 ```elisp
 (setq inhibit-startup-message t
@@ -302,7 +289,7 @@ In `lisp/p3-config-base.el`:
       ring-bell-function #'ignore)
 ```
 
-- [ ] **Step 6: Replace inline appearance with one top-level loader**
+- [ ] **Step 4: Replace inline appearance with one loader**
 
 Add after Base in `config.org`:
 
@@ -317,9 +304,9 @@ in =lisp/p3-config-appearance.el=.
 #+END_SRC
 ```
 
-Remove the inline `Themes` implementation, Doom-modeline block, commented Telephone Line block, and `unicode-fonts` declaration. Keep the UTF-8/process coding block and `.Rmd` CRLF rule under an encoding-focused heading.
+Remove the old inline `Themes` implementation, Doom-modeline, commented Telephone Line block, and `unicode-fonts`. Keep UTF-8/process coding and `.Rmd` CRLF under an encoding-focused heading.
 
-- [ ] **Step 7: Run ownership tests GREEN**
+- [ ] **Step 5: Run GREEN ownership gate**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -328,9 +315,9 @@ emacs -Q --batch -L lisp \
   -f ert-run-tests-batch-and-exit
 ```
 
-Expected: PASS for structural ownership/extraction tests.
+Expected: PASS.
 
-- [ ] **Step 8: Commit the visual extraction**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add config.org lisp/p3-config-base.el lisp/p3-config-appearance.el \
@@ -340,19 +327,18 @@ git commit -m "Extract appearance and icon configuration"
 
 ---
 
-### Task 3: Build the cheap native mode-line identity layer
+### Task 3: Build native mode-line identity and alignment
 
 **Files:**
 - Modify: `lisp/p3-config-appearance.el`
 - Modify: `test/p3-config-appearance-test.el`
 
 **Interfaces:**
-- Consumes: `buffer-file-name`, `default-directory`, `major-mode`, `mode-name`, `mode-line-process`, `file-remote-p`, `project-current` only outside redisplay, and Nerd Icons functions only when cached icon availability is true.
-- Produces: buffer-local `p3/appearance--project-root`, `p3/appearance--project-relative-file`; `p3/appearance-refresh-buffer-context`; `p3/appearance--remote-host`; `p3/appearance--buffer-state`; `p3/appearance--file-segment`; `p3/appearance--mode-segment`; `p3/appearance--position-segment`; `p3/appearance--left-segment`; initial `p3/appearance--right-segment`; `p3/appearance--native-right-align-p`; `p3/appearance--right-align-space`; `p3/appearance--build-mode-line-format`.
+- Produces: `p3/appearance--project-root`, `p3/appearance--project-relative-file`, `p3/appearance-refresh-buffer-context`, `p3/appearance--join`, `p3/appearance--safe-icon`, `p3/appearance--remote-host`, `p3/appearance--buffer-state`, `p3/appearance--file-label`, `p3/appearance--file-segment`, `p3/appearance--remote-segment`, `p3/appearance--mode-segment`, `p3/appearance--position-segment`, `p3/appearance--left-segment`, initial `p3/appearance--right-segment`, `p3/appearance--native-right-align-p`, `p3/appearance--right-align-space`, `p3/appearance--build-mode-line-format`.
 
-- [ ] **Step 1: Add the runtime test harness and RED identity tests**
+- [ ] **Step 1: Add reusable runtime test loader**
 
-At the top of `test/p3-config-appearance-test.el`, after structural helpers, load the real module with external surfaces stubbed:
+Before runtime ERT cases in `test/p3-config-appearance-test.el`, add:
 
 ```elisp
 (require 'use-package-ensure)
@@ -365,17 +351,22 @@ At the top of `test/p3-config-appearance-test.el`, after structural helpers, loa
 (defun nerd-icons-octicon (&rest _) "G")
 (defun nerd-icons-codicon (&rest _) "R")
 (provide 'nerd-icons)
+(provide 'doom-themes)
 
-(let ((real-load-theme (symbol-function 'load-theme)))
-  (unwind-protect
-      (progn
-        (fset 'load-theme (lambda (&rest _) t))
-        (provide 'doom-themes)
-        (load-file
-         (expand-file-name "lisp/p3-config-appearance.el"
-                           p3-config-appearance-test--root)))
-    (fset 'load-theme real-load-theme)))
+(defun p3-config-appearance-test--load-appearance ()
+  (let ((real-load-theme (symbol-function 'load-theme)))
+    (unwind-protect
+        (progn
+          (fset 'load-theme (lambda (&rest _) t))
+          (load-file
+           (expand-file-name "lisp/p3-config-appearance.el"
+                             p3-config-appearance-test--root)))
+      (fset 'load-theme real-load-theme))))
+
+(p3-config-appearance-test--load-appearance)
 ```
+
+- [ ] **Step 2: Add RED identity/alignment tests**
 
 Add:
 
@@ -393,28 +384,40 @@ Add:
     (setq buffer-file-name "/ssh:example.org:/tmp/example.R")
     (should (equal "example.org" (p3/appearance--remote-host)))))
 
-(ert-deftest p3-appearance-mode-segment-keeps-mode-name-without-icons ()
+(ert-deftest p3-appearance-mode-segment-keeps-text-without-icons ()
   (with-temp-buffer
     (emacs-lisp-mode)
     (let ((p3/appearance--icons-available nil))
       (should (string-match-p "Emacs-Lisp"
                               (p3/appearance--mode-segment))))))
+
+(ert-deftest p3-appearance-build-mode-line-selects-native-alignment ()
+  (cl-letf (((symbol-function 'p3/appearance--native-right-align-p)
+             (lambda () t)))
+    (should (memq 'mode-line-format-right-align
+                  (p3/appearance--build-mode-line-format)))))
+
+(ert-deftest p3-appearance-build-mode-line-selects-emacs29-fallback ()
+  (cl-letf (((symbol-function 'p3/appearance--native-right-align-p)
+             (lambda () nil)))
+    (let ((format (p3/appearance--build-mode-line-format)))
+      (should-not (memq 'mode-line-format-right-align format))
+      (should (string-match-p "p3/appearance--right-align-space"
+                              (prin1-to-string format))))))
 ```
 
-Add two tests that `cl-letf` `p3/appearance--native-right-align-p` to return `t` and `nil`, respectively, and assert the built format contains `mode-line-format-right-align` only on the native path.
+Run focused Appearance ERT. Expected: FAIL because formatter functions do not exist.
 
-Run the focused appearance test file. Expected: FAIL because formatter/cache functions are not defined.
+- [ ] **Step 3: Implement project cache and identity helpers**
 
-- [ ] **Step 2: Derive project context outside redisplay**
-
-Add:
+Append to Appearance before `provide`:
 
 ```elisp
 (defvar-local p3/appearance--project-root nil)
 (defvar-local p3/appearance--project-relative-file nil)
 
 (defun p3/appearance-refresh-buffer-context ()
-  "Refresh cheap presentation context for the current buffer."
+  "Refresh cheap local project presentation context."
   (setq p3/appearance--project-root nil
         p3/appearance--project-relative-file nil)
   (when (and buffer-file-name
@@ -431,15 +434,23 @@ Add:
 (when (boundp 'after-set-visited-file-name-hook)
   (add-hook 'after-set-visited-file-name-hook
             #'p3/appearance-refresh-buffer-context))
-```
 
-Formatters read these variables and never call `project-current`.
+(defun p3/appearance--join (&rest segments)
+  (string-join
+   (delq nil
+         (mapcar (lambda (segment)
+                   (and segment
+                        (not (string-empty-p segment))
+                        segment))
+                 segments))
+   "  "))
 
-- [ ] **Step 3: Implement file/mode/remote/buffer-state segments**
+(defun p3/appearance--safe-icon (function &rest args)
+  (when p3/appearance--icons-available
+    (condition-case nil
+        (apply function args)
+      (error nil))))
 
-Use these concrete rules:
-
-```elisp
 (defun p3/appearance--remote-host ()
   (file-remote-p (or buffer-file-name default-directory) 'host))
 
@@ -458,19 +469,51 @@ Use these concrete rules:
          p3/appearance--project-relative-file)
     p3/appearance--project-relative-file)
    (t (file-name-nondirectory buffer-file-name))))
+
+(defun p3/appearance--file-segment ()
+  (let ((icon
+         (if buffer-file-name
+             (p3/appearance--safe-icon
+              #'nerd-icons-icon-for-file buffer-file-name :height 0.95)
+           (p3/appearance--safe-icon
+            #'nerd-icons-icon-for-buffer :height 0.95))))
+    (p3/appearance--join icon (p3/appearance--file-label))))
+
+(defun p3/appearance--remote-segment ()
+  (when-let ((host (p3/appearance--remote-host)))
+    (p3/appearance--join
+     (p3/appearance--safe-icon
+      #'nerd-icons-codicon "nf-cod-remote" :height 0.95)
+     host)))
+
+(defun p3/appearance--mode-segment ()
+  (p3/appearance--join
+   (p3/appearance--safe-icon
+    #'nerd-icons-icon-for-mode major-mode :height 0.95)
+   (format-mode-line mode-name)))
 ```
 
-`p3/appearance--file-segment` prefixes `nerd-icons-icon-for-file` or `nerd-icons-icon-for-buffer` only when `p3/appearance--icons-available` is non-nil; otherwise it returns text only. `p3/appearance--mode-segment` uses `nerd-icons-icon-for-mode major-mode` only on the icon path and always appends `(format-mode-line mode-name)`.
+`project-current` is used only in the refresh hook, never in a mode-line formatter.
 
-Remote host identity is a separate textual segment; when icons are available prefix it with `nerd-icons-codicon "nf-cod-remote"`. File/mode/icon calls must be wrapped in `condition-case` so lookup failures fall back to text.
+- [ ] **Step 4: Implement left/right identity and alignment**
 
-- [ ] **Step 4: Add the initial position-only right side and alignment**
-
-Define:
+Append:
 
 ```elisp
 (defun p3/appearance--position-segment ()
   (format-mode-line "%l:%c"))
+
+(defun p3/appearance--left-segment ()
+  (let ((process
+         (and (>= (window-total-width) 100)
+              mode-line-process
+              (string-trim (format-mode-line mode-line-process)))))
+    (p3/appearance--join
+     (p3/appearance--buffer-state)
+     (p3/appearance--remote-segment)
+     (p3/appearance--file-segment)
+     (p3/appearance--mode-segment)
+     process)))
 
 (defun p3/appearance--right-segment ()
   (p3/appearance--position-segment))
@@ -482,13 +525,7 @@ Define:
   (let ((width (string-width (p3/appearance--right-segment))))
     (propertize " " 'display
                 `((space :align-to (- right ,(+ width 1)))))))
-```
 
-`p3/appearance--left-segment` joins nonempty buffer state, remote host, file identity, mode identity, and—only at widths `>= 100`—`(format-mode-line mode-line-process)`.
-
-Define:
-
-```elisp
 (defun p3/appearance--build-mode-line-format ()
   (append
    '("%e " (:eval (p3/appearance--left-segment)))
@@ -502,9 +539,7 @@ Define:
   (setq-default mode-line-right-align-edge 'window))
 ```
 
-Using `setq-default` leaves existing buffer-local mode-line formats alone.
-
-- [ ] **Step 5: Run identity/alignment GREEN and commit**
+- [ ] **Step 5: Run GREEN and commit**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -521,71 +556,146 @@ git commit -m "Add native appearance mode line"
 
 ---
 
-### Task 4: Add VC, Flycheck, encoding, truncation, and redisplay guards
+### Task 4: Add VC, Flycheck, coding, narrow-width policy, and redisplay guards
 
 **Files:**
 - Modify: `lisp/p3-config-appearance.el`
 - Modify: `test/p3-config-appearance-test.el`
 
 **Interfaces:**
-- Consumes: `vc-mode`; `flycheck-last-status-change`, `flycheck-current-errors`, `flycheck-count-errors` only when Flycheck is already loaded; `buffer-file-coding-system`; `window-total-width`.
-- Produces: `p3/appearance--vc-segment`, `p3/appearance--flycheck-finished-segment`, `p3/appearance--flycheck-segment`, `p3/appearance--coding-segment`, and completed `p3/appearance--right-segment`.
+- Produces: `p3/appearance--git-icon`, `p3/appearance--vc-text`, `p3/appearance--vc-segment`, `p3/appearance--flycheck-finished-segment`, `p3/appearance--flycheck-segment`, `p3/appearance--coding-segment`, completed `p3/appearance--right-segment`.
 
-- [ ] **Step 1: Add RED state and performance tests**
-
-Add ERT cases for:
-
-- `vc-mode` nil → nil VC segment;
-- long VC text → `string-width <= 14` including the textual separator and ellipsis;
-- Flycheck `running` → progress state without stale counts;
-- `finished` + zero counts → success;
-- `finished` + error/warning/info counts → all nonzero counts;
-- `errored`, `suspicious`, `interrupted` → distinct compact states;
-- `no-checker`, `not-checked`, Flycheck absent/disabled → nil;
-- `utf-8-unix` → `UTF-8 LF`;
-- `utf-8-dos` → `UTF-8 CRLF`;
-- position remains present at every width.
-
-Add redisplay guards:
-
-```elisp
-(cl-letf (((symbol-function 'project-current)
-           (lambda (&rest _) (ert-fail "project-current during redisplay")))
-          ((symbol-function 'process-file)
-           (lambda (&rest _) (ert-fail "process-file during redisplay"))))
-  (format-mode-line (default-value 'mode-line-format)))
-```
-
-For a remote buffer, additionally stub `file-exists-p`, `file-attributes`, and `directory-files` to `ert-fail` while formatting. Add a test that binds `p3/appearance--icons-available` nil and stubs each `nerd-icons-*` formatter to fail; rendering must still succeed.
-
-Run the focused test file. Expected: FAIL because status functions are not implemented.
-
-- [ ] **Step 2: Implement bounded VC presentation**
+- [ ] **Step 1: Add exact RED status tests**
 
 Add:
+
+```elisp
+(ert-deftest p3-appearance-vc-text-is-bounded ()
+  (with-temp-buffer
+    (setq vc-mode " Git:very-long-branch-name")
+    (should (<= (string-width (p3/appearance--vc-text)) 12))))
+
+(ert-deftest p3-appearance-flycheck-finished-renders-counts ()
+  (let ((features (cons 'flycheck features))
+        (flycheck-mode t)
+        (flycheck-last-status-change 'finished)
+        (flycheck-current-errors 'simulated))
+    (cl-letf (((symbol-function 'flycheck-count-errors)
+               (lambda (_errors)
+                 '((error . 2) (warning . 3) (info . 1)))))
+      (let ((segment (p3/appearance--flycheck-segment)))
+        (should (string-match-p "2" segment))
+        (should (string-match-p "3" segment))
+        (should (string-match-p "1" segment))))))
+
+(ert-deftest p3-appearance-flycheck-finished-renders-clean ()
+  (let ((features (cons 'flycheck features))
+        (flycheck-mode t)
+        (flycheck-last-status-change 'finished)
+        (flycheck-current-errors nil))
+    (cl-letf (((symbol-function 'flycheck-count-errors)
+               (lambda (_errors) nil)))
+      (should (string-match-p "✓" (p3/appearance--flycheck-segment))))))
+
+(ert-deftest p3-appearance-flycheck-statuses-are-deliberate ()
+  (let ((features (cons 'flycheck features))
+        (flycheck-mode t))
+    (dolist (case '((running . "↻")
+                    (errored . "×")
+                    (suspicious . "?")
+                    (interrupted . "·")))
+      (let ((flycheck-last-status-change (car case)))
+        (should (string-match-p
+                 (regexp-quote (cdr case))
+                 (p3/appearance--flycheck-segment)))))
+    (dolist (status '(no-checker not-checked))
+      (let ((flycheck-last-status-change status))
+        (should-not (p3/appearance--flycheck-segment))))))
+
+(ert-deftest p3-appearance-flycheck-absent-or-disabled-is-hidden ()
+  (let ((features (delq 'flycheck (copy-sequence features)))
+        (flycheck-mode nil))
+    (should-not (p3/appearance--flycheck-segment))))
+
+(ert-deftest p3-appearance-coding-segment-distinguishes-eol ()
+  (with-temp-buffer
+    (setq buffer-file-coding-system 'utf-8-unix)
+    (should (equal "UTF-8 LF" (p3/appearance--coding-segment)))
+    (setq buffer-file-coding-system 'utf-8-dos)
+    (should (equal "UTF-8 CRLF" (p3/appearance--coding-segment)))))
+```
+
+- [ ] **Step 2: Add exact RED redisplay guards**
+
+Add:
+
+```elisp
+(ert-deftest p3-appearance-render-does-not-discover-project-or-run-processes ()
+  (with-temp-buffer
+    (setq buffer-file-name "/tmp/example.R"
+          p3/appearance--icons-available nil)
+    (cl-letf (((symbol-function 'project-current)
+               (lambda (&rest _)
+                 (ert-fail "project-current during redisplay")))
+              ((symbol-function 'process-file)
+               (lambda (&rest _)
+                 (ert-fail "process-file during redisplay"))))
+      (should (stringp
+               (format-mode-line (default-value 'mode-line-format)))))))
+
+(ert-deftest p3-appearance-remote-render-does-not-touch-filesystem ()
+  (with-temp-buffer
+    (setq buffer-file-name "/ssh:example.org:/tmp/example.R"
+          default-directory "/ssh:example.org:/tmp/"
+          p3/appearance--icons-available nil)
+    (cl-letf (((symbol-function 'file-exists-p)
+               (lambda (&rest _) (ert-fail "file-exists-p during redisplay")))
+              ((symbol-function 'file-attributes)
+               (lambda (&rest _) (ert-fail "file-attributes during redisplay")))
+              ((symbol-function 'directory-files)
+               (lambda (&rest _) (ert-fail "directory-files during redisplay"))))
+      (should (stringp
+               (format-mode-line (default-value 'mode-line-format)))))))
+
+(ert-deftest p3-appearance-no-font-path-does-not-call-nerd-renderers ()
+  (with-temp-buffer
+    (setq buffer-file-name "/tmp/example.R"
+          p3/appearance--icons-available nil)
+    (cl-letf (((symbol-function 'nerd-icons-icon-for-file)
+               (lambda (&rest _) (ert-fail "file icon called")))
+              ((symbol-function 'nerd-icons-icon-for-buffer)
+               (lambda (&rest _) (ert-fail "buffer icon called")))
+              ((symbol-function 'nerd-icons-icon-for-mode)
+               (lambda (&rest _) (ert-fail "mode icon called")))
+              ((symbol-function 'nerd-icons-octicon)
+               (lambda (&rest _) (ert-fail "git icon called")))
+              ((symbol-function 'nerd-icons-codicon)
+               (lambda (&rest _) (ert-fail "remote icon called"))))
+      (should (stringp
+               (format-mode-line (default-value 'mode-line-format)))))))
+```
+
+Run focused ERT. Expected: FAIL because status/coding functions do not exist.
+
+- [ ] **Step 3: Implement bounded VC and Flycheck state**
+
+Append before `provide`:
 
 ```elisp
 (defun p3/appearance--git-icon ()
-  (if p3/appearance--icons-available
-      (condition-case nil
-          (nerd-icons-octicon "nf-oct-git_branch" :height 0.95)
-        (error "Git"))
-    "Git"))
+  (or (p3/appearance--safe-icon
+       #'nerd-icons-octicon "nf-oct-git_branch" :height 0.95)
+      "Git"))
+
+(defun p3/appearance--vc-text ()
+  (when vc-mode
+    (truncate-string-to-width
+     (string-trim (format-mode-line vc-mode)) 12 nil nil "…")))
 
 (defun p3/appearance--vc-segment ()
-  (when vc-mode
-    (let* ((raw (string-trim (format-mode-line vc-mode)))
-           (text (truncate-string-to-width raw 12 nil nil "…")))
-      (format "%s %s" (p3/appearance--git-icon) text))))
-```
+  (when-let ((text (p3/appearance--vc-text)))
+    (p3/appearance--join (p3/appearance--git-icon) text)))
 
-Do not call `vc-refresh-state`, Git, or Magit.
-
-- [ ] **Step 3: Implement Flycheck state mapping from existing state only**
-
-Add:
-
-```elisp
 (defun p3/appearance--flycheck-finished-segment (&optional compact)
   (let* ((counts (flycheck-count-errors flycheck-current-errors))
          (errors (or (cdr (assq 'error counts)) 0))
@@ -600,14 +710,12 @@ Add:
        ((> warnings 0) (propertize (format "!%d" warnings) 'face 'warning))
        (t (format "i%d" infos))))
      (t
-      (string-join
-       (delq nil
-             (list (when (> errors 0)
-                     (propertize (format "×%d" errors) 'face 'error))
-                   (when (> warnings 0)
-                     (propertize (format "!%d" warnings) 'face 'warning))
-                   (when (> infos 0) (format "i%d" infos))))
-       " ")))))
+      (p3/appearance--join
+       (when (> errors 0)
+         (propertize (format "×%d" errors) 'face 'error))
+       (when (> warnings 0)
+         (propertize (format "!%d" warnings) 'face 'warning))
+       (when (> infos 0) (format "i%d" infos)))))))
 
 (defun p3/appearance--flycheck-segment (&optional compact)
   (when (and (featurep 'flycheck)
@@ -622,11 +730,9 @@ Add:
       (_ nil))))
 ```
 
-No Flycheck `require`, checker execution, or refresh is permitted from these functions.
+- [ ] **Step 4: Implement coding and narrow-width right side**
 
-- [ ] **Step 4: Implement coding and completed right-side width policy**
-
-Add:
+Append:
 
 ```elisp
 (defun p3/appearance--coding-segment ()
@@ -649,12 +755,12 @@ Add:
          (flycheck (p3/appearance--flycheck-segment (< width 80)))
          (coding (and (>= width 100) (p3/appearance--coding-segment)))
          (position (p3/appearance--position-segment)))
-    (string-join (delq nil (list vc flycheck coding position)) "  ")))
+    (p3/appearance--join vc flycheck coding position)))
 ```
 
-The left-side file label already drops project-parent detail below 120 columns; `mode-line-process` is already omitted below 100 columns. Position, actual filename, remote host, and mode identity remain.
+The existing file label drops project path detail below 120 columns, and left-side process text disappears below 100 columns. Position, filename, remote host, and mode identity remain.
 
-- [ ] **Step 5: Run GREEN performance/state tests and commit**
+- [ ] **Step 5: Run GREEN and commit**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -662,7 +768,7 @@ emacs -Q --batch -L lisp \
   -f ert-run-tests-batch-and-exit
 ```
 
-Expected: PASS, including the expensive-operation guards.
+Expected: PASS including redisplay guards.
 
 ```bash
 git add lisp/p3-config-appearance.el test/p3-config-appearance-test.el
@@ -679,33 +785,39 @@ git commit -m "Complete appearance mode line status"
 - Modify: `.github/workflows/windows-platform-tests.yml`
 
 **Interfaces:**
-- Consumes: completed Appearance module/tests.
-- Produces: reload idempotency regression, warnings-as-errors compilation on Ubuntu/Windows, batch smoke load, and full ERT inclusion.
+- Produces: reload idempotency regression, strict compile coverage, batch smoke load, full ERT inclusion.
 
-- [ ] **Step 1: Add reload/idempotency regression**
+- [ ] **Step 1: Add exact reload/idempotency regression**
 
-Load the real appearance source twice with icon availability forced false and assert:
+Add:
 
 ```elisp
-(should (= 1 (cl-count #'p3/appearance-refresh-buffer-context
-                       find-file-hook :test #'eq)))
-(should (= 1 (cl-count #'p3/appearance-refresh-buffer-context
-                       after-change-major-mode-hook :test #'eq)))
-(should-not (memq #'nerd-icons-dired-mode dired-mode-hook))
-(should (equal (default-value 'mode-line-format)
-               (p3/appearance--build-mode-line-format)))
+(ert-deftest p3-appearance-reload-is-idempotent ()
+  (let ((p3/appearance--icons-available nil))
+    (p3-config-appearance-test--load-appearance)
+    (p3-config-appearance-test--load-appearance)
+    (should (= 1 (cl-count #'p3/appearance-refresh-buffer-context
+                           find-file-hook :test #'eq)))
+    (should (= 1 (cl-count #'p3/appearance-refresh-buffer-context
+                           after-change-major-mode-hook :test #'eq)))
+    (should-not (memq #'nerd-icons-dired-mode dired-mode-hook))
+    (should (equal (default-value 'mode-line-format)
+                   (p3/appearance--build-mode-line-format)))
+    (setq p3/appearance--icons-available t)
+    (p3/appearance-sync-dired-icons)
+    (p3/appearance-sync-dired-icons)
+    (should (= 1 (cl-count #'nerd-icons-dired-mode
+                           dired-mode-hook :test #'eq)))))
 ```
 
-Then bind/set `p3/appearance--icons-available` true, call `p3/appearance-sync-dired-icons` twice, and assert exactly one `nerd-icons-dired-mode` entry in `dired-mode-hook`.
+Run focused Appearance ERT. Expected: PASS.
 
-Run the focused appearance suite. Expected: PASS.
-
-- [ ] **Step 2: Extend Ubuntu compilation, smoke, and ERT coverage**
+- [ ] **Step 2: Extend Ubuntu compile/smoke/ERT coverage**
 
 In `.github/workflows/emacs-tests.yml`:
 
 - add `lisp/p3-config-appearance.el` to warnings-as-errors compilation;
-- add `-l test/p3-config-appearance-test.el` to the full ERT command;
+- add `-l test/p3-config-appearance-test.el` to full ERT;
 - add this smoke step before full ERT:
 
 ```bash
@@ -725,7 +837,7 @@ emacs -Q --batch -L lisp \
   --eval '(unless (and (featurep (quote p3-config-appearance)) (listp (default-value (quote mode-line-format)))) (kill-emacs 1))'
 ```
 
-Expected: exit 0 without graphical display or Nerd Font.
+Expected: exit 0 under `emacs-nox` with no Nerd Font.
 
 - [ ] **Step 3: Extend Windows source/compile/test coverage**
 
@@ -733,13 +845,13 @@ In `.github/workflows/windows-platform-tests.yml`:
 
 - add `lisp/p3-config-appearance.el` and `test/p3-config-appearance-test.el` to `pull_request.paths`;
 - add `lisp/p3-config-appearance.el` to strict Windows byte compilation;
-- add `-l test/p3-config-appearance-test.el` to the Windows config-architecture ERT step.
+- add `-l test/p3-config-appearance-test.el` to Windows config architecture tests.
 
-Do not add graphical font rendering to Windows Actions.
+Do not add graphical Windows CI.
 
-- [ ] **Step 4: Run available local/static gates**
+- [ ] **Step 4: Run available local/static gates and commit**
 
-Run the focused suite and, if the execution environment has Emacs, the full local ERT command matching `.github/workflows/emacs-tests.yml`.
+Run focused ERT. If local Emacs exists, run the full ERT command from `.github/workflows/emacs-tests.yml`.
 
 Run:
 
@@ -749,7 +861,7 @@ git grep -n -E '\(use-package (doom-modeline|all-the-icons|all-the-icons-dired|u
 
 Expected: no active-source matches.
 
-- [ ] **Step 5: Commit CI hardening**
+Commit:
 
 ```bash
 git add .github/workflows/emacs-tests.yml \
@@ -760,122 +872,79 @@ git commit -m "Harden appearance configuration checks"
 
 ---
 
-### Task 6: Open the draft PR and verify the exact automated head
+### Task 6: Open draft PR and verify exact automated head
 
 **Files:**
-- No source modification unless verification exposes a defect.
+- No source modification unless verification finds a defect.
 
 **Interfaces:**
-- Consumes: implementation commits from Tasks 1–5.
-- Produces: draft PR, exact-head Ubuntu/Windows evidence, and the remaining manual graphical acceptance requirement.
+- Produces: draft PR, exact-head Ubuntu/Windows evidence, remaining manual graphical acceptance requirement.
 
-- [ ] **Step 1: Open a draft PR without merging**
+- [ ] **Step 1: Open a draft PR**
 
-Use branch `refactor/appearance-config`. The body must state:
+Use `refactor/appearance-config`. Body must state legacy package removal, native mode-line information contract, remote/VC/Flycheck/coding behavior, redisplay constraints, Nerd Font fallback, unchanged theme, and pending graphical acceptance.
 
-- Doom-modeline/all-the-icons/unicode-fonts removal;
-- custom native mode line and information contract;
-- file/mode/remote/VC/Flycheck/coding/position behavior;
-- redisplay performance constraints;
-- Nerd Font fallback behavior;
-- unchanged `doom-palenight` theme;
-- manual graphical acceptance still required.
+- [ ] **Step 2: Verify exact-head Ubuntu**
 
-- [ ] **Step 2: Verify exact-head Ubuntu Actions**
+Require PASS for strict Appearance compile, Appearance smoke, existing subsystem smokes, and full ERT including Appearance tests. On failure, retrieve the exact failing job log, fix root cause, run the narrow gate, then rerun the final full gate.
 
-Confirm the exact PR head passes:
+- [ ] **Step 3: Verify exact-head Windows**
 
-- warnings-as-errors compile including Appearance;
-- Appearance batch smoke;
-- existing subsystem smokes;
-- full ERT including Appearance tests.
+Require PASS on the same SHA for strict Appearance compilation and config architecture tests including Appearance, plus existing native Windows gates.
 
-On failure, retrieve the failing job log, fix the root cause, run the smallest relevant gate, then rerun the final full gate.
+- [ ] **Step 4: Adversarial final automated diff check**
 
-- [ ] **Step 3: Verify exact-head Windows Actions**
+Verify no config-module coupling; no project discovery/subprocess/file/remote I/O/package load/VC refresh in mode-line eval paths; no automatic font download; no theme or coding-policy drift; no generalized cache/timer/framework; Dashboard/Dired behavior remains Base-owned while icon presentation is Appearance-owned; old package declarations are absent.
 
-Confirm the same head passes strict Appearance compilation and the config architecture suite including Appearance tests, alongside existing native Windows checks.
-
-- [ ] **Step 4: Adversarially inspect the final automated diff**
-
-Verify:
-
-- no `p3-config-*` cross-module dependency;
-- no project discovery, subprocess, file/remote I/O, package load, or VC refresh from mode-line eval paths;
-- no automatic font download;
-- no hidden theme replacement;
-- no UTF-8 or `.Rmd` coding change;
-- no broad cache/timer/framework;
-- Dashboard/Dired behavior stays in Base while icon presentation stays in Appearance;
-- legacy modeline/icon/font package declarations are gone from active config.
-
-Do not mark merge-ready yet.
+Do not mark merge-ready.
 
 ---
 
 ### Task 7: Perform graphical acceptance and minimal visual tuning
 
 **Files:**
-- Modify only `lisp/p3-config-appearance.el` for evidence-driven spacing/threshold/face/glyph adjustments.
-- Modify tests only if a behavioral contract changes.
+- Modify only `lisp/p3-config-appearance.el` for evidence-driven spacing/threshold/face/glyph tuning.
+- Modify tests only if behavior contract changes.
 
 **Interfaces:**
-- Consumes: automated-green exact head from Task 6.
-- Produces: human-verified graphical appearance and final reviewed head.
+- Produces: human-verified graphical appearance and final reviewed SHA.
 
-- [ ] **Step 1: Verify the missing-font fallback**
+- [ ] **Step 1: Verify missing-font fallback**
 
-With `Symbols Nerd Font Mono` unavailable, start/reload graphical Emacs and verify:
+With `Symbols Nerd Font Mono` unavailable, verify graphical Emacs shows readable text/Unicode mode line, Dashboard/Dired without tofu, and no startup font installation.
 
-- textual/Unicode mode line is readable;
-- Dashboard and Dired open without tofu;
-- no startup font-install prompt/action occurs.
-
-- [ ] **Step 2: Install the Nerd Font explicitly and reload**
-
-Run:
+- [ ] **Step 2: Install font explicitly and reload**
 
 ```text
 M-x nerd-icons-install-fonts
 ```
 
-Restart Emacs only if platform font discovery requires it; otherwise run `C-c r`. Verify file and major-mode icons appear and Dashboard/Dired use Nerd Icons.
+Restart only if the platform requires font rediscovery; otherwise `C-c r`. Verify file and major-mode icons plus Dashboard/Dired Nerd Icons.
 
-- [ ] **Step 3: Exercise the graphical matrix**
+- [ ] **Step 3: Exercise all graphical cases**
 
-Check all twelve cases:
+Check:
 
-1. local project file on a Git branch;
+1. local project file on Git branch;
 2. modified file;
 3. read-only buffer;
-4. Flycheck running and finished-with-diagnostics states;
-5. buffer with meaningful `mode-line-process`;
+4. Flycheck running and finished-with-diagnostics;
+5. meaningful `mode-line-process` buffer;
 6. narrow window;
-7. remote/TRAMP buffer when an endpoint is available;
+7. remote/TRAMP buffer when endpoint exists;
 8. Dashboard;
 9. Dired;
-10. active versus inactive windows;
-11. normal text buffer containing `— → ✓ λ ∑`;
+10. active vs inactive windows;
+11. text buffer containing `— → ✓ λ ∑`;
 12. repeated `C-c r`.
 
-There must be no noticeable typing, scrolling, or redisplay lag locally; remote rendering must not add noticeable latency.
+No noticeable typing/scrolling/redisplay lag locally or due to remote rendering.
 
-- [ ] **Step 4: Make only permitted evidence-driven visual adjustments**
+- [ ] **Step 4: Tune only permitted visual parameters**
 
-Permitted without reopening design:
+Permitted: spacing, relative mode-line height/weight/box attributes, theme-derived active/inactive contrast, width thresholds `120/100/80`, VC bound near 12 columns, individual Nerd glyph choice. Forbidden: new segments/packages/timers/generalized caches/literal palette colors.
 
-- segment spacing;
-- mode-line relative height/weight/box attributes;
-- active/inactive contrast using theme-derived faces;
-- width thresholds `120/100/80`;
-- fixed VC bound near 12 columns;
-- individual Nerd glyph choice when the current glyph is unclear.
-
-Do not add segments, packages, timers, generalized caches, or literal palette colors.
-
-- [ ] **Step 5: Re-run focused and exact-head gates after any source tuning**
-
-When local Emacs exists:
+- [ ] **Step 5: Re-run gates after any tuning**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -887,6 +956,4 @@ Then require fresh exact-head Ubuntu and Windows PR gates.
 
 - [ ] **Step 6: Final adversarial review and stop before merge**
 
-Confirm the implementation matches the approved spec, the exact-head automated gates are green, and the graphical matrix is complete. Report final head SHA and any remaining caveat.
-
-Do not merge without explicit approval.
+Confirm approved spec compliance, exact-head automated green status, completed graphical matrix, final SHA, and any remaining caveat. Do not merge without explicit approval.
