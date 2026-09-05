@@ -88,14 +88,13 @@
 
 (ert-deftest p3-config-org-delegates-custom-subsystems-to-modules ()
   (let ((contents (p3-config-test--contents "config.org")))
-    (dolist (module '("p3-platform" "p3-core" "p3-terminal" "p3-gptel"))
+    (dolist (module '("p3-platform" "p3-core" "p3-gptel"))
       (should (string-match-p (regexp-quote (format "(use-package %s" module))
                               contents)))
-    (dolist (package '("vterm" "gptel"))
-      (should (string-match-p (regexp-quote (format "(use-package %s" package))
-                              contents)))
+    (should (string-match-p (regexp-quote "(use-package gptel") contents))
     (dolist (module '(p3-config-ess p3-config-org p3-config-org-roam
-                      p3-config-org-present p3-config-python))
+                      p3-config-org-present p3-config-python
+                      p3-config-terminal))
       (should
        (string-match-p
         (regexp-quote (format "(p3/config-load-module '%s)" module))
@@ -126,8 +125,8 @@
                "(p3/config-load-module 'p3-config-ess)" contents))
          (r-program (p3-config-test--position
                      "(p3/windows-configure-r-program)" contents))
-         (shell (p3-config-test--position
-                 "(p3/windows-configure-shell)" contents)))
+         (terminal (p3-config-test--position
+                    "(p3/config-load-module 'p3-config-terminal)" contents)))
     (should (< newer auto))
     (should (< auto secrets))
     (should (< secrets rtools))
@@ -136,24 +135,31 @@
     (should (< editing completion))
     (should (< completion ess))
     (should (< ess r-program))
-    (should (< r-program shell))))
+    (should (< r-program terminal))))
 
 (ert-deftest p3-config-platform-setup-preserves-subsystem-timing ()
   (let* ((contents (p3-config-test--contents "config.org"))
+         (terminal-config
+          (p3-config-test--contents "lisp/p3-config-terminal.el"))
          (rtools (p3-config-test--position "(p3/windows-configure-rtools)" contents))
          (ess (p3-config-test--position
                "(p3/config-load-module 'p3-config-ess)" contents))
          (r-program (p3-config-test--position
                      "(p3/windows-configure-r-program)" contents))
-         (terminal (p3-config-test--position "(use-package p3-terminal" contents))
-         (shell (p3-config-test--position "(p3/windows-configure-shell)" contents))
+         (terminal (p3-config-test--position
+                    "(p3/config-load-module 'p3-config-terminal)" contents))
+         (behavior (p3-config-test--position
+                    "(p3/config-load-module 'p3-terminal)" terminal-config))
+         (shell (p3-config-test--position
+                 "(p3/windows-configure-shell)" terminal-config))
          (shell-binding (p3-config-test--position
-                         "(global-set-key (kbd \"C-x C-u\") #'shell)" contents)))
+                         "(global-set-key (kbd \"C-x C-u\") #'shell)"
+                         terminal-config)))
     (should-not (string-match-p "(p3/platform-setup)" contents))
     (should (< rtools ess))
     (should (< ess r-program))
     (should (< r-program terminal))
-    (should (< terminal shell))
+    (should (< behavior shell))
     (should (< shell shell-binding))))
 
 (ert-deftest p3-config-org-subsystem-order-is-explicit ()
@@ -181,21 +187,22 @@
          (python (p3-config-test--position
                   "(p3/config-load-module 'p3-config-python)" contents))
          (rainbow (p3-config-test--position "(use-package rainbow-mode" contents))
-         (shell (p3-config-test--position "(p3/windows-configure-shell)" contents)))
+         (terminal (p3-config-test--position
+                    "(p3/config-load-module 'p3-config-terminal)" contents)))
     (should (< flycheck projectile))
     (should (< projectile python))
     (should (< python rainbow))
-    (should (< rainbow shell))))
+    (should (< rainbow terminal))))
 
-(ert-deftest p3-config-org-source-loads-ten-config-modules ()
+(ert-deftest p3-config-org-source-loads-eleven-config-modules ()
   (let ((contents (p3-config-test--contents "config.org")))
-    (should (= 10
+    (should (= 11
                (p3-config-test--count-occurrences
                 "(p3/config-load-module 'p3-config-" contents)))
     (dolist (module '(p3-config-base p3-config-editing p3-config-completion
                       p3-config-ess p3-config-org p3-config-org-roam
                       p3-config-org-present p3-config-python
-                      p3-config-workspace p3-config-git))
+                      p3-config-terminal p3-config-workspace p3-config-git))
       (should
        (string-match-p
         (regexp-quote (format "(p3/config-load-module '%s)" module))
@@ -259,7 +266,10 @@
                "(defun p3/org-present-quit-hook"
                "(defun p3/org-present-prev"
                "(defun p3/org-present-next"
-               "(use-package org-present"))
+               "(use-package org-present"
+               "(use-package p3-terminal"
+               "(p3/windows-configure-shell)"
+               "(use-package vterm"))
       (should-not (string-match-p (regexp-quote implementation) contents)))
     (dolist (package '(dashboard which-key vertico company undo-tree super-save
                        multiple-cursors magit git-gutter-fringe+ transpose-frame
@@ -307,11 +317,13 @@
         (org (p3-config-test--contents "lisp/p3-config-org.el"))
         (roam (p3-config-test--contents "lisp/p3-config-org-roam.el"))
         (present (p3-config-test--contents "lisp/p3-config-org-present.el"))
+        (terminal (p3-config-test--contents "lisp/p3-config-terminal.el"))
         (commands (p3-config-test--contents "lisp/p3-commands.el"))
         (git-behavior (p3-config-test--contents "lisp/p3-git.el"))
         (org-behavior (p3-config-test--contents "lisp/p3-org.el"))
         (roam-behavior (p3-config-test--contents "lisp/p3-org-roam.el"))
-        (present-behavior (p3-config-test--contents "lisp/p3-org-present.el")))
+        (present-behavior (p3-config-test--contents "lisp/p3-org-present.el"))
+        (terminal-behavior (p3-config-test--contents "lisp/p3-terminal.el")))
     (should (string-match-p
              (regexp-quote "(p3/config-load-module 'p3-commands)") base))
     (should (string-match-p
@@ -322,8 +334,10 @@
              (regexp-quote "(p3/config-load-module 'p3-org-roam)") roam))
     (should (string-match-p
              (regexp-quote "(p3/config-load-module 'p3-org-present)") present))
+    (should (string-match-p
+             (regexp-quote "(p3/config-load-module 'p3-terminal)") terminal))
     (dolist (behavior (list commands git-behavior org-behavior
-                            roam-behavior present-behavior))
+                            roam-behavior present-behavior terminal-behavior))
       (should-not (string-match-p "p3-config-" behavior)))))
 
 (ert-deftest p3-config-workspace-keeps-only-narrow-ess-display-policy ()
