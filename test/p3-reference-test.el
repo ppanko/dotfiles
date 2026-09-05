@@ -10,6 +10,8 @@
 (add-to-list 'load-path (expand-file-name "lisp" p3-reference-test--root))
 (require 'p3-reference)
 
+(defvar org-roam-directory)
+
 (defmacro p3-reference-test--with-library (content &rest body)
   (declare (indent 1))
   `(let* ((directory (make-temp-file "p3-reference-" t))
@@ -341,8 +343,10 @@
             (let ((text (buffer-string)))
               (should (string-match-p ":ROAM_REFS: @alpha2020" text))
               (should (string-match-p ":ID: note-id" text))
-              (should (string-match-p "#+filetags: :literature:" text))
-              (should (string-match-p "#+title: Alpha Study" text))
+              (should (string-match-p
+                       (regexp-quote "#+filetags: :literature:") text))
+              (should (string-match-p
+                       (regexp-quote "#+title: Alpha Study") text))
               (should-not (string-match-p "doi:" text)))))
       (delete-directory directory t))))
 
