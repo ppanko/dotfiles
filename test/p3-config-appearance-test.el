@@ -183,6 +183,26 @@
       (should (stringp (p3/appearance--left-segment)))
       (should (stringp (p3/appearance--right-segment))))))
 
+(ert-deftest p3-appearance-reload-is-idempotent ()
+  (p3-config-appearance-test--load-appearance)
+  (p3-config-appearance-test--load-appearance)
+  (should (= 1 (cl-count #'p3/appearance-refresh-buffer-context
+                         find-file-hook :test #'eq)))
+  (should (= 1 (cl-count #'p3/appearance-refresh-buffer-context
+                         after-change-major-mode-hook :test #'eq)))
+  (should (= 1 (cl-count #'p3/appearance-apply-frame-font
+                         after-make-frame-functions :test #'eq)))
+  (should (= 1 (cl-count #'p3/appearance--configure-dashboard-after-load
+                         after-load-functions :test #'eq)))
+  (should-not (memq #'nerd-icons-dired-mode dired-mode-hook))
+  (should (equal (default-value 'mode-line-format)
+                 (p3/appearance--build-mode-line-format)))
+  (let ((p3/appearance--icons-available t))
+    (p3/appearance-sync-dired-icons)
+    (p3/appearance-sync-dired-icons)
+    (should (= 1 (cl-count #'nerd-icons-dired-mode
+                           dired-mode-hook :test #'eq)))))
+
 (provide 'p3-config-appearance-test)
 
 ;;; p3-config-appearance-test.el ends here
