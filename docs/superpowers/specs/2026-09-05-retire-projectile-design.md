@@ -52,6 +52,8 @@ After this change, no active source configuration should load, enable, configure
 
 The change does not attempt to uninstall an already-installed Projectile package from a user's package directory. Package retirement means it is no longer part of the configuration or startup path.
 
+An already-running Emacs session is a special transition case. Because `projectile-mode` is currently enabled as a global minor mode, removing its configuration does not by itself disable that already-active mode or remove its minor-mode keymap/provider state during `C-c r`. The retirement is therefore considered complete only after one Emacs restart following adoption of this change. Do not add permanent runtime cleanup code merely to make the transition hot-reloadable.
+
 ### Native project command interface
 
 Add `lisp/p3-config-project.el` as the declarative owner of the user-facing native project bindings.
@@ -63,7 +65,13 @@ It will require built-in `project` and bind:
 
 The standard built-in `C-x p` binding remains untouched.
 
-This preserves the two existing high-level entry keys while replacing the implementation behind them with built-in `project.el` commands. No compatibility wrapper command or copied Projectile keymap is introduced.
+This preserves the two existing high-level entry keys while replacing the implementation behind them with built-in `project.el` commands. It does not preserve Projectile's command semantics. Native `project-switch-project`, `project-find-file`, remembered-project behavior, and the rest of `project-prefix-map` should retain their built-in behavior rather than be configured to imitate Projectile.
+
+In particular, users may initially see a different switch-project flow and fewer remembered projects. That is an intentional migration cost, not a regression to be papered over with compatibility wrappers.
+
+The new aliases live in the global map rather than Projectile's global minor-mode map, so their keymap precedence is slightly lower than before. `C-c p` is a user-reserved prefix and `s-p` is an explicit personal binding; accept this simplification unless an actual conflict is demonstrated. Do not introduce another global minor mode merely to reproduce Projectile's keymap precedence.
+
+No compatibility wrapper command or copied Projectile keymap is introduced.
 
 `config.org` will load `p3-config-project` in the same relative location currently occupied by the Projectile block: after Presentation and before Python. That avoids unrelated startup-order changes.
 
@@ -71,7 +79,7 @@ This preserves the two existing high-level entry keys while replacing the implem
 
 Newly generated R projects should stop creating an empty `.projectile` file.
 
-Instead, add `"*.Rproj"` to `project-vc-extra-root-markers` in `p3-project.el`. Emacs 29's `project.el` explicitly supports glob patterns in `project-vc-extra-root-markers`, so the existing `<project-name>.Rproj` file can define the project boundary without a Projectile-specific sentinel.
+Instead, add `"*.Rproj"` to `project-vc-extra-root-markers` in `p3-project.el`. Emacs 29's `project.el` supports glob patterns in `project-vc-extra-root-markers`, so the existing `<project-name>.Rproj` file can define the project boundary without a Projectile-specific sentinel.
 
 This preserves the important current semantic: an R analysis directory can define an inner project boundary even when it lives inside a larger Git repository.
 
@@ -91,7 +99,7 @@ A later cleanup can remove `.projectile` support only after there is evidence th
 
 Do not migrate Projectile's remembered-project database into `project.el`.
 
-Native `project.el` maintains its own known-project list. Users may initially see fewer remembered projects in `project-switch-project`; visiting or selecting projects through native project commands will repopulate that list normally.
+Native `project.el` maintains its own known-project list. Users may initially see fewer remembered projects in `project-switch-project`; selecting recognized projects through native project commands will repopulate that list normally. Arbitrary unmarked directories should not be treated as persistently known projects merely to mimic Projectile.
 
 Writing a one-off Projectile cache importer would add compatibility machinery for a framework being removed and is outside this design.
 
@@ -111,9 +119,11 @@ This change must not:
 - change terminal root or placement behavior;
 - add project tabs or a new project UI package;
 - add a custom `project.el` backend;
+- reproduce Projectile command semantics on top of `project.el`;
 - migrate Projectile's remembered-project database;
 - uninstall packages from user package directories;
 - rename or delete existing `.projectile` files;
+- add persistent Projectile shutdown/cleanup machinery for already-running sessions;
 - modify historical specs/plans to pretend Projectile was never part of the migration path.
 
 The supported Emacs baseline remains 29+.
@@ -126,6 +136,8 @@ Marker-defined non-VCS projects must still be detectable and enumerable after th
 
 Windows coverage should exercise the forward marker (`*.Rproj`) rather than only the legacy `.projectile` marker, while ordinary cross-platform tests continue to prove legacy `.projectile` compatibility.
 
+The Windows workflow must also remain durable for future isolated edits to the new project config owner. Add both `lisp/p3-config-project.el` and its focused test file to `.github/workflows/windows-platform-tests.yml` path filters, compile the owner in the Windows byte-compilation gate, and load its focused test where the existing Windows architecture tests run.
+
 No new Windows-specific project implementation should be introduced.
 
 ## Tests
@@ -137,20 +149,23 @@ Implementation must establish these invariants:
 3. `C-c p` and `s-p` resolve to native `project-prefix-map`; standard `C-x p` remains native.
 4. A normal Git repository is recognized by `project.el`.
 5. An `*.Rproj`-only project is recognized from a descendant directory.
-6. A nested `*.Rproj` marker inside an outer Git repository resolves to the inner project root.
+6. A nested `*.Rproj` marker inside an outer Git repository resolves to the inner project root, and `project-files` for that project includes files inside the inner project while excluding sibling files that belong only to the outer repository.
 7. A legacy `.projectile` marker still defines a project root.
 8. Newly generated R projects contain the normal `.Rproj` file and no longer create `.projectile`.
 9. Existing ESS, Python, R-tool, and terminal tests continue to prove shared `p3/project-root` consumption without behavioral drift.
 10. Native Windows tests detect and enumerate an `*.Rproj`-defined project after normal platform setup.
 11. `p3-config-project.el` byte-compiles with warnings treated as errors and has a focused smoke/boundary test.
-12. The aggregate config architecture tests reflect the new project config owner and the removal of inline Projectile configuration.
-13. The full ERT suite remains green.
+12. The Windows workflow path filters, compile step, and architecture-test load list include the new project config owner and focused test.
+13. The aggregate config architecture tests reflect the new project config owner and the removal of inline Projectile configuration.
+14. The full ERT suite remains green.
+
+The transition note must also be verified manually/documentarily: after adopting the merged change, restart Emacs once rather than relying on `C-c r` to disable an already-running Projectile session.
 
 Use static/local review and focused tests first. Run the normal Ubuntu and Windows CI workflows as one coherent final gate rather than as an iterative diagnostic loop.
 
 ## Expected result
 
-After this change:
+After this change and one Emacs restart:
 
 - `project.el` is the only project framework in active use;
 - `p3-project.el` owns early project semantics and marker policy;
