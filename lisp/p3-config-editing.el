@@ -83,8 +83,8 @@
          ("C-}" . mc/mark-previous-like-this)
          ("C-|" . mc/mark-all-like-this)))
 
-;; Keep ownership here while preserving the original literate activation order.
-(with-eval-after-load 'p3-config-completion
+(defun p3/config-editing-setup-thesaurus-and-snippets ()
+  "Configure generic thesaurus and snippet support."
   (use-package synosaurus
     :diminish synosaurus-mode
     :init    (synosaurus-mode)
@@ -96,19 +96,22 @@
     :config
     (add-to-list 'yas-snippet-dirs "~/.emacs.d/snippets")))
 
-(with-eval-after-load 'p3-config-gptel
+(defun p3/config-editing-setup-diagnostics ()
+  "Configure global Flycheck behavior."
   (use-package flycheck
     :hook (after-init . global-flycheck-mode)
     :config
     (setq flycheck-global-modes '(not LaTeX-mode latex-mode org-mode))
     (setq flycheck-checker-error-threshold 1000)))
 
-(with-eval-after-load 'p3-config-python
+(defun p3/config-editing-setup-color-helper ()
+  "Configure color previews for programming buffers."
   (use-package rainbow-mode
     :config
     (add-hook 'prog-mode-hook #'rainbow-mode)))
 
-(with-eval-after-load 'p3-config-terminal
+(defun p3/config-editing-setup-spelling ()
+  "Configure platform-specific Hunspell and Ispell behavior."
   (use-package ispell
     :defer nil
     :ensure nil
