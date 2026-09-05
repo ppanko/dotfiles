@@ -7,6 +7,13 @@
 (defvar org-present-mode-keymap)
 (defvar org-present-text-scale)
 
+(declare-function p3/org-present-hook "p3-org-present" ())
+(declare-function p3/org-present-next "p3-org-present" ())
+(declare-function p3/org-present-prev "p3-org-present" ())
+(declare-function p3/org-present-quit-hook "p3-org-present" ())
+(declare-function p3/org-present-start "p3-org-present" ())
+(declare-function p3/org-present-toggle-fullscreen "p3-org-present" ())
+
 (use-package hide-mode-line
   :after (org-present))
 

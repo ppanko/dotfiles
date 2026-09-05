@@ -13,6 +13,9 @@
 (defvar org-roam-node-display-template)
 
 (declare-function org-roam-db-autosync-mode "org-roam-db" (&optional arg))
+(declare-function org-roam-node-insert-immediate-with-tag "p3-org-roam" (arg &rest args))
+(declare-function org-roam-rg-search "p3-org-roam" ())
+(declare-function p3/org-roam-get-agenda "p3-org-roam" ())
 
 (p3/config-load-module 'p3-org-roam)
 

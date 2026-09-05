@@ -20,6 +20,7 @@
 (defvar time-stamp-start)
 
 (declare-function org-babel-do-load-languages "ob-core" (sym value))
+(declare-function p3/org-sort-todos "p3-org" ())
 
 (p3/config-load-module 'p3-org)
 
