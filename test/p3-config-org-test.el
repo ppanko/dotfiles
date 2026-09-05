@@ -104,15 +104,22 @@
              org-ellipsis " ↴")))))
 
 (ert-deftest p3-config-org-preserves-export-pdf-and-agenda-wiring ()
-  (let ((forms (p3-config-org-test--forms "lisp/p3-config-org.el")))
+  (let* ((forms (p3-config-org-test--forms "lisp/p3-config-org.el"))
+         (require-position
+          (seq-position forms '(require 'p3-org-export) #'equal))
+         (package-form (p3-config-org-test--use-package-form 'p3-org-export))
+         (package-position (seq-position forms package-form #'equal)))
+    (should (integerp require-position))
+    (should (integerp package-position))
+    (should (< require-position package-position))
     (should
      (equal
-      (p3-config-org-test--use-package-form 'p3-org-export)
+      package-form
       '(use-package p3-org-export
          :ensure nil
          :demand t
          :config
-         (funcall 'p3-org-export-setup))))
+         (p3-org-export-setup))))
     (should-not (member '(p3/config-load-module 'p3-org-export) forms))
     (should
      (member

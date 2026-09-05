@@ -59,11 +59,13 @@
 
 (define-key org-mode-map (kbd "C-c C-x C-o") #'p3/org-sort-todos)
 
+(require 'p3-org-export)
+
 (use-package p3-org-export
   :ensure nil
   :demand t
   :config
-  (funcall 'p3-org-export-setup))
+  (p3-org-export-setup))
 
 (when (eq system-type 'gnu/linux)
   (add-to-list 'org-file-apps '("pdf" . "evince %s")))
