@@ -45,6 +45,16 @@
     (should position)
     (+ position (length needle))))
 
+(defun p3-config-test--count-occurrences (needle contents)
+  "Return the number of non-overlapping NEEDLE occurrences in CONTENTS."
+  (let ((start 0)
+        (count 0)
+        (regexp (regexp-quote needle)))
+    (while (string-match regexp contents start)
+      (setq count (1+ count)
+            start (match-end 0)))
+    count))
+
 (ert-deftest p3-init-el-is-readable ()
   (p3-config-test--assert-readable-elisp
    (p3-config-test--path "init.el")))
@@ -73,16 +83,17 @@
 
 (ert-deftest p3-config-org-delegates-custom-subsystems-to-modules ()
   (let ((contents (p3-config-test--contents "config.org")))
-    (dolist (module '("p3-platform" "p3-core" "p3-python" "p3-terminal"
-                      "p3-gptel"))
+    (dolist (module '("p3-platform" "p3-core" "p3-terminal" "p3-gptel"))
       (should (string-match-p (regexp-quote (format "(use-package %s" module))
                               contents)))
-    (dolist (package '("python" "eglot" "vterm" "gptel"))
+    (dolist (package '("vterm" "gptel"))
       (should (string-match-p (regexp-quote (format "(use-package %s" package))
                               contents)))
-    (should
-     (string-match-p
-      (regexp-quote "(p3/config-load-module 'p3-config-ess)") contents))
+    (dolist (module '(p3-config-ess p3-config-python))
+      (should
+       (string-match-p
+        (regexp-quote (format "(p3/config-load-module '%s)" module))
+        contents)))
     (dolist (implementation '("(defun p3/windows-rtools-version"
                                "(defun p3/windows-latest-r-program"
                                "(defun p3/project-root"
@@ -139,10 +150,24 @@
     (should (< terminal shell))
     (should (< shell shell-binding))))
 
-(ert-deftest p3-config-org-source-loads-six-config-modules ()
+(ert-deftest p3-config-python-preserves-subsystem-timing ()
+  (let* ((contents (p3-config-test--contents "config.org"))
+         (flycheck (p3-config-test--position "(use-package flycheck" contents))
+         (projectile (p3-config-test--position "(use-package projectile" contents))
+         (python (p3-config-test--position
+                  "(p3/config-load-module 'p3-config-python)" contents))
+         (rainbow (p3-config-test--position "(use-package rainbow-mode" contents))
+         (shell (p3-config-test--position "(p3/windows-configure-shell)" contents)))
+    (should (< flycheck projectile))
+    (should (< projectile python))
+    (should (< python rainbow))
+    (should (< rainbow shell))))
+
+(ert-deftest p3-config-org-source-loads-seven-config-modules ()
   (let ((contents (p3-config-test--contents "config.org")))
     (dolist (module '(p3-config-base p3-config-editing p3-config-completion
-                      p3-config-ess p3-config-workspace p3-config-git))
+                      p3-config-ess p3-config-python p3-config-workspace
+                      p3-config-git))
       (should
        (string-match-p
         (regexp-quote (format "(p3/config-load-module '%s)" module))
@@ -181,7 +206,12 @@
                "(use-package p3-r-tools"
                "(use-package p3-ess"
                "(use-package ess-r-mode"
-               "(defun compile-rmd"))
+               "(defun compile-rmd"
+               "(use-package p3-python"
+               "(use-package python"
+               "(use-package eglot"
+               "(add-hook 'python-ts-mode-hook"
+               "flycheck-python-flake8-executable"))
       (should-not (string-match-p (regexp-quote implementation) contents)))
     (dolist (package '(dashboard which-key vertico company undo-tree super-save
                        multiple-cursors magit git-gutter-fringe+ transpose-frame
@@ -201,6 +231,18 @@
      (string-match-p
       (regexp-quote "(keymap-global-set \"C-c R\"") contents))
     (should (< ess r-program))))
+
+(ert-deftest p3-config-python-orchestration-has-one-owner ()
+  (let* ((contents (p3-config-test--contents "config.org"))
+         (owner "(p3/config-load-module 'p3-config-python)"))
+    (should (= 1 (p3-config-test--count-occurrences owner contents)))
+    (dolist (forbidden '("(use-package p3-python"
+                          "(use-package python"
+                          "(use-package eglot"
+                          "(add-hook 'python-ts-mode-hook"
+                          "flycheck-python-flake8-executable"))
+      (should-not (string-match-p (regexp-quote forbidden) contents)))
+    (should (string-match-p (regexp-quote "(python . t)") contents))))
 
 (ert-deftest p3-config-behavior-library-owner-pattern-is-explicit ()
   (let ((base (p3-config-test--contents "lisp/p3-config-base.el"))
