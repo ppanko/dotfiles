@@ -20,7 +20,6 @@
 (defvar time-stamp-start)
 
 (declare-function org-babel-do-load-languages "ob-core" (sym value))
-(declare-function p3-org-export-setup "p3-org-export" ())
 
 (p3/config-load-module 'p3-org)
 
@@ -63,6 +62,7 @@
 (use-package p3-org-export
   :ensure nil
   :demand t
+  :functions p3-org-export-setup
   :config
   (p3-org-export-setup))
 
