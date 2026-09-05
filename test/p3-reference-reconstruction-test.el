@@ -196,6 +196,65 @@
            :type 'user-error))
       (delete-directory directory t))))
 
+(ert-deftest p3-reference-live-modified-bibliography-preserves-unsaved-edits ()
+  (let* ((directory (make-temp-file "p3-live-bib-modified-" t))
+         (p3/reference-bibliography-file
+          (expand-file-name "references.bib" directory))
+         buffer)
+    (unwind-protect
+        (progn
+          (with-temp-file p3/reference-bibliography-file
+            (insert "@article{alpha2020, title={Alpha Study}}\n"))
+          (setq buffer (find-file-noselect p3/reference-bibliography-file))
+          (with-current-buffer buffer
+            (goto-char (point-max))
+            (insert "\n% unsaved local bibliography edit\n")
+            (p3/reference-add-keyword "alpha2020" "topic/live")
+            (should (buffer-modified-p))
+            (should (save-excursion
+                      (goto-char (point-min))
+                      (search-forward "topic/live" nil t)))
+            (should (save-excursion
+                      (goto-char (point-min))
+                      (search-forward "unsaved local bibliography edit" nil t))))
+          (with-temp-buffer
+            (insert-file-contents p3/reference-bibliography-file)
+            (should-not (search-forward "topic/live" nil t))
+            (should-not (search-forward "unsaved local bibliography edit" nil t)))
+          (with-current-buffer buffer
+            (save-buffer))
+          (with-temp-buffer
+            (insert-file-contents p3/reference-bibliography-file)
+            (should (search-forward "topic/live" nil t))
+            (should (search-forward "unsaved local bibliography edit" nil t))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (delete-directory directory t))))
+
+(ert-deftest p3-reference-live-clean-bibliography-persists-and-stays-clean ()
+  (let* ((directory (make-temp-file "p3-live-bib-clean-" t))
+         (p3/reference-bibliography-file
+          (expand-file-name "references.bib" directory))
+         buffer)
+    (unwind-protect
+        (progn
+          (with-temp-file p3/reference-bibliography-file
+            (insert "@article{alpha2020, title={Alpha Study}}\n"))
+          (setq buffer (find-file-noselect p3/reference-bibliography-file))
+          (with-current-buffer buffer
+            (should-not (buffer-modified-p))
+            (p3/reference-add-keyword "alpha2020" "topic/live")
+            (should-not (buffer-modified-p))
+            (should (save-excursion
+                      (goto-char (point-min))
+                      (search-forward "topic/live" nil t))))
+          (with-temp-buffer
+            (insert-file-contents p3/reference-bibliography-file)
+            (should (search-forward "topic/live" nil t))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (delete-directory directory t))))
+
 (provide 'p3-reference-reconstruction-test)
 
 ;;; p3-reference-reconstruction-test.el ends here
