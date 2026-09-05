@@ -79,6 +79,18 @@ jobs:
           lisp/p3-config-loader.el
           lisp/p3-commands.el
           lisp/p3-git.el
+          lisp/p3-config-terminal.el
+
+      - name: Smoke-load Windows terminal configuration boundary
+        shell: powershell
+        run: >-
+          emacs -Q --batch -L lisp
+          --eval "(setq user-emacs-directory (file-name-as-directory default-directory))"
+          -l lisp/p3-platform.el
+          --eval "(setq linuxy-environment-path (file-name-as-directory (expand-file-name \"usr/bin\" (getenv \"P3_TEST_MSYS2_ROOT\"))))"
+          -l lisp/p3-config-loader.el
+          -l lisp/p3-config-terminal.el
+          --eval "(unless (and (featurep (quote p3-config-terminal)) (featurep (quote p3-terminal)) (eq (key-binding (kbd \"C-x C-u\")) (quote shell)) (string-suffix-p \"bash.exe\" shell-file-name t)) (kill-emacs 1))"
 
       - name: Run Windows platform and project tests
         shell: powershell
