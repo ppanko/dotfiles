@@ -25,6 +25,38 @@
              (lambda (_project) "/tmp/native-project/")))
     (should (equal (p3/project-root) "/tmp/native-project/"))))
 
+(ert-deftest p3-project-plain-git-project-is-detected-from-descendant ()
+  (skip-unless (executable-find "git"))
+  (let* ((root (make-temp-file "p3-project-git-" t))
+         (child (expand-file-name "src/subdir" root)))
+    (unwind-protect
+        (progn
+          (should
+           (zerop (call-process "git" nil nil nil "-C" root "init" "-q")))
+          (make-directory child t)
+          (let ((default-directory child))
+            (should
+             (equal (p3-project-test--canonical-directory (p3/project-root))
+                    (p3-project-test--canonical-directory root)))))
+      (delete-directory root t))))
+
+(ert-deftest p3-project-init-prefers-newer-source-before-early-local-requires ()
+  (let ((path (expand-file-name "init.el" p3-project-test--root)))
+    (with-temp-buffer
+      (insert-file-contents path)
+      (let* ((contents (buffer-string))
+             (newer (string-match
+                     (regexp-quote "(setq load-prefer-newer t)") contents))
+             (project (string-match
+                       (regexp-quote "(require 'p3-project)") contents))
+             (loader (string-match
+                      (regexp-quote "(require 'p3-config-loader)") contents)))
+        (should newer)
+        (should project)
+        (should loader)
+        (should (< newer project))
+        (should (< newer loader))))))
+
 (ert-deftest p3-project-legacy-projectile-marker-is-detected-from-descendant ()
   (let* ((root (make-temp-file "p3-project-marker-" t))
          (child (expand-file-name "R/subdir" root)))
