@@ -14,6 +14,10 @@
 (defvar org-startup-folded)
 (defvar org-todo-keyword-faces)
 (defvar org-todo-keywords)
+(defvar time-stamp-active)
+(defvar time-stamp-end)
+(defvar time-stamp-format)
+(defvar time-stamp-start)
 
 (declare-function org-babel-do-load-languages "ob-core" (sym value))
 (declare-function p3-org-export-setup "p3-org-export" ())
