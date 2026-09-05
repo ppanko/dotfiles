@@ -98,7 +98,9 @@ Literature note :ROAM_REFS: @fellegi1969
 PDF directory   ~/papers/fellegi1969/
 ```
 
-A provisional URL-only inbox record may have a temporary key, but it cannot become part of the durable knowledge graph until the key is finalized. A provisional reference cannot be cited, receive a literature note, or be associated with a project.
+A provisional URL-only inbox record may have a temporary key, but it cannot become part of the durable knowledge graph until the key is finalized. A provisional reference cannot be cited, receive a literature note, be associated with a project, or receive a citekey-based PDF attachment directory.
+
+Finalization uses a deterministic BibTeX autokey convention based on mature bibliographic metadata. The proposed permanent key is shown before it is accepted and may be edited at that point. The exact author/year/title formatting convention is configuration, not corpus structure.
 
 After finalization, citekeys are effectively immutable. Changing one is an explicit migration operation, never a side effect of enrichment.
 
@@ -118,6 +120,8 @@ Use a configurable attachment root and a deterministic citekey-based layout:
 ```
 
 Only the attachment root is machine-specific. The bibliography and Org corpus must remain usable when the PDF root or a particular attachment is absent.
+
+If an attachment operation is requested for a provisional record, the record must be finalized first so the attachment path never depends on a temporary citekey.
 
 ### Literature notes
 
@@ -140,7 +144,7 @@ The bibliography owns bibliographic facts. The literature note owns the user's i
 
 Project relationships belong in the Org knowledge graph, not in `references.bib`.
 
-An Org-roam project note associates references through ordinary Org citation/reference content, conceptually:
+A machine-readable `project` Org-roam tag identifies project notes. Each project note uses one top-level `* References` subtree as the canonical explicit association list:
 
 ```org
 #+title: SAIDS
@@ -152,11 +156,15 @@ An Org-roam project note associates references through ordinary Org citation/ref
 [cite:@smith2024]
 ```
 
+The reference workflow creates the `* References` subtree when necessary and keeps associations unique. `C-c b r` reads this subtree, rather than treating every narrative citation elsewhere in the project note as an automatic project association.
+
+This keeps ordinary prose citations semantically distinct from the explicit project-reference registry while leaving the registry itself as plain Org citation text.
+
 One reference may therefore relate to zero, one, or many projects without duplicating or modifying the bibliographic record.
 
-A simple `project` Org-roam tag is the machine-readable convention for identifying project notes. If the current note is not unambiguously a project, project-aware commands prompt rather than guessing.
+If the current note is not unambiguously a project, project-aware commands prompt rather than guessing.
 
-Project association and literature-note creation remain independent. A project may cite a reference that has no literature note.
+Project association and literature-note creation remain independent. A project may associate a reference that has no literature note.
 
 ## User-facing workflow contract
 
@@ -202,10 +210,13 @@ Search the same library and insert native Org citation syntax, e.g.:
 
 Documents must not depend on Citar-specific citation syntax.
 
+If the selected record is still provisional, citation insertion first enters the explicit finalization flow.
+
 ### `C-c b n` — literature note
 
 Select a reference or use the reference at point.
 
+- If the selected record is provisional, finalize it first.
 - If a literature note with the corresponding `ROAM_REFS` already exists, open it.
 - Otherwise create exactly one minimal Org-roam literature note and place point in the body.
 
@@ -215,7 +226,7 @@ Repeated invocation must not create duplicate literature notes.
 
 Resolve the selected citekey to its attachment directory and open `main.pdf` when present.
 
-Missing attachment root or PDF is a normal condition, not a knowledge-base error.
+If the selected record is provisional and an attachment is being added, finalize it first. Missing attachment root or PDF is a normal condition, not a knowledge-base error.
 
 ### `C-c b t` — classify or associate
 
@@ -227,14 +238,14 @@ The action may:
 - associate the reference with an Org-roam project;
 - remove an existing project association.
 
-Project association modifies the project note, not the bibliography entry.
+Project association modifies only the canonical `* References` subtree in the project note, not the bibliography entry. A provisional record is finalized before project association.
 
 ### `C-c b r` — references for current project
 
 When invoked from an Org-roam project note:
 
 1. identify the current project note;
-2. collect its associated citekeys;
+2. read citekeys from its canonical `* References` subtree;
 3. resolve them against `references.bib`;
 4. show that subset through the same reference-search/action interface as global lookup.
 
@@ -370,13 +381,14 @@ These are not permanently forbidden. They may be introduced later only to solve 
 1. `references.bib` must remain valid BibLaTeX after every successful mutation.
 2. Library mutations write and validate a temporary result before atomically replacing the original file; failed validation leaves the original untouched.
 3. Mature citekeys are unique and effectively immutable.
-4. Provisional records cannot be cited, linked to literature notes, or associated with projects until finalized.
+4. Provisional records cannot be cited, linked to literature notes, associated with projects, or assigned citekey-based attachment paths until finalized.
 5. Enrichment may fill missing metadata automatically but may not silently overwrite populated conflicting data.
 6. DOI and normalized-URL equality may identify strong duplicates; title similarity may only warn.
-7. Optional package state is never required to reconstruct citation identity, literature-note links, or project associations.
-8. Missing PDFs do not invalidate references or notes.
-9. Network failure does not block local retrieval or basic capture.
-10. Package-specific PDF annotation state must remain supplemental to durable Org text.
+7. Project associations are represented only by unique citekeys in the canonical `* References` subtree of project notes; narrative citations elsewhere do not implicitly modify that registry.
+8. Optional package state is never required to reconstruct citation identity, literature-note links, or project associations.
+9. Missing PDFs do not invalidate references or notes.
+10. Network failure does not block local retrieval or basic capture.
+11. Package-specific PDF annotation state must remain supplemental to durable Org text.
 
 ## Testing strategy
 
@@ -392,12 +404,14 @@ Focused automated coverage should include:
 - normalized-URL duplicate detection;
 - similar-title warning without automatic merge;
 - enrichment fills missing fields without overwriting populated fields;
+- finalization presents a deterministic proposed citekey and accepts an explicit user choice;
 - finalized citekey cannot change as an incidental enrichment side effect;
-- provisional record cannot be cited or linked before finalization;
+- provisional record cannot be cited, linked, project-associated, or attached before finalization;
 - citation insertion emits native Org citation syntax;
 - literature-note creation writes the correct `ROAM_REFS`;
 - repeated note creation opens the existing note;
-- project association is idempotent;
+- project association creates/uses the canonical `* References` subtree and is idempotent;
+- narrative citations outside that subtree do not become project associations;
 - project-reference retrieval resolves the intended bibliography subset;
 - attachment lookup follows the citekey directory convention;
 - missing PDF root/PDF/network/optional packages degrade without corrupting state;
@@ -415,8 +429,9 @@ V1 includes:
 - native Org-cite insertion;
 - Biblio-backed acquisition/enrichment where practical;
 - URL/BibLaTeX capture that survives network failure;
+- explicit citekey finalization before durable relationships are created;
 - literature-note creation/opening through Org-roam;
-- project association and project-scoped retrieval through Org notes;
+- project association and project-scoped retrieval through canonical Org project-note reference subtrees;
 - citekey-based PDF directory convention;
 - pdf-tools reading integration;
 - focused regression tests and existing architecture/CI integration.
