@@ -4,7 +4,7 @@
 
 **Goal:** Extract Org core, Org-roam, and Org presentation configuration from `config.org` into three focused configuration modules and three reusable behavior libraries without changing user-facing behavior or startup ordering.
 
-**Architecture:** `config.org` remains the explicit top-level map and loads `p3-config-org`, `p3-config-org-roam`, and `p3-config-org-present` in their current broad positions. Each configuration module owns declarative package wiring and exact-source loads its new behavior library; `p3-org-export.el` remains unchanged and retains its existing `use-package` activation/reload semantics.
+**Architecture:** `config.org` remains the explicit top-level map and loads `p3-config-org`, `p3-config-org-roam`, and `p3-config-org-present` in their current broad positions. Each new config module owns declarative wiring and exact-source loads only its new behavior library. `p3-org-export.el` remains unchanged and keeps its current `use-package` activation/reload semantics.
 
 **Tech Stack:** Emacs Lisp, Org, Org Agenda, Org Babel, Org-roam, org-present, `use-package`, ERT, GitHub Actions.
 
@@ -18,32 +18,33 @@
 - Preserve every existing Org, Roam, and presentation keybinding, hook, template, path, and setting.
 - Preserve Babel languages exactly: Emacs Lisp, R, C, Python, LaTeX, and shell.
 - Preserve `org-confirm-babel-evaluate t`.
-- Preserve the anonymous timestamp-on-save hook as an anonymous hook; do not normalize or deduplicate it.
-- Preserve legacy function names, including `org-set-line-checkbox`, `org-roam-generate-tagged-header`, `org-roam-node-insert-immediate-with-tag`, and `org-roam-rg-search`.
+- Preserve the anonymous timestamp-on-save hook as anonymous; do not name, deduplicate, or otherwise normalize it.
+- Preserve legacy command names, including `org-set-line-checkbox`, `org-roam-generate-tagged-header`, `org-roam-node-insert-immediate-with-tag`, and `org-roam-rg-search`.
 - Preserve the current trailing `#` in the nonblank tagged-header output.
-- `p3-org-export.el` must not change and must not gain exact-source reload semantics.
+- `lisp/p3-org-export.el` and `test/p3-org-export-test.el` must remain byte-for-byte unchanged.
+- `p3-org-export.el` must not gain exact-source reload semantics.
 - `p3-org-present.el` directly requires built-in `face-remap`.
-- Optional Org-roam/presentation packages must not be installed merely for byte compilation or smoke loading.
-- No broad `display-buffer-alist` policy or other window-management changes.
-- Keep CI economical: no iterative diagnostic workflows; use targeted tests and one final PR CI cycle after local/static verification.
+- Optional Org-roam/presentation packages must not be installed merely for compilation or smoke loading.
+- No broad `display-buffer-alist` policy or other window-management change.
+- Keep CI economical: no diagnostic workflows or iterative Actions loops; perform one final PR CI cycle once the implementation head is coherent.
 
 ---
 
 ## File Map
 
-### New behavior libraries
+**Create behavior libraries**
 
-- `lisp/p3-org.el` — reusable core Org commands only.
-- `lisp/p3-org-roam.el` — reusable Org-roam helper/search/agenda behavior only.
+- `lisp/p3-org.el` — reusable core Org commands.
+- `lisp/p3-org-roam.el` — reusable Org-roam helper/search/agenda behavior.
 - `lisp/p3-org-present.el` — stateful presentation behavior and direct `face-remap` dependency.
 
-### New configuration modules
+**Create configuration modules**
 
-- `lisp/p3-config-org.el` — Org core, Babel, TODO, Agenda, PDF handling, and existing `p3-org-export` activation.
-- `lisp/p3-config-org-roam.el` — Org-roam package settings, templates, bindings, and autosync.
-- `lisp/p3-config-org-present.el` — hide-mode-line, visual-fill-column, org-present package wiring, bindings, hooks, and text scale.
+- `lisp/p3-config-org.el` — Org core, Babel, TODO, Agenda, PDF handling, and unchanged `p3-org-export` activation.
+- `lisp/p3-config-org-roam.el` — Org-roam settings, capture templates, bindings, and autosync.
+- `lisp/p3-config-org-present.el` — hide-mode-line, visual-fill-column, org-present bindings/hooks/config.
 
-### New focused tests
+**Create focused tests**
 
 - `test/p3-org-test.el`
 - `test/p3-config-org-test.el`
@@ -52,21 +53,21 @@
 - `test/p3-org-present-test.el`
 - `test/p3-config-org-present-test.el`
 
-### Existing files to modify
+**Modify**
 
-- `config.org` — replace only the current Org, Org-roam, and Presentation implementation blocks with concise module-loader stanzas; leave intervening/out-of-scope sections in place.
-- `test/p3-config-test.el` — update module ownership/count/order assertions and moved-code exclusions.
-- `.github/workflows/emacs-tests.yml` — compile six new Lisp files, load six focused test files, and add three runtime smoke checks.
-- `.github/workflows/windows-platform-tests.yml` — add source-level architecture/config-boundary coverage and matching path triggers only; do not install optional packages.
+- `config.org`
+- `test/p3-config-test.el`
+- `.github/workflows/emacs-tests.yml`
+- `.github/workflows/windows-platform-tests.yml`
 
-### Existing files that must remain unchanged
+**Must not modify**
 
 - `lisp/p3-org-export.el`
 - `test/p3-org-export-test.el`
 
 ---
 
-### Task 1: Extract Org core behavior and declarative configuration
+### Task 1: Extract Org core behavior and configuration
 
 **Files:**
 - Create: `lisp/p3-org.el`
@@ -75,50 +76,77 @@
 - Create: `test/p3-config-org-test.el`
 
 **Interfaces:**
-- Consumes: `p3/config-load-module` from `p3-config-loader.el`; built-in Org functions at runtime; existing `p3-org-export` feature through unchanged `use-package` activation.
-- Produces: `p3/org-sort-todos`, `org-set-line-checkbox`, feature `p3-org`, feature `p3-config-org`.
+- Consumes: `p3/config-load-module`, built-in Org APIs at runtime, existing `p3-org-export` through unchanged `use-package` activation.
+- Produces: `p3/org-sort-todos`, `org-set-line-checkbox`, features `p3-org` and `p3-config-org`.
 
-- [ ] **Step 1: Write failing core behavior tests before creating `p3-org.el`**
+- [ ] **Step 1: Write failing behavior tests for the two extracted commands**
 
-Create `test/p3-org-test.el` with a repository-root/load-path setup matching the existing test files, then define tests that stub the Org entry points instead of requiring package configuration.
-
-Use this shape for TODO sorting:
+Create `test/p3-org-test.el` with the standard repository-root/load-path setup and:
 
 ```elisp
-(ert-deftest p3-org-sort-todos-preserves-current-org-sort-call ()
+;;; p3-org-test.el --- Tests for p3-org -*- lexical-binding: t; -*-
+
+(require 'cl-lib)
+(require 'ert)
+
+(defconst p3-org-test--root
+  (file-name-directory
+   (directory-file-name
+    (file-name-directory (or load-file-name buffer-file-name)))))
+
+(add-to-list 'load-path (expand-file-name "lisp" p3-org-test--root))
+(require 'p3-org)
+
+(ert-deftest p3-org-sort-todos-preserves-current-sort-call ()
   (let (seen)
     (cl-letf (((symbol-function 'org-sort-entries)
                (lambda (&rest args) (setq seen args))))
       (p3/org-sort-todos)
-      (should (equal seen '(nil 111))))))
+      (should (equal seen (list nil ?o))))))
+
+(ert-deftest p3-org-set-line-checkbox-prefixes-current-line ()
+  (with-temp-buffer
+    (insert "alpha\nbeta\n")
+    (goto-char (point-min))
+    (org-set-line-checkbox 1)
+    (should (equal (buffer-string) "- [ ] alpha\nbeta\n"))
+    (should (= (point) (line-beginning-position)))))
+
+(ert-deftest p3-org-set-line-checkbox-prefixes-active-region-lines ()
+  (with-temp-buffer
+    (transient-mark-mode 1)
+    (insert "alpha\nbeta\ngamma\n")
+    (goto-char (point-min))
+    (push-mark (line-beginning-position 3) t t)
+    (activate-mark)
+    (org-set-line-checkbox 1)
+    (should (equal (buffer-string)
+                   "- [ ] alpha\n- [ ] beta\ngamma\n"))
+    (should (looking-at "gamma"))))
+
+(provide 'p3-org-test)
+;;; p3-org-test.el ends here
 ```
 
-`111` is the character code for `?o`; if the implementation/test uses `?o` directly, the assertion may use `'(nil ?o)`.
+- [ ] **Step 2: Verify RED before creating the behavior file**
 
-For checkbox behavior, cover both no-region and active-region semantics using temporary buffers. Pin the literal inserted prefix `"- [ ] "`, the number of affected lines, and the final cursor at the beginning of the last processed line as the current function does.
-
-- [ ] **Step 2: Verify the focused behavior tests fail because `p3-org.el` does not exist**
-
-Run, when Emacs is available:
+Run when local Emacs is available:
 
 ```bash
-emacs -Q --batch -L lisp \
-  -l test/p3-org-test.el \
-  -f ert-run-tests-batch-and-exit
+emacs -Q --batch -L lisp -l test/p3-org-test.el -f ert-run-tests-batch-and-exit
 ```
 
-Expected: FAIL/load error for missing `p3-org` or undefined extracted commands.
+Expected: load failure because `p3-org` does not exist. In the connector-only ChatGPT harness, preserve this test-first commit ordering and do not spend a standalone Actions run solely to demonstrate the expected missing-file failure.
 
-In the ChatGPT connector harness, where Emacs is unavailable locally, preserve this RED-before-GREEN commit ordering and defer executable confirmation to the final Actions gate rather than spending a standalone CI run.
-
-- [ ] **Step 3: Create the minimal `p3-org.el` behavior library**
-
-Move the two existing definitions without redesign:
+- [ ] **Step 3: Create `lisp/p3-org.el` exactly as the behavior boundary**
 
 ```elisp
 ;;; p3-org.el --- Core Org workflow helpers -*- lexical-binding: t; -*-
 
-(declare-function org-sort-entries "org" (&optional with-case sorting-type get-key-func compare-func property interactive?))
+(declare-function org-sort-entries
+                  "org"
+                  (&optional with-case sorting-type get-key-func compare-func
+                             property interactive?))
 
 (defun p3/org-sort-todos ()
   "Sort sibling entries by TODO state without changing outline hierarchy.
@@ -141,35 +169,47 @@ TODO states according to `org-todo-keywords'."
     (beginning-of-line)))
 
 (provide 'p3-org)
-
 ;;; p3-org.el ends here
 ```
 
-Do not `(require 'org)` merely to define these functions. Add only compiler declarations actually needed by warnings-as-errors compilation.
+Do not require Org merely to define these commands.
 
-- [ ] **Step 4: Run the core behavior tests and make only behavior-preserving corrections**
-
-Run:
+- [ ] **Step 4: Run the behavior tests**
 
 ```bash
-emacs -Q --batch -L lisp \
-  -l test/p3-org-test.el \
-  -f ert-run-tests-batch-and-exit
+emacs -Q --batch -L lisp -l test/p3-org-test.el -f ert-run-tests-batch-and-exit
 ```
 
 Expected: PASS.
 
-- [ ] **Step 5: Write source-semantic tests for `p3-config-org.el` before creating it**
+- [ ] **Step 5: Write failing source-semantic tests for `p3-config-org.el`**
 
-Create `test/p3-config-org-test.el` using the parsed-form helpers already established in `test/p3-config-python-test.el`: read top-level forms, find `use-package` forms, and inspect keyword sections.
+Create `test/p3-config-org-test.el` using the parsed-form helper pattern from `test/p3-config-python-test.el`. The tests must assert all of the following exact facts:
 
-Tests must pin at minimum:
+1. `(p3/config-load-module 'p3-org)` exists before the binding of `p3/org-sort-todos`.
+2. `org-startup-folded` is `content`.
+3. The anonymous timestamp hook still sets:
 
 ```elisp
-(p3/config-load-module 'p3-org)
+time-stamp-active t
+time-stamp-start "#\\+last_modified:[ \t]*"
+time-stamp-end "$"
+time-stamp-format "\[%Y-%m-%d %3a %02H:%02M\]"
 ```
 
-before the command binding; the exact Babel language list:
+and locally adds `time-stamp` to `before-save-hook`.
+4. The `use-package org` block preserves:
+
+```elisp
+:bind (:map org-mode-map
+            ("C-c s" lambda () (interactive)
+             (insert "#+BEGIN_SRC emacs-lisp\n#+END_SRC")))
+:hook ((org-mode . flyspell-mode)
+       (org-mode . visual-line-mode)
+       (org-mode . org-indent-mode))
+```
+
+5. Babel languages are exactly:
 
 ```elisp
 '((emacs-lisp . t)
@@ -180,25 +220,18 @@ before the command binding; the exact Babel language list:
   (shell . t))
 ```
 
-and these values:
+6. Org settings are exactly:
 
 ```elisp
-(setq org-startup-folded 'content)
 (setq org-confirm-babel-evaluate t
       org-src-fontify-natively t
       org-src-tab-acts-natively t
       org-hide-emphasis-markers t
       org-ellipsis " ↴")
-(setq org-todo-keywords
-      '((sequence "TODO(t)" "WAIT(w)" "|" "DONE(d)"))
-      org-todo-keyword-faces
-      '(("WAIT" . "DarkOrange")))
-(setq org-agenda-sorting-strategy '(priority-down))
 ```
 
-Pin the existing Org hooks, `C-c s`, `C-c C-x C-o`, Linux Evince PDF association, and the anonymous timestamp hook body.
-
-Also assert that the module retains unchanged exporter activation in substance:
+7. `C-c C-x C-o` binds `p3/org-sort-todos`.
+8. The exporter activation is still:
 
 ```elisp
 (use-package p3-org-export
@@ -208,23 +241,30 @@ Also assert that the module retains unchanged exporter activation in substance:
   (p3-org-export-setup))
 ```
 
-and assert there is **no** `(p3/config-load-module 'p3-org-export)` form.
+and there is no `(p3/config-load-module 'p3-org-export)`.
+9. Linux PDF handling remains `(add-to-list 'org-file-apps '("pdf" . "evince %s"))`.
+10. TODO state remains:
 
-- [ ] **Step 6: Verify the config-boundary tests fail because the new module does not exist**
-
-Run:
-
-```bash
-emacs -Q --batch -L lisp \
-  -l test/p3-config-org-test.el \
-  -f ert-run-tests-batch-and-exit
+```elisp
+(setq org-todo-keywords
+      '((sequence "TODO(t)" "WAIT(w)" "|" "DONE(d)"))
+      org-todo-keyword-faces
+      '(("WAIT" . "DarkOrange")))
 ```
 
-Expected: FAIL due to missing `lisp/p3-config-org.el`.
+11. Org Agenda remains `(setq org-agenda-sorting-strategy '(priority-down))`.
 
-- [ ] **Step 7: Create `p3-config-org.el` by moving the current forms without normalization**
+- [ ] **Step 6: Verify the config tests are RED**
 
-Start with:
+```bash
+emacs -Q --batch -L lisp -l test/p3-config-org-test.el -f ert-run-tests-batch-and-exit
+```
+
+Expected: missing `lisp/p3-config-org.el`.
+
+- [ ] **Step 7: Create `lisp/p3-config-org.el` with the complete moved configuration**
+
+Use this implementation, preserving the current anonymous hook and exporter activation:
 
 ```elisp
 ;;; p3-config-org.el --- Org configuration -*- lexical-binding: t; -*-
@@ -232,22 +272,85 @@ Start with:
 (require 'use-package)
 (require 'p3-config-loader)
 
+(defvar org-agenda-sorting-strategy)
+(defvar org-confirm-babel-evaluate)
+(defvar org-ellipsis)
+(defvar org-file-apps)
+(defvar org-hide-emphasis-markers)
+(defvar org-mode-map)
+(defvar org-src-fontify-natively)
+(defvar org-src-tab-acts-natively)
+(defvar org-startup-folded)
+(defvar org-todo-keyword-faces)
+(defvar org-todo-keywords)
+
+(declare-function org-babel-do-load-languages "ob-core" (sym value))
+(declare-function p3-org-export-setup "p3-org-export" ())
+
 (p3/config-load-module 'p3-org)
-```
 
-Then move the current executable Org forms in their current semantic order: `org-startup-folded`, anonymous timestamp hook, `use-package org`, `p3/org-sort-todos` binding, unchanged `use-package p3-org-export`, Linux Evince association, TODO keywords/faces, and `use-package org-agenda` sorting.
+(setq org-startup-folded 'content)
 
-Do not move the earlier Citar/BibTeX/RefTeX block or the LaTeX block into this file.
+(add-hook 'org-mode-hook
+          (lambda ()
+            (setq-local time-stamp-active t
+                        time-stamp-start "#\\+last_modified:[ \t]*"
+                        time-stamp-end "$"
+                        time-stamp-format "\[%Y-%m-%d %3a %02H:%02M\]")
+            (add-hook 'before-save-hook 'time-stamp nil 'local)))
 
-End with:
+(use-package org
+  :defer t
+  :bind (:map org-mode-map
+              ("C-c s" lambda () (interactive)
+               (insert "#+BEGIN_SRC emacs-lisp\n#+END_SRC")))
+  :hook ((org-mode . flyspell-mode)
+         (org-mode . visual-line-mode)
+         (org-mode . org-indent-mode))
+  :init
+  (org-babel-do-load-languages
+   'org-babel-load-languages
+   '((emacs-lisp . t)
+     (R . t)
+     (C . t)
+     (python . t)
+     (latex . t)
+     (shell . t)))
+  :config
+  (setq org-confirm-babel-evaluate t
+        org-src-fontify-natively t
+        org-src-tab-acts-natively t
+        org-hide-emphasis-markers t
+        org-ellipsis " ↴"))
 
-```elisp
+(define-key org-mode-map (kbd "C-c C-x C-o") #'p3/org-sort-todos)
+
+(use-package p3-org-export
+  :ensure nil
+  :demand t
+  :config
+  (p3-org-export-setup))
+
+(when (eq system-type 'gnu/linux)
+  (add-to-list 'org-file-apps '("pdf" . "evince %s")))
+
+(setq org-todo-keywords
+      '((sequence "TODO(t)" "WAIT(w)" "|" "DONE(d)"))
+      org-todo-keyword-faces
+      '(("WAIT" . "DarkOrange")))
+
+(use-package org-agenda
+  :ensure nil
+  :config
+  (setq org-agenda-sorting-strategy '(priority-down)))
+
 (provide 'p3-config-org)
+;;; p3-config-org.el ends here
 ```
+
+If warnings-as-errors reports a compiler-only declaration mismatch, adjust only declarations/signatures; do not change executable forms.
 
 - [ ] **Step 8: Run both focused Org test files**
-
-Run:
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -258,17 +361,16 @@ emacs -Q --batch -L lisp \
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit the core Org extraction**
+- [ ] **Step 9: Commit Task 1**
 
 ```bash
-git add lisp/p3-org.el lisp/p3-config-org.el \
-        test/p3-org-test.el test/p3-config-org-test.el
+git add lisp/p3-org.el lisp/p3-config-org.el test/p3-org-test.el test/p3-config-org-test.el
 git commit -m "Extract Org core configuration boundary"
 ```
 
 ---
 
-### Task 2: Extract Org-roam behavior and declarative configuration
+### Task 2: Extract Org-roam behavior and configuration
 
 **Files:**
 - Create: `lisp/p3-org-roam.el`
@@ -277,56 +379,40 @@ git commit -m "Extract Org core configuration boundary"
 - Create: `test/p3-config-org-roam-test.el`
 
 **Interfaces:**
-- Consumes: `p3/config-load-module`; Org-roam functions/variables at runtime; `consult-ripgrep`; `org-agenda`; `seq`; `subr-x`.
-- Produces: `org-roam-generate-tagged-header`, `org-roam-node-insert-immediate-with-tag`, `org-roam-rg-search`, `p3/org-roam-filter-by-tag`, `p3/org-roam-list-notes`, `p3/org-roam-list-notes-by-tag`, `p3/org-roam-get-agenda`, feature `p3-org-roam`, feature `p3-config-org-roam`.
+- Consumes: `p3/config-load-module`; Org-roam APIs at runtime; `consult-ripgrep`; `org-agenda`; built-in `seq`/`subr-x`.
+- Produces: `org-roam-generate-tagged-header`, `org-roam-node-insert-immediate-with-tag`, `org-roam-rg-search`, `p3/org-roam-filter-by-tag`, `p3/org-roam-list-notes`, `p3/org-roam-list-notes-by-tag`, `p3/org-roam-get-agenda`, features `p3-org-roam` and `p3-config-org-roam`.
 
-- [ ] **Step 1: Write failing Org-roam behavior tests with no real database**
+- [ ] **Step 1: Write failing behavior tests that use stubs instead of a database**
 
-Create `test/p3-org-roam-test.el`. Require only ERT/CL helpers and `p3-org-roam`; stub Org-roam functions.
-
-Pin blank tagged-header output exactly:
+Create `test/p3-org-roam-test.el`. Pin these two exact header outputs:
 
 ```elisp
 "#+title: ${title}\n#+category:${title}\n#+created: %U\n#+last_modified: %U\n"
 ```
 
-Pin nonblank output exactly, including the current trailing `#`:
+and, for tag `work`, including the trailing `#`:
 
 ```elisp
 "#+title: ${title}\n#+category:${title}\n#+filetags: work\n#+created: %U\n#+last_modified: %U\n#"
 ```
 
-For list/filter tests, stub:
+Use `cl-letf` stubs for `read-string`, `org-roam-node-list`, `org-roam-node-file`, `org-roam-node-tags`, `org-roam-node-insert`, `consult-ripgrep`, and `org-agenda`. Assert:
 
-```elisp
-org-roam-node-list
-org-roam-node-file
-org-roam-node-tags
-```
+- blank/nonblank tag predicates;
+- all-note and tag-filtered file lists;
+- `p3/org-roam-get-agenda` sets `org-agenda-files` correctly and calls `org-agenda`;
+- `org-roam-rg-search` forwards `org-roam-directory` exactly;
+- immediate insertion passes through its original args and dynamically supplies a one-entry tagged capture template whose plist contains `:immediate-finish t`.
 
-using simple plist/alist nodes and `cl-letf`.
-
-For `p3/org-roam-get-agenda`, stub `read-string`, the listing functions, and `org-agenda`; assert `org-agenda-files` receives all files for blank input and only tagged files for nonblank input.
-
-For `org-roam-rg-search`, bind `org-roam-directory` to a sentinel path and stub `consult-ripgrep`; assert the exact directory argument is forwarded.
-
-For immediate insertion, capture the dynamically bound `org-roam-capture-templates` inside a stubbed `org-roam-node-insert` call and assert `:immediate-finish t` is present.
-
-- [ ] **Step 2: Verify Org-roam behavior tests fail before implementation**
-
-Run:
+- [ ] **Step 2: Verify RED before creating the behavior library**
 
 ```bash
-emacs -Q --batch -L lisp \
-  -l test/p3-org-roam-test.el \
-  -f ert-run-tests-batch-and-exit
+emacs -Q --batch -L lisp -l test/p3-org-roam-test.el -f ert-run-tests-batch-and-exit
 ```
 
-Expected: FAIL/load error for missing `p3-org-roam`.
+Expected: missing `p3-org-roam`.
 
-- [ ] **Step 3: Create `p3-org-roam.el` by moving the current helpers verbatim in behavior**
-
-Use this dependency shape:
+- [ ] **Step 3: Create `lisp/p3-org-roam.el` with the complete moved helpers**
 
 ```elisp
 ;;; p3-org-roam.el --- Org-roam workflow helpers -*- lexical-binding: t; -*-
@@ -344,55 +430,137 @@ Use this dependency shape:
 (declare-function org-roam-node-insert "org-roam-node" (&optional arg &rest args))
 (declare-function org-roam-node-list "org-roam-node" ())
 (declare-function org-roam-node-tags "org-roam-node" (node))
+
+(defun org-roam-generate-tagged-header ()
+  (let ((tag (read-string "Enter tag: ")))
+    (if (string-empty-p tag)
+        (concat "#+title: ${title}\n#+category:${title}\n#+created: %U\n#+last_modified: %U\n")
+      (concat "#+title: ${title}\n#+category:${title}\n#+filetags: " tag
+              "\n#+created: %U\n#+last_modified: %U\n#"))))
+
+(defun org-roam-node-insert-immediate-with-tag (arg &rest args)
+  (interactive "p")
+  (let ((args (cons arg args))
+        (org-roam-capture-templates
+         (list
+          (append
+           (car
+            '(("t" "tagged" plain "%?"
+               :if-new
+               (file+head "%<%Y%m%d%H%M%S>-${slug}.org"
+                          org-roam-generate-tagged-header)
+               :unnarrowed t)))
+           '(:immediate-finish t)))))
+    (apply #'org-roam-node-insert args)))
+
+(defun org-roam-rg-search ()
+  "Search org-roam directory using consult-ripgrep. With live-preview."
+  (interactive)
+  (consult-ripgrep org-roam-directory))
+
+(defun p3/org-roam-filter-by-tag (tag-name)
+  (lambda (node)
+    (member tag-name (org-roam-node-tags node))))
+
+(defun p3/org-roam-list-notes ()
+  (mapcar #'org-roam-node-file
+          (org-roam-node-list)))
+
+(defun p3/org-roam-list-notes-by-tag (tag-name)
+  (mapcar #'org-roam-node-file
+          (seq-filter
+           (p3/org-roam-filter-by-tag tag-name)
+           (org-roam-node-list))))
+
+(defun p3/org-roam-get-agenda ()
+  (interactive)
+  (let ((tag (read-string "Enter tag: ")))
+    (if (string-empty-p tag)
+        (setq org-agenda-files (p3/org-roam-list-notes))
+      (setq org-agenda-files (p3/org-roam-list-notes-by-tag tag))))
+  (org-agenda))
+
+(provide 'p3-org-roam)
+;;; p3-org-roam.el ends here
 ```
 
-Then move the seven current helper functions unchanged, including the trailing `#` behavior.
+Do not require `org-roam` solely to define these helpers.
 
-Do not require `org-roam` solely to define the helpers.
+- [ ] **Step 4: Run the focused behavior tests**
 
-- [ ] **Step 4: Run Org-roam behavior tests**
+```bash
+emacs -Q --batch -L lisp -l test/p3-org-roam-test.el -f ert-run-tests-batch-and-exit
+```
 
-Run the focused file and expect PASS.
+Expected: PASS.
 
-- [ ] **Step 5: Write failing source-semantic tests for the Org-roam config owner**
+- [ ] **Step 5: Write failing source-semantic tests for the Roam config owner**
 
-Create `test/p3-config-org-roam-test.el` using parsed top-level forms. Assert:
+Create `test/p3-config-org-roam-test.el` using parsed top-level forms. Assert `(p3/config-load-module 'p3-org-roam)` occurs before `(use-package org-roam ...)` and structurally compare these exact values:
 
 ```elisp
-(p3/config-load-module 'p3-org-roam)
+(org-roam-database-connector 'sqlite-builtin)
+(org-roam-directory "~/org/notes/roam/")
+(org-roam-completion-everywhere t)
+(org-roam-completion-system 'default)
+(org-roam-dailies-directory "journal/")
 ```
 
-occurs before `(use-package org-roam ...)`, and pin the current `:hook`, `:custom`, `:bind`, and `:config` values.
-
-The test must compare the current default capture template, literature-note capture template, and dailies template structurally, including this target expression:
+Pin the exact default capture template:
 
 ```elisp
-(file+head
- "%(expand-file-name (or citar-org-roam-subdir \"\") org-roam-directory)/${citar-citekey}.org"
- "#+title: ${citar-citekey} (${citar-date}). ${note-title}.\n#+created: %U\n#+last_modified: %U\n\n")
+'(("d" "default" plain "%?"
+   :if-new (file+head "%<%Y%m%d%H%M%S>-${slug}.org"
+                      "#+title: ${title}\n#+category:${title}\n#+created: %U\n#+last_modified: %U\n")
+   :unnarrowed t)
 ```
 
-Pin all existing bindings:
+plus the existing literature-note entry:
+
+```elisp
+("n" "literature note" plain "* Heading\n %?"
+ :target
+ (file+head
+  "%(expand-file-name (or citar-org-roam-subdir \"\") org-roam-directory)/${citar-citekey}.org"
+  "#+title: ${citar-citekey} (${citar-date}). ${note-title}.\n#+created: %U\n#+last_modified: %U\n\n")
+ :unnarrowed t)
+```
+
+and dailies template:
+
+```elisp
+'(("d" "default" entry "* %<%I:%M %p>: %?"
+   :target
+   (file+head "%<%Y-%m-%d>.org"
+              "#+title: %<%Y-%m-%d %a>\n#+created: %U\n#+last_modified: %U\n")))
+```
+
+Pin all bindings exactly:
 
 ```text
-C-c n l  org-roam-buffer-toggle
-C-c n f  org-roam-node-find
-C-c n g  org-roam-graph
-C-c n i  org-roam-node-insert
-C-c n c  org-roam-capture
-C-c n n  org-roam-node-insert-immediate-with-tag
-C-c n s  org-roam-rg-search
-C-c n d  org-roam-dailies-goto-today
-C-c n t  org-roam-dailies-capture-today
+C-c n l   org-roam-buffer-toggle
+C-c n f   org-roam-node-find
+C-c n g   org-roam-graph
+C-c n i   org-roam-node-insert
+C-c n c   org-roam-capture
+C-c n n   org-roam-node-insert-immediate-with-tag
+C-c n s   org-roam-rg-search
+C-c n d   org-roam-dailies-goto-today
+C-c n t   org-roam-dailies-capture-today
 C-c n C-t org-roam-tag-add
-C-c n a  p3/org-roam-get-agenda
+C-c n a   p3/org-roam-get-agenda
 ```
 
-Pin `(org-roam-db-autosync-mode)` and the current node display template.
+Also pin:
 
-- [ ] **Step 6: Create `p3-config-org-roam.el`**
+```elisp
+(setq org-roam-node-display-template
+      (concat "${title:*} "
+              (propertize "${tags:10}" 'face 'org-tag)))
+(org-roam-db-autosync-mode)
+```
 
-Use:
+- [ ] **Step 6: Create `lisp/p3-config-org-roam.el` with the complete current declaration**
 
 ```elisp
 ;;; p3-config-org-roam.el --- Org-roam configuration -*- lexical-binding: t; -*-
@@ -400,21 +568,73 @@ Use:
 (require 'use-package)
 (require 'p3-config-loader)
 
+(defvar org-roam-node-display-template)
+
+(declare-function org-roam-db-autosync-mode "org-roam-db" (&optional arg))
+
 (p3/config-load-module 'p3-org-roam)
 
 (use-package org-roam
-  ...current declaration moved without semantic edits...)
+  :hook
+  (after-init . org-roam-mode)
+  :custom
+  (org-roam-database-connector 'sqlite-builtin)
+  (org-roam-directory "~/org/notes/roam/")
+  (org-roam-completion-everywhere t)
+  (org-roam-completion-system 'default)
+  (org-roam-capture-templates
+   '(("d" "default" plain "%?"
+      :if-new
+      (file+head "%<%Y%m%d%H%M%S>-${slug}.org"
+                 "#+title: ${title}\n#+category:${title}\n#+created: %U\n#+last_modified: %U\n")
+      :unnarrowed t)
+     ("n" "literature note" plain "* Heading\n %?"
+      :target
+      (file+head
+       "%(expand-file-name (or citar-org-roam-subdir \"\") org-roam-directory)/${citar-citekey}.org"
+       "#+title: ${citar-citekey} (${citar-date}). ${note-title}.\n#+created: %U\n#+last_modified: %U\n\n")
+      :unnarrowed t)))
+  (org-roam-dailies-directory "journal/")
+  (org-roam-dailies-capture-templates
+   '(("d" "default" entry "* %<%I:%M %p>: %?"
+      :target
+      (file+head "%<%Y-%m-%d>.org"
+                 "#+title: %<%Y-%m-%d %a>\n#+created: %U\n#+last_modified: %U\n"))))
+  :bind (("C-c n l" . org-roam-buffer-toggle)
+         ("C-c n f" . org-roam-node-find)
+         ("C-c n g" . org-roam-graph)
+         ("C-c n i" . org-roam-node-insert)
+         ("C-c n c" . org-roam-capture)
+         ("C-c n n" . org-roam-node-insert-immediate-with-tag)
+         ("C-c n s" . org-roam-rg-search)
+         ("C-c n d" . org-roam-dailies-goto-today)
+         ("C-c n t" . org-roam-dailies-capture-today)
+         ("C-c n C-t" . org-roam-tag-add)
+         ("C-c n a" . p3/org-roam-get-agenda))
+  :config
+  (setq org-roam-node-display-template
+        (concat "${title:*} "
+                (propertize "${tags:10}" 'face 'org-tag)))
+  (org-roam-db-autosync-mode))
 
 (provide 'p3-config-org-roam)
+;;; p3-config-org-roam.el ends here
 ```
 
-Keep `citar-org-roam` outside this file. Do not alter its existing earlier `:after (citar org-roam)` declaration.
+Keep the existing earlier `use-package citar-org-roam` block in `config.org`; do not move it into this module.
 
 - [ ] **Step 7: Run both focused Roam test files**
 
-Run both and expect PASS without creating a real Roam database or touching `~/org/notes/roam/`.
+```bash
+emacs -Q --batch -L lisp \
+  -l test/p3-org-roam-test.el \
+  -l test/p3-config-org-roam-test.el \
+  -f ert-run-tests-batch-and-exit
+```
 
-- [ ] **Step 8: Commit the Roam extraction**
+Expected: PASS without creating a real Roam database.
+
+- [ ] **Step 8: Commit Task 2**
 
 ```bash
 git add lisp/p3-org-roam.el lisp/p3-config-org-roam.el \
@@ -424,7 +644,7 @@ git commit -m "Extract Org-roam configuration boundary"
 
 ---
 
-### Task 3: Extract presentation state behavior and package wiring
+### Task 3: Extract presentation behavior and configuration
 
 **Files:**
 - Create: `lisp/p3-org-present.el`
@@ -433,24 +653,22 @@ git commit -m "Extract Org-roam configuration boundary"
 - Create: `test/p3-config-org-present-test.el`
 
 **Interfaces:**
-- Consumes: built-in `face-remap`; runtime `org-present`, `visual-fill-column`, and `hide-mode-line` functions/variables supplied by packages.
-- Produces: `p3/org-present--state`, `p3/org-present-start`, `p3/org-present-toggle-fullscreen`, `p3/org-present-hook`, `p3/org-present-quit-hook`, `p3/org-present-prev`, `p3/org-present-next`, feature `p3-org-present`, feature `p3-config-org-present`.
+- Consumes: built-in `face-remap`; optional `org-present`, `visual-fill-column`, and `hide-mode-line` APIs at runtime.
+- Produces: `p3/org-present--state`, `p3/org-present-start`, `p3/org-present-toggle-fullscreen`, `p3/org-present-hook`, `p3/org-present-quit-hook`, `p3/org-present-prev`, `p3/org-present-next`, features `p3-org-present` and `p3-config-org-present`.
 
-- [ ] **Step 1: Write failing presentation behavior tests before implementation**
+- [ ] **Step 1: Write failing behavior tests with all optional-package calls stubbed**
 
-Create `test/p3-org-present-test.el` and stub every optional-package function the behavior calls.
+Create `test/p3-org-present-test.el`. Cover:
 
-Tests must cover:
+- `p3/org-present-start` rejects a non-Org buffer with `user-error` and calls `org-present` in an Org-derived-mode test buffer;
+- fullscreen toggles nil -> `fullboth` -> nil by stubbing `frame-parameter`/`set-frame-parameter`;
+- next/prev wrappers delegate once;
+- enter hook stores header-line, line-number state, inline-image state, visual-fill state/settings, hide-mode-line state, and remap cookies, then applies line numbers off, `org-present-big`, inline images if absent, width `90`, centering `t`, visual-fill on, hide-mode-line on, and scale factors `1.5`, `1.2`, `1.1`;
+- quit hook calls `org-present-small`, restores each prior state, removes every stored remap cookie, and clears `p3/org-present--state`.
 
-1. `p3/org-present-start` signals `user-error` outside Org-derived modes and delegates to `org-present` inside a stubbed Org context.
-2. `p3/org-present-toggle-fullscreen` changes frame parameter `fullscreen` from nil to `fullboth` and back.
-3. `p3/org-present-next` and `p3/org-present-prev` delegate exactly once.
-4. `p3/org-present-hook` captures header line, line-number mode state, inline-image state, visual-fill state/settings, hide-mode-line state, and face-remap cookies; then applies width `90`, centered text, hide-mode-line, and face scales `1.5`, `1.2`, `1.1`.
-5. `p3/org-present-quit-hook` calls `org-present-small`, restores each saved state, removes each remap cookie, and sets `p3/org-present--state` back to nil.
+Stub with `cl-letf`:
 
-Use `cl-letf` stubs for:
-
-```elisp
+```text
 org-present
 org-present-big
 org-present-small
@@ -465,13 +683,15 @@ face-remap-add-relative
 face-remap-remove-relative
 ```
 
-- [ ] **Step 2: Verify presentation behavior tests fail before `p3-org-present.el` exists**
+- [ ] **Step 2: Verify RED before creating `p3-org-present.el`**
 
-Run focused ERT and expect FAIL/load error.
+```bash
+emacs -Q --batch -L lisp -l test/p3-org-present-test.el -f ert-run-tests-batch-and-exit
+```
 
-- [ ] **Step 3: Create `p3-org-present.el` with direct `face-remap` ownership**
+Expected: missing `p3-org-present`.
 
-Start with:
+- [ ] **Step 3: Create `lisp/p3-org-present.el` with direct `face-remap` dependency and unchanged behavior**
 
 ```elisp
 ;;; p3-org-present.el --- Org presentation behavior -*- lexical-binding: t; -*-
@@ -491,19 +711,101 @@ Start with:
 (declare-function org-present-small "org-present" ())
 (declare-function org-remove-inline-images "org" ())
 (declare-function visual-fill-column-mode "visual-fill-column" (&optional arg))
+
+(defvar-local p3/org-present--state nil
+  "Saved buffer state while `org-present' is active.")
+
+(defun p3/org-present-start ()
+  "Start a presentation in the current Org buffer."
+  (interactive)
+  (unless (derived-mode-p 'org-mode)
+    (user-error "Presentation mode requires an Org buffer"))
+  (org-present))
+
+(defun p3/org-present-toggle-fullscreen ()
+  "Toggle fullscreen for the current presentation frame."
+  (interactive)
+  (set-frame-parameter
+   nil 'fullscreen
+   (unless (frame-parameter nil 'fullscreen) 'fullboth)))
+
+(defun p3/org-present-hook ()
+  "Prepare the current Org buffer for presentation mode."
+  (setq-local p3/org-present--state
+              (list :header-line header-line-format
+                    :line-numbers (bound-and-true-p display-line-numbers-mode)
+                    :inline-images (and (boundp 'org-inline-image-overlays)
+                                        org-inline-image-overlays)
+                    :visual-fill (bound-and-true-p visual-fill-column-mode)
+                    :visual-fill-width visual-fill-column-width
+                    :visual-fill-center visual-fill-column-center-text
+                    :hide-mode-line (bound-and-true-p hide-mode-line-mode)
+                    :face-remap-cookies nil))
+  (setq-local header-line-format " ")
+  (display-line-numbers-mode -1)
+  (org-present-big)
+  (unless (and (boundp 'org-inline-image-overlays)
+               org-inline-image-overlays)
+    (org-display-inline-images))
+  (setq-local visual-fill-column-width 90
+              visual-fill-column-center-text t)
+  (visual-fill-column-mode 1)
+  (hide-mode-line-mode +1)
+  (setf (plist-get p3/org-present--state :face-remap-cookies)
+        (list (face-remap-add-relative 'org-level-1 :height 1.5)
+              (face-remap-add-relative 'org-level-2 :height 1.2)
+              (face-remap-add-relative 'org-level-3 :height 1.1))))
+
+(defun p3/org-present-quit-hook ()
+  "Restore the buffer state saved by `p3/org-present-hook'."
+  (let ((state p3/org-present--state))
+    (org-present-small)
+    (when state
+      (setq-local header-line-format (plist-get state :header-line))
+      (if (plist-get state :line-numbers)
+          (display-line-numbers-mode +1)
+        (display-line-numbers-mode -1))
+      (unless (plist-get state :inline-images)
+        (org-remove-inline-images))
+      (setq-local visual-fill-column-width
+                  (plist-get state :visual-fill-width)
+                  visual-fill-column-center-text
+                  (plist-get state :visual-fill-center))
+      (if (plist-get state :visual-fill)
+          (visual-fill-column-mode +1)
+        (visual-fill-column-mode -1))
+      (if (plist-get state :hide-mode-line)
+          (hide-mode-line-mode +1)
+        (hide-mode-line-mode -1))
+      (dolist (cookie (plist-get state :face-remap-cookies))
+        (face-remap-remove-relative cookie)))
+    (setq-local p3/org-present--state nil)))
+
+(defun p3/org-present-prev ()
+  "Move to the previous presentation slide."
+  (interactive)
+  (org-present-prev))
+
+(defun p3/org-present-next ()
+  "Move to the next presentation slide."
+  (interactive)
+  (org-present-next))
+
+(provide 'p3-org-present)
+;;; p3-org-present.el ends here
 ```
 
-Then move the current state variable and six functions without semantic changes.
+- [ ] **Step 4: Run focused presentation behavior tests**
 
-Do not add `use-package` or require `p3-config-org-present`.
-
-- [ ] **Step 4: Run focused presentation behavior tests and correct only declaration/test harness issues**
+```bash
+emacs -Q --batch -L lisp -l test/p3-org-present-test.el -f ert-run-tests-batch-and-exit
+```
 
 Expected: PASS.
 
-- [ ] **Step 5: Write failing source-semantic tests for `p3-config-org-present.el`**
+- [ ] **Step 5: Write failing source-semantic tests for the presentation config owner**
 
-Create `test/p3-config-org-present-test.el` and pin this effective top-level order:
+Create `test/p3-config-org-present-test.el`. Parse top-level forms and pin this effective order:
 
 ```text
 (use-package hide-mode-line ...)
@@ -512,9 +814,16 @@ Create `test/p3-config-org-present-test.el` and pin this effective top-level ord
 (use-package org-present ...)
 ```
 
-Assert there is no standalone `(require 'face-remap)` in the config owner; the behavior library owns it.
+Assert `p3-config-org-present.el` has no standalone `(require 'face-remap)` and `p3-org-present.el` does.
 
-Pin `hide-mode-line :after (org-present)`, `org-present-text-scale 4`, both hooks, `C-c P`, and every `org-present-mode-keymap` binding:
+Pin `hide-mode-line :after (org-present)`, hooks:
+
+```elisp
+((org-present-mode . p3/org-present-hook)
+ (org-present-mode-quit . p3/org-present-quit-hook))
+```
+
+`org-present-text-scale 4`, `C-c P`, and these map bindings:
 
 ```text
 C-c C-j     p3/org-present-next
@@ -527,15 +836,17 @@ f           p3/org-present-toggle-fullscreen
 q           org-present-quit
 ```
 
-- [ ] **Step 6: Create `p3-config-org-present.el` with package wiring only**
-
-Use:
+- [ ] **Step 6: Create `lisp/p3-config-org-present.el` with exact package wiring**
 
 ```elisp
 ;;; p3-config-org-present.el --- Org presentation configuration -*- lexical-binding: t; -*-
 
 (require 'use-package)
 (require 'p3-config-loader)
+
+(defvar org-mode-map)
+(defvar org-present-mode-keymap)
+(defvar org-present-text-scale)
 
 (use-package hide-mode-line
   :after (org-present))
@@ -545,18 +856,38 @@ Use:
 (p3/config-load-module 'p3-org-present)
 
 (use-package org-present
-  ...current bindings/hooks/config moved unchanged...)
+  :bind ((:map org-mode-map
+               ("C-c P" . p3/org-present-start))
+         (:map org-present-mode-keymap
+               ("C-c C-j" . p3/org-present-next)
+               ("C-c C-k" . p3/org-present-prev)
+               ("SPC" . p3/org-present-next)
+               ("<backspace>" . p3/org-present-prev)
+               ("n" . p3/org-present-next)
+               ("p" . p3/org-present-prev)
+               ("f" . p3/org-present-toggle-fullscreen)
+               ("q" . org-present-quit)))
+  :hook ((org-present-mode . p3/org-present-hook)
+         (org-present-mode-quit . p3/org-present-quit-hook))
+  :config
+  (setq org-present-text-scale 4))
 
 (provide 'p3-config-org-present)
+;;; p3-config-org-present.el ends here
 ```
-
-Add only compile-time declarations required by warnings-as-errors byte compilation.
 
 - [ ] **Step 7: Run both focused presentation test files**
 
+```bash
+emacs -Q --batch -L lisp \
+  -l test/p3-org-present-test.el \
+  -l test/p3-config-org-present-test.el \
+  -f ert-run-tests-batch-and-exit
+```
+
 Expected: PASS.
 
-- [ ] **Step 8: Commit the presentation extraction**
+- [ ] **Step 8: Commit Task 3**
 
 ```bash
 git add lisp/p3-org-present.el lisp/p3-config-org-present.el \
@@ -573,12 +904,12 @@ git commit -m "Extract Org presentation configuration boundary"
 - Modify: `test/p3-config-test.el`
 
 **Interfaces:**
-- Consumes: features `p3-config-org`, `p3-config-org-roam`, `p3-config-org-present` from Tasks 1-3.
-- Produces: one explicit loader stanza per new configuration owner, with existing out-of-scope sections retaining their positions.
+- Consumes: `p3-config-org`, `p3-config-org-roam`, `p3-config-org-present`.
+- Produces: one explicit top-level loader stanza per subsystem with current out-of-scope sections retaining their positions.
 
 - [ ] **Step 1: Add failing architecture assertions before editing `config.org`**
 
-Update the config-module test to expect ten explicit configuration modules:
+Update the config-module ownership test to require all ten modules:
 
 ```elisp
 '(p3-config-base
@@ -593,24 +924,18 @@ Update the config-module test to expect ten explicit configuration modules:
   p3-config-git)
 ```
 
-Add a dedicated ordering test that locates these exact needles in `config.org`:
+Add an ordering test locating:
 
-```elisp
-"(p3/config-load-module 'p3-config-org)"
-"(p3/config-load-module 'p3-config-org-roam)"
-"(use-package poly-R"
-"(p3/config-load-module 'p3-config-org-present)"
+```text
+(p3/config-load-module 'p3-config-org)
+(p3/config-load-module 'p3-config-org-roam)
+(use-package poly-R
+(p3/config-load-module 'p3-config-org-present)
 ```
 
-and asserts:
+and assert Org < Roam < Poly-R < Presentation.
 
-```elisp
-(should (< org roam))
-(should (< roam poly-r))
-(should (< poly-r present))
-```
-
-Add ownership assertions that each loader stanza occurs exactly once and that the following moved definitions/forms no longer appear inline:
+Add one-owner assertions that each new loader occurs exactly once and that `config.org` no longer contains:
 
 ```text
 (defun p3/org-sort-todos
@@ -633,61 +958,81 @@ Add ownership assertions that each loader stanza occurs exactly once and that th
 (use-package org-present
 ```
 
-Do **not** forbid legitimate `(python . t)`, `(R . t)`, citation, LaTeX, or `citar-org-roam` references.
+Do not forbid Babel `(python . t)` or `(R . t)` references. Assert `config.org` still contains `(use-package citar-org-roam`, the BibTeX/RefTeX setup, the LaTeX `org-latex-pdf-process`, and `(use-package poly-R`.
 
-Assert `config.org` still contains the existing Citar/BibTeX/RefTeX section markers/forms, LaTeX forms, Poly-R declaration, and `(use-package citar-org-roam ...)`.
-
-- [ ] **Step 2: Verify the new architecture assertions fail against the still-inline config**
-
-Run:
+- [ ] **Step 2: Verify RED against the still-inline config**
 
 ```bash
-emacs -Q --batch -L lisp \
-  -l test/p3-config-test.el \
-  -f ert-run-tests-batch-and-exit
+emacs -Q --batch -L lisp -l test/p3-config-test.el -f ert-run-tests-batch-and-exit
 ```
 
-Expected: FAIL because the three loader stanzas are absent and inline implementation remains.
+Expected: FAIL because the three loader stanzas do not yet exist.
 
-- [ ] **Step 3: Replace only the three approved implementation regions in `config.org`**
+- [ ] **Step 3: Replace only the approved Org section with concise orchestration**
 
-Replace the current Org implementation block with concise prose and:
+The `** org` section becomes:
 
-```elisp
-(p3/config-load-module 'p3-config-org)
+```org
+** org
+
+Org core behavior lives in =lisp/p3-org.el=. Declarative Org, Babel, TODO,
+Agenda, PDF-opening, and export-activation configuration lives in
+=lisp/p3-config-org.el=.
+
+#+BEGIN_SRC emacs-lisp
+  (p3/config-load-module 'p3-config-org)
+#+END_SRC
 ```
 
-Replace the current Org-roam implementation block with concise prose and:
+The separate `** org-agenda` implementation is absorbed into `p3-config-org.el`; do not leave a second inline Agenda owner.
 
-```elisp
-(p3/config-load-module 'p3-config-org-roam)
+- [ ] **Step 4: Replace only the approved Org-roam section**
+
+Use:
+
+```org
+** org-roam
+
+Org-roam package configuration lives in =lisp/p3-config-org-roam.el= and
+reusable Roam search, capture, filtering, and agenda helpers live in
+=lisp/p3-org-roam.el=.
+
+#+BEGIN_SRC emacs-lisp
+  (p3/config-load-module 'p3-config-org-roam)
+#+END_SRC
 ```
 
-Leave the `** Poly-R` section exactly between Roam and Presentation.
+Leave `** Poly-R` immediately after this section.
 
-Replace the current Presentation implementation block with concise prose and:
+- [ ] **Step 5: Replace only the approved Presentation section**
 
-```elisp
-(p3/config-load-module 'p3-config-org-present)
+Use:
+
+```org
+** Presentation
+
+Org presentation package wiring lives in =lisp/p3-config-org-present.el=;
+state capture/restoration and presentation commands live in
+=lisp/p3-org-present.el=.
+
+#+BEGIN_SRC emacs-lisp
+  (p3/config-load-module 'p3-config-org-present)
+#+END_SRC
 ```
 
-Do not move or rewrite the earlier citation/BibTeX/RefTeX or LaTeX sections.
+Do not move Projectile/Python or any section around it.
 
-Because connector updates replace whole files, reconstruct `config.org` from exact current branch contents, then reject any diff containing unrelated whitespace/content changes before committing.
+- [ ] **Step 6: Update the existing export integration architecture test**
 
-- [ ] **Step 4: Update the older export-ownership architecture assertion without changing exporter semantics**
+Change `p3-config-org-owns-org-export-integration` so it asserts:
 
-The existing test currently expects `(use-package p3-org-export` directly in `config.org`. Change it to assert:
+- `config.org` contains `(p3/config-load-module 'p3-config-org)`;
+- `lisp/p3-config-org.el` contains `(use-package p3-org-export`;
+- neither file contains the implementation definition `(defun p3/org-export-to-office`.
 
-```elisp
-(p3/config-load-module 'p3-config-org)
-```
+This verifies ownership moved without changing exporter implementation/reload semantics.
 
-in `config.org`, `(use-package p3-org-export` in `lisp/p3-config-org.el`, and absence of `p3/org-export-to-office` implementation from both top-level config and config module.
-
-- [ ] **Step 5: Run architecture and all six focused Org boundary tests**
-
-Run:
+- [ ] **Step 7: Run architecture plus all six focused tests**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -703,17 +1048,17 @@ emacs -Q --batch -L lisp \
 
 Expected: PASS.
 
-- [ ] **Step 6: Confirm `p3-org-export.el` and its test are byte-for-byte unchanged**
-
-Run:
+- [ ] **Step 8: Verify untouched exporter files and inspect the whole `config.org` diff**
 
 ```bash
 git diff --exit-code master -- lisp/p3-org-export.el test/p3-org-export-test.el
+git diff --check master...HEAD
+git diff master...HEAD -- config.org
 ```
 
-Expected: no output, exit 0.
+Expected: exporter command exits 0 with no output; `config.org` diff is limited to the Org/Agenda, Org-roam, and Presentation regions. If connector whole-file replacement introduced unrelated blank-line or content changes, restore them before proceeding.
 
-- [ ] **Step 7: Commit top-level orchestration**
+- [ ] **Step 9: Commit Task 4**
 
 ```bash
 git add config.org test/p3-config-test.el
@@ -729,12 +1074,12 @@ git commit -m "Route Org subsystems through focused modules"
 - Modify: `.github/workflows/windows-platform-tests.yml`
 
 **Interfaces:**
-- Consumes: all six new Lisp files and six new focused test files.
+- Consumes: six new Lisp files and six new focused tests.
 - Produces: warnings-as-errors compilation, three runtime-load smoke checks, Ubuntu full-suite coverage, and Windows source-level boundary coverage without optional-package installation.
 
-- [ ] **Step 1: Add all six new Lisp files to Ubuntu warnings-as-errors byte compilation**
+- [ ] **Step 1: Add all six new Lisp files to Ubuntu byte compilation**
 
-Add:
+Add these exact paths to the existing `batch-byte-compile` list:
 
 ```text
 lisp/p3-org.el
@@ -745,62 +1090,88 @@ lisp/p3-org-present.el
 lisp/p3-config-org-present.el
 ```
 
-to the existing `batch-byte-compile` list after package installation has already been suppressed with:
+Keep the existing package-install suppression:
 
 ```elisp
 (require 'use-package-ensure)
 (setq use-package-ensure-function (lambda (&rest _) t))
 ```
 
-Do not install Org-roam, org-present, hide-mode-line, or visual-fill-column for this compile step. Resolve warnings with declaration-only `defvar`/`declare-function` forms in the owning source files.
+Do not install Org-roam, org-present, hide-mode-line, or visual-fill-column. Compiler failures caused only by unknown external variables/functions are resolved with declaration-only source forms, not package installation.
 
-- [ ] **Step 2: Add an Org-core runtime smoke check**
+- [ ] **Step 2: Add an exact Org-core runtime smoke step**
 
-Add a workflow step that loads `p3-config-loader.el` and `p3-config-org.el` with package installation suppressed, then exits nonzero unless:
+Add this workflow command:
 
-```elisp
-(featurep 'p3-config-org)
-(featurep 'p3-org)
-(equal org-startup-folded 'content)
-(eq org-confirm-babel-evaluate t)
+```bash
+emacs -Q --batch \
+  -L lisp \
+  --eval '(setq user-emacs-directory (file-name-as-directory default-directory))' \
+  --eval '(require (quote use-package-ensure))' \
+  --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
+  -l lisp/p3-config-loader.el \
+  -l lisp/p3-config-org.el \
+  --eval '(unless (and (featurep (quote p3-config-org))
+                       (featurep (quote p3-org))
+                       (eq org-startup-folded (quote content))
+                       (eq org-confirm-babel-evaluate t)
+                       (featurep (quote p3-org-export)))
+             (kill-emacs 1))'
 ```
 
-are all true.
+This deliberately exercises the unchanged `use-package p3-org-export :demand t` path instead of exact-source loading the exporter.
 
-Do not exact-source load `p3-org-export`; let the unchanged `use-package p3-org-export :demand t` form exercise its real activation path.
+- [ ] **Step 3: Add an exact stubbed Org-roam runtime smoke step**
 
-- [ ] **Step 3: Add an Org-roam config smoke test using stubs, not package installation**
+Use this command so no database or third-party package is installed:
 
-Before loading `p3-config-org-roam.el`, provide the minimum package surface needed for the `use-package org-roam` declaration to evaluate without side effects. Use temporary symbols/maps/functions and `(provide 'org-roam)` / any required subfeatures rather than creating a database.
-
-The assertion must at least verify:
-
-```elisp
-(featurep 'p3-config-org-roam)
-(featurep 'p3-org-roam)
-(equal org-roam-directory "~/org/notes/roam/")
+```bash
+emacs -Q --batch \
+  -L lisp \
+  --eval '(setq user-emacs-directory (file-name-as-directory default-directory))' \
+  --eval '(require (quote use-package-ensure))' \
+  --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
+  --eval '(defun org-roam-db-autosync-mode (&optional _arg) t)' \
+  --eval '(provide (quote org-roam))' \
+  -l lisp/p3-config-loader.el \
+  -l lisp/p3-config-org-roam.el \
+  --eval '(unless (and (featurep (quote p3-config-org-roam))
+                       (featurep (quote p3-org-roam))
+                       (equal org-roam-directory "~/org/notes/roam/"))
+             (kill-emacs 1))'
 ```
 
-and the smoke harness must stub `org-roam-db-autosync-mode` so no database is opened.
+If `use-package` requires a specific Org-roam subfeature solely because of macro expansion on the runner version, provide that feature in this smoke command; do not install or initialize Org-roam. No smoke code may call a real database function.
 
-- [ ] **Step 4: Add a presentation config smoke test using stubs, not package installation**
+- [ ] **Step 4: Add an exact stubbed presentation runtime smoke step**
 
-Provide stub features/functions/maps for `hide-mode-line`, `visual-fill-column`, and `org-present`, including `org-mode-map` and `org-present-mode-keymap` where necessary for `use-package :bind` evaluation.
+Use:
 
-Load `p3-config-org-present.el` and assert:
-
-```elisp
-(featurep 'p3-config-org-present)
-(featurep 'p3-org-present)
-(featurep 'face-remap)
-(equal org-present-text-scale 4)
+```bash
+emacs -Q --batch \
+  -L lisp \
+  --eval '(setq user-emacs-directory (file-name-as-directory default-directory))' \
+  --eval '(require (quote use-package-ensure))' \
+  --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
+  --eval '(require (quote org))' \
+  --eval '(defvar org-present-mode-keymap (make-sparse-keymap))' \
+  --eval '(provide (quote hide-mode-line))' \
+  --eval '(provide (quote visual-fill-column))' \
+  --eval '(provide (quote org-present))' \
+  -l lisp/p3-config-loader.el \
+  -l lisp/p3-config-org-present.el \
+  --eval '(unless (and (featurep (quote p3-config-org-present))
+                       (featurep (quote p3-org-present))
+                       (featurep (quote face-remap))
+                       (equal org-present-text-scale 4))
+             (kill-emacs 1))'
 ```
 
-Do not enter presentation mode or manipulate a real frame/buffer beyond what batch Emacs itself creates.
+The smoke test must not invoke `p3/org-present-start` or either presentation hook.
 
-- [ ] **Step 5: Add all six focused tests to the Ubuntu full ERT invocation**
+- [ ] **Step 5: Load all six new focused tests in the Ubuntu ERT command**
 
-Load:
+Add:
 
 ```text
 test/p3-org-test.el
@@ -811,11 +1182,11 @@ test/p3-org-present-test.el
 test/p3-config-org-present-test.el
 ```
 
-Keep the existing `test/p3-org-export-test.el` line unchanged.
+Keep `-l test/p3-org-export-test.el` unchanged.
 
-- [ ] **Step 6: Extend Windows path triggers and source-level test invocation only**
+- [ ] **Step 6: Extend Windows only for source-level boundary coverage**
 
-Add the three new config modules and three config-boundary test files to Windows workflow path triggers:
+Add path triggers for:
 
 ```text
 lisp/p3-config-org.el
@@ -826,61 +1197,56 @@ test/p3-config-org-roam-test.el
 test/p3-config-org-present-test.el
 ```
 
-Add the three config-boundary tests to the existing Windows config-architecture ERT command.
+Load those three config-boundary tests in the existing Windows config-architecture ERT command. Do not add Org-roam/presentation runtime smoke tests on Windows and do not add behavior-library triggers that would spend Windows Actions minutes without corresponding behavior coverage.
 
-Do not add runtime Org-roam/presentation smoke checks on Windows and do not add behavior-library path triggers that would cause Windows jobs without corresponding Windows behavior coverage.
+- [ ] **Step 7: Perform pre-PR static rejection checks**
 
-- [ ] **Step 7: Run static pre-PR verification before pushing the implementation head**
-
-Confirm:
+Run or reproduce through connector diffs:
 
 ```bash
 git diff --check master...HEAD
 git diff --exit-code master -- lisp/p3-org-export.el test/p3-org-export-test.el
+git diff master...HEAD -- config.org
+git diff master...HEAD -- .github/workflows/emacs-tests.yml
+git diff master...HEAD -- .github/workflows/windows-platform-tests.yml
 ```
 
-Inspect the aggregate `config.org` diff and reject any changes outside the Org, Org-roam, and Presentation regions.
+Reject any unrelated change, package-install command for Org-roam/presentation dependencies, broad display policy, citation/LaTeX/Poly-R/Projectile change, or normalization of the trailing `#`/anonymous timestamp hook.
 
-Search the branch diff for `TBD`, `TODO` placeholders introduced by this work, accidental package-install commands, broad `display-buffer-alist` changes, or changes under citation/LaTeX/Poly-R/Projectile.
+- [ ] **Step 8: Commit CI wiring**
 
-- [ ] **Step 8: Open/update the PR only after the implementation head is final enough for one CI cycle**
+```bash
+git add .github/workflows/emacs-tests.yml .github/workflows/windows-platform-tests.yml
+git commit -m "Cover Org configuration boundaries in CI"
+```
 
-The PR summary must state that this is behavior-preserving decomposition and explicitly note:
+- [ ] **Step 9: Open the PR only after the implementation branch is coherent enough for one CI cycle**
 
-- exporter implementation/reload behavior unchanged;
-- trailing Roam header `#` intentionally preserved;
-- direct `face-remap` dependency moved with presentation behavior;
-- optional packages are stubbed rather than installed in smoke checks;
-- Citar/BibTeX/RefTeX, LaTeX, and Poly-R are out of scope.
+PR summary must explicitly state:
 
-- [ ] **Step 9: Verify the final Ubuntu and Windows runs from the exact PR head**
+- structural/behavior-preserving extraction only;
+- exporter implementation and reload behavior unchanged;
+- trailing tagged-header `#` intentionally preserved;
+- `face-remap` now travels with the extracted behavior that calls it, at the same effective point in startup;
+- optional package surfaces are stubbed rather than installed in smoke checks;
+- Citar/BibTeX/RefTeX, LaTeX, and Poly-R are outside scope.
 
-Ubuntu must show:
+- [ ] **Step 10: Verify final CI from the exact PR head**
 
-- warnings-as-errors byte compilation success;
-- Org core runtime smoke success;
-- Org-roam stubbed runtime smoke success;
-- presentation stubbed runtime smoke success;
-- full ERT suite success with zero unexpected failures.
+Ubuntu must show success for:
 
-Windows must show:
+1. warnings-as-errors byte compilation;
+2. Org-core runtime smoke;
+3. stubbed Org-roam runtime smoke;
+4. stubbed presentation runtime smoke;
+5. full ERT suite with zero unexpected failures.
 
-- existing platform/project gate success;
-- config architecture gate success including the three new source-level config-boundary tests.
+Windows must show success for the existing platform/project gate and config architecture gate including the three new source-level boundary suites.
 
-If a run fails, inspect the exact job log and fix the root cause; do not add diagnostic workflows.
+For any failure, inspect the exact failing job/assertion and fix its root cause. Do not create diagnostic workflows or repeatedly push speculative changes.
 
-- [ ] **Step 10: Perform final adversarial review before any merge recommendation**
+- [ ] **Step 11: Perform final adversarial review before merge recommendation**
 
-Review the aggregate PR against the spec for:
-
-- any changed Org/Roam/presentation behavior;
-- accidental exporter reload changes;
-- missing direct dependencies in behavior libraries;
-- package installation in compile/smoke steps;
-- config ordering drift;
-- capture/template/keybinding drift;
-- presentation state restoration coverage;
-- unrelated modifications.
+Review the aggregate PR specifically for behavior drift, exporter reload drift, direct dependency mistakes, optional-package installation, `config.org` ordering changes, capture/template/keybinding changes, incomplete presentation restoration testing, or unrelated edits.
 
 Do not merge without explicit user approval.
