@@ -6,7 +6,6 @@
 
 (defvar dashboard-startup-banner)
 (defvar dashboard-center-content)
-(defvar dashboard-icon-type)
 (defvar dashboard-path-style)
 (defvar dashboard-path-max-length)
 (defvar dashboard-projects-show-base)
@@ -21,26 +20,21 @@
 (defvar mouse-wheel-progressive-speed)
 (defvar tramp-backup-directory-alist)
 (defvar tramp-auto-save-directory)
-(defvar all-the-icons-scale-factor)
 
 (declare-function dashboard-setup-startup-hook "dashboard" ())
 (declare-function which-key-mode "which-key" (&optional arg))
 (declare-function which-key-add-key-based-replacements "which-key" (&rest replacements))
 (declare-function dired-async-mode "dired-async" (&optional arg))
 (declare-function async-bytecomp-package-mode "async-bytecomp" (&optional arg))
-(declare-function all-the-icons-install-fonts "all-the-icons" (&optional pfx))
 (declare-function package-refresh-contents "package" (&optional async))
 (declare-function package-list-packages "package" (&optional no-fetch))
 (declare-function p3/windows-shell "p3-commands" ())
-
-(add-to-list 'default-frame-alist '(fullscreen . maximized))
 
 (use-package dashboard
   :config
   (dashboard-setup-startup-hook)
   (setq dashboard-startup-banner 'official
         dashboard-center-content t
-        dashboard-icon-type 'all-the-icons
         dashboard-path-style 'truncate-end
         dashboard-path-max-length 60
         dashboard-projects-show-base 'align
@@ -125,12 +119,10 @@
   (package-list-packages t)
   (message "Review upgrades with U, then execute selected actions with x."))
 
-(when (eq system-type 'windows-nt)
-  (set-face-attribute 'default nil :family "Consolas" :height 125))
-(when (eq system-type 'gnu/linux)
-  (set-face-attribute 'default nil :family "Inconsolata" :height 140))
-
-(setq-default cursor-type 'bar)
+(setq inhibit-startup-message t
+      initial-scratch-message nil
+      initial-major-mode 'lisp-interaction-mode
+      ring-bell-function #'ignore)
 
 (fset 'yes-or-no-p 'y-or-n-p)
 
@@ -179,8 +171,7 @@
                   prog-mode-hook
                   conf-mode-hook))
     (add-hook mode (lambda ()
-                     (display-line-numbers-mode 1)
-                     (set-face-foreground 'line-number-current-line "#FFD700")))))
+                     (display-line-numbers-mode 1)))))
 
 (p3/set-line-numbers)
 
@@ -205,21 +196,9 @@
 
 (use-package dired
   :ensure nil
-  :after all-the-icons-dired
-  :hook (dired-mode . all-the-icons-dired-mode)
   :custom
   (dired-auto-revert-buffer t)
   (dired-kill-when-opening-new-dired-buffer t))
-
-(use-package all-the-icons
-  :if (display-graphic-p)
-  :config
-  (unless (find-font (font-spec :name "all-the-icons"))
-    (all-the-icons-install-fonts t))
-  (setq all-the-icons-scale-factor 1))
-
-(use-package all-the-icons-dired
-  :after all-the-icons)
 
 (when (eq system-type 'windows-nt)
   (global-set-key (kbd "C-x C-i") #'p3/windows-shell))
