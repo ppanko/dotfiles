@@ -3,6 +3,13 @@
 (require 'use-package)
 (require 'p3-config-loader)
 
+(defvar org-roam-capture-templates)
+(defvar org-roam-completion-everywhere)
+(defvar org-roam-completion-system)
+(defvar org-roam-dailies-capture-templates)
+(defvar org-roam-dailies-directory)
+(defvar org-roam-database-connector)
+(defvar org-roam-directory)
 (defvar org-roam-node-display-template)
 
 (declare-function org-roam-db-autosync-mode "org-roam-db" (&optional arg))
