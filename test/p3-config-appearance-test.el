@@ -4,6 +4,7 @@
 (require 'ert)
 (require 'subr-x)
 
+(defvar features)
 (defvar flycheck-mode)
 (defvar flycheck-last-status-change)
 (defvar flycheck-current-errors)
