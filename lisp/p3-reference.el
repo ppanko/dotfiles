@@ -9,6 +9,7 @@
 
 (defconst p3/reference-provisional-prefix "p3-inbox-")
 (defvar p3/reference--provisional-sequence 0)
+(defvar-local p3/reference--biblio-target-key nil)
 
 (defconst p3/reference--entry-head-regexp
   "^[ \t]*@\\([[:alpha:]][[:alnum:]_-]*\\)[ \t\n]*[{(][ \t\n]*\\([^, \t\n]+\\)[ \t\n]*,")
@@ -338,6 +339,140 @@
           (user-error "Permanent citekey is invalid or already used"))
         (p3/reference--rename-provisional-entry-head citekey accepted)
         accepted))))
+
+(defun p3/reference--doi-in-string (string)
+  "Return a normalized DOI recognized directly in STRING, or nil."
+  (when (stringp string)
+    (let ((case-fold-search t))
+      (when (string-match
+             "\\(10\\.[0-9][0-9][0-9][0-9]+/[[:alnum:]._()/:;-]+\\)"
+             string)
+        (p3/reference-normalize-doi (match-string 1 string))))))
+
+(defun p3/reference--input-kind (input)
+  "Classify INPUT as BibTeX, DOI, URL, or bibliographic search text."
+  (let ((value (string-trim (or input ""))))
+    (cond
+     ((string-match-p "\\`@[[:alpha:]][[:alnum:]_-]*[[:space:]]*[{(]" value)
+      'bibtex)
+     ((p3/reference--doi-in-string value) 'doi)
+     ((string-match-p "\\`https?://" value) 'url)
+     (t 'search))))
+
+(defun p3/reference--capture-url (url)
+  "Save URL immediately as a provisional offline reference."
+  (let ((key (p3/reference--new-provisional-key)))
+    (p3/reference--transaction
+     (lambda ()
+       (goto-char (point-max))
+       (unless (bolp) (insert "\n"))
+       (insert (format
+                "@online{%s,\n  url = {%s},\n  urldate = {%s},\n  keywords = {status/inbox}\n}\n"
+                key url (format-time-string "%Y-%m-%d")))))
+    key))
+
+(defun p3/reference--lookup-doi (input &optional target-key)
+  "Look up DOI from INPUT and import it, or merge into TARGET-KEY."
+  (unless (require 'biblio-doi nil t)
+    (user-error "Biblio DOI support is unavailable"))
+  (let ((doi (or (p3/reference--doi-in-string input)
+                 (p3/reference-normalize-doi input))))
+    (unless doi
+      (user-error "No DOI found"))
+    (biblio-doi-forward-bibtex
+     (biblio-cleanup-doi doi)
+     (lambda (raw)
+       (let ((bibtex (biblio-format-bibtex raw nil)))
+         (if target-key
+             (p3/reference-merge-bibtex target-key bibtex)
+           (p3/reference-import-bibtex bibtex)))))))
+
+(defun p3/reference--lookup-title (query &optional target-key)
+  "Open a Crossref search for QUERY and optionally target TARGET-KEY."
+  (unless (require 'biblio-crossref nil t)
+    (user-error "Biblio Crossref support is unavailable"))
+  (let ((buffer (biblio-crossref-lookup query)))
+    (when (and target-key (buffer-live-p buffer))
+      (with-current-buffer buffer
+        (setq-local p3/reference--biblio-target-key target-key)))
+    buffer))
+
+(defun p3/reference-add (&optional input)
+  "Capture or look up a reference from INPUT."
+  (interactive)
+  (let ((value (or input
+                   (read-string "Reference (DOI, URL, BibTeX, or search): "))))
+    (pcase (p3/reference--input-kind value)
+      ('bibtex (p3/reference-import-bibtex value))
+      ('doi (p3/reference--lookup-doi value))
+      ('url (p3/reference--capture-url value))
+      ('search (p3/reference--lookup-title value)))))
+
+(defun p3/reference-merge-bibtex (target-key bibtex)
+  "Merge BIBTEX metadata into TARGET-KEY without changing its identity."
+  (unless (p3/reference--entry-alist target-key)
+    (user-error "Unknown reference: %s" target-key))
+  (let* ((remote (p3/reference--parse-single-entry bibtex))
+         (duplicate (p3/reference--strong-duplicate-key remote)))
+    (when (and duplicate (not (equal duplicate target-key)))
+      (user-error "Retrieved metadata already belongs to %s" duplicate))
+    (p3/reference--transaction
+     (lambda ()
+       (unless (p3/reference--goto-entry target-key)
+         (user-error "Unknown reference: %s" target-key))
+       (let ((current (bibtex-parse-entry t)))
+         (dolist (field remote)
+           (let ((name (car field))
+                 (value (cdr field)))
+             (unless (or (member name '("=key=" "=type="))
+                         (not (stringp value))
+                         (string-empty-p (string-trim value)))
+               (let ((existing (cdr (assoc name current))))
+                 (cond
+                  ((or (null existing) (string-empty-p (string-trim existing)))
+                   (bibtex-set-field name value))
+                  ((equal existing value) nil)
+                  ((y-or-n-p
+                    (format "Replace %s for %s? " name target-key))
+                   (bibtex-set-field name value))))))))
+       target-key))))
+
+(defun p3/reference-biblio-save (metadata)
+  "Save selected Biblio METADATA to the P3 library or enrichment target."
+  (let ((target p3/reference--biblio-target-key)
+        (backend (alist-get 'backend metadata)))
+    (unless backend
+      (user-error "Biblio result has no backend"))
+    (funcall
+     backend 'forward-bibtex metadata
+     (lambda (raw)
+       (let ((bibtex (biblio-format-bibtex raw nil)))
+         (if target
+             (p3/reference-merge-bibtex target bibtex)
+           (p3/reference-import-bibtex bibtex)))))))
+
+(defun p3/reference-enrich (&optional citekey)
+  "Enrich CITEKEY from DOI or an explicit Crossref result selection."
+  (interactive)
+  (let* ((key (or citekey
+                  (if (fboundp 'p3/reference--select-key)
+                      (p3/reference--select-key nil)
+                    (user-error "Reference selection is unavailable"))))
+         (entry (p3/reference--entry-alist key)))
+    (unless entry
+      (user-error "Unknown reference: %s" key))
+    (let ((doi (cdr (assoc "doi" entry)))
+          (title (cdr (assoc "title" entry)))
+          (url (cdr (assoc "url" entry))))
+      (cond
+       ((and doi (not (string-empty-p (string-trim doi))))
+        (p3/reference--lookup-doi doi key))
+       ((and title (not (string-empty-p (string-trim title))))
+        (p3/reference--lookup-title title key))
+       ((and url (not (string-empty-p (string-trim url))))
+        (p3/reference--lookup-title url key))
+       (t
+        (user-error "Reference needs a DOI, title, or URL for enrichment"))))))
 
 (provide 'p3-reference)
 

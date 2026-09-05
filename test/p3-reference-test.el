@@ -164,6 +164,80 @@
                (lambda (&rest _) "alpha2020")))
       (should-error (p3/reference-finalize "p3-inbox-1")))))
 
+(ert-deftest p3-reference-routes-capture-inputs ()
+  (should (eq 'bibtex (p3/reference--input-kind "@article{x, title={X}}")))
+  (should (eq 'doi (p3/reference--input-kind "10.1000/xyz")))
+  (should (eq 'doi (p3/reference--input-kind "https://doi.org/10.1000/xyz")))
+  (should (eq 'url (p3/reference--input-kind "https://example.org/article")))
+  (should (eq 'search (p3/reference--input-kind "Smith 2024 measurement error")))
+  (should (eq 'search
+              (p3/reference--input-kind
+               "Smith, A. (2024). Measurement Error. Journal 2(1)."))))
+
+(ert-deftest p3-reference-url-only-capture-is-offline-and-provisional ()
+  (p3-reference-test--with-library nil
+    (cl-letf (((symbol-function 'url-retrieve)
+               (lambda (&rest _) (ert-fail "URL retrieval is forbidden"))))
+      (let ((key (p3/reference--capture-url "https://example.org/article")))
+        (should (p3/reference-provisional-key-p key))
+        (let ((entry (p3/reference--entry-alist key)))
+          (should (equal "https://example.org/article"
+                         (cdr (assoc "url" entry))))
+          (should (string-match-p "status/inbox"
+                                  (cdr (assoc "keywords" entry)))))))))
+
+(ert-deftest p3-reference-doi-result-enters-safe-import-path ()
+  (p3-reference-test--with-library nil
+    (let (imported)
+      (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
+                ((symbol-function 'biblio-cleanup-doi) #'identity)
+                ((symbol-function 'biblio-format-bibtex)
+                 (lambda (text _autokey) text))
+                ((symbol-function 'biblio-doi-forward-bibtex)
+                 (lambda (_doi callback)
+                   (funcall callback
+                            "@article{alpha2020, title={Alpha}, doi={10.1000/alpha}}")))
+                ((symbol-function 'p3/reference-import-bibtex)
+                 (lambda (text) (setq imported text) "alpha2020")))
+        (p3/reference--lookup-doi "10.1000/alpha")
+        (should (string-match-p "alpha2020" imported))))))
+
+(ert-deftest p3-reference-enrichment-fills-blanks-without-changing-key ()
+  (p3-reference-test--with-library
+      "@article{p3-inbox-1, title={Alpha}, year={}}\n"
+    (p3/reference-merge-bibtex
+     "p3-inbox-1"
+     "@article{remote, title={Alpha}, year={2024}, doi={10.1000/alpha}}")
+    (let ((entry (p3/reference--entry-alist "p3-inbox-1")))
+      (should (equal "2024" (cdr (assoc "year" entry))))
+      (should (equal "10.1000/alpha" (cdr (assoc "doi" entry)))))))
+
+(ert-deftest p3-reference-enrichment-preserves-declined-conflict ()
+  (p3-reference-test--with-library
+      "@article{p3-inbox-1, title={My corrected title}, year={2024}}\n"
+    (cl-letf (((symbol-function 'y-or-n-p) (lambda (&rest _) nil)))
+      (p3/reference-merge-bibtex
+       "p3-inbox-1"
+       "@article{remote, title={Remote title}, year={2024}}"))
+    (should (equal "My corrected title"
+                   (cdr (assoc "title"
+                               (p3/reference--entry-alist "p3-inbox-1")))))))
+
+(ert-deftest p3-reference-biblio-action-enriches-target-not-new-identity ()
+  (p3-reference-test--with-library
+      "@article{p3-inbox-1, title={Alpha}}\n"
+    (let ((p3/reference--biblio-target-key "p3-inbox-1"))
+      (cl-letf (((symbol-function 'biblio-format-bibtex)
+                 (lambda (text _autokey) text)))
+        (p3/reference-biblio-save
+         `((backend . ,(lambda (command metadata callback)
+                         (ignore metadata)
+                         (when (eq command 'forward-bibtex)
+                           (funcall callback
+                                    "@article{remote, title={Alpha}, year={2024}}"))))))))
+    (should (p3/reference--entry-alist "p3-inbox-1"))
+    (should-not (p3/reference--entry-alist "remote"))))
+
 (provide 'p3-reference-test)
 
 ;;; p3-reference-test.el ends here
