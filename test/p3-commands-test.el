@@ -43,6 +43,14 @@
 (ert-deftest p3-commands-keybinding-atlas-keeps-global-section ()
   (should (equal (caar p3/keybinding-sections) "Global")))
 
+(ert-deftest p3-commands-keybinding-atlas-documents-native-project-prefix ()
+  (let ((section (assoc "Project" p3/keybinding-sections)))
+    (should section)
+    (should (equal (cdr (assoc "C-c p / C-x p" (cdr section)))
+                   "native project commands"))
+    (should (equal (cdr (assoc "s-p" (cdr section)))
+                   "native project commands"))))
+
 (provide 'p3-commands-test)
 
 ;;; p3-commands-test.el ends here
