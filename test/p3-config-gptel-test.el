@@ -74,7 +74,8 @@
          (p3/config-lisp-directory directory)
          (owner (expand-file-name "p3-config-gptel.el" directory))
          (behavior (expand-file-name "p3-gptel.el" directory))
-         (old-map (and (boundp 'p3/gptel-command-map) p3/gptel-command-map))
+         (map-was-bound (boundp 'p3/gptel-command-map))
+         (old-map (and map-was-bound p3/gptel-command-map))
          (old-binding (key-binding (kbd "C-c g"))))
     (unwind-protect
         (progn
@@ -97,7 +98,7 @@
           (should
            (eq (keymap-lookup p3/gptel-command-map "x")
                #'p3/gptel-send-current-line)))
-      (if old-map
+      (if map-was-bound
           (setq p3/gptel-command-map old-map)
         (makunbound 'p3/gptel-command-map))
       (define-key global-map (kbd "C-c g") old-binding)
