@@ -28,6 +28,7 @@ jobs:
             -L lisp \
             --eval '(require (quote use-package-ensure))' \
             --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
+            --eval '(require (quote p3-org-export))' \
             --eval '(setq byte-compile-error-on-warn t)' \
             -f batch-byte-compile \
             lisp/p3-platform.el \

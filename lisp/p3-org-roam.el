@@ -1,4 +1,4 @@
-;;; p3-org-roam.el --- Org-roam workflow helpers -*- lexical-binding: t; -*-
+;;; p3-org-roam.el --- Org-roam workflow helpers
 
 (require 'seq)
 (require 'subr-x)

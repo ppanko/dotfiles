@@ -21,6 +21,7 @@
 
 (declare-function org-babel-do-load-languages "ob-core" (sym value))
 (declare-function p3/org-sort-todos "p3-org" ())
+(declare-function p3-org-export-setup "p3-org-export" ())
 
 (p3/config-load-module 'p3-org)
 
@@ -59,8 +60,6 @@
         org-ellipsis " ↴"))
 
 (define-key org-mode-map (kbd "C-c C-x C-o") #'p3/org-sort-todos)
-
-(require 'p3-org-export)
 
 (use-package p3-org-export
   :ensure nil
