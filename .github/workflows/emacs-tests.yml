@@ -50,6 +50,7 @@ jobs:
             lisp/p3-ess.el \
             lisp/p3-r-tools.el \
             lisp/p3-gptel.el \
+            lisp/p3-config-gptel.el \
             lisp/p3-org.el \
             lisp/p3-config-org.el \
             lisp/p3-org-roam.el \
@@ -79,6 +80,19 @@ jobs:
             -l lisp/p3-config-loader.el \
             -l lisp/p3-config-terminal.el \
             --eval '(unless (and (featurep (quote p3-config-terminal)) (featurep (quote p3-terminal)) (keymapp p3/vterm-command-map) (string-match-p "vterm-bashrc" vterm-shell)) (kill-emacs 1))'
+
+      - name: Smoke-load GPTel configuration boundary
+        run: |
+          emacs -Q --batch \
+            -L lisp \
+            --eval '(setq user-emacs-directory (file-name-as-directory default-directory))' \
+            --eval '(require (quote use-package-ensure))' \
+            --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
+            --eval '(defun gptel-api-key-from-auth-source () nil)' \
+            --eval '(provide (quote gptel))' \
+            -l lisp/p3-config-loader.el \
+            -l lisp/p3-config-gptel.el \
+            --eval '(unless (and (featurep (quote p3-config-gptel)) (featurep (quote p3-gptel)) (eq gptel-model (quote gpt-4o-mini)) (eq gptel-api-key (quote gptel-api-key-from-auth-source)) (eq (key-binding (kbd "C-c g")) p3/gptel-command-map)) (kill-emacs 1))'
 
       - name: Smoke-load Org configuration boundary
         run: |
@@ -136,6 +150,7 @@ jobs:
             -l test/p3-config-terminal-test.el \
             -l test/p3-ess-test.el \
             -l test/p3-gptel-test.el \
+            -l test/p3-config-gptel-test.el \
             -l test/p3-r-tools-test.el \
             -l test/p3-org-test.el \
             -l test/p3-config-org-test.el \
