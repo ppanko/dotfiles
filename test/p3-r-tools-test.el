@@ -148,6 +148,9 @@
   (dolist (key '("p" "h" "w" "c" "s" "a" "m" "d" "l" "v" "r" "f"))
     (should (commandp (keymap-lookup p3-r-command-map key)))))
 
+(ert-deftest p3-r-tools-does-not-retain-projectile-helper-alias ()
+  (should-not (fboundp 'p3/projectile-open-r-helper-functions-file)))
+
 (provide 'p3-r-tools-test)
 
 ;;; p3-r-tools-test.el ends here
