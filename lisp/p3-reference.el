@@ -4,6 +4,7 @@
 (require 'cl-lib)
 (require 'subr-x)
 
+(defvar citar-bibliography)
 (defvar org-roam-directory)
 (defvar p3/reference-bibliography-file nil)
 (defvar p3/reference-pdf-directory nil)
@@ -118,7 +119,8 @@
 (defun p3/reference--goto-entry (citekey)
   "Move point to the entry headed by CITEKEY and return non-nil if found."
   (goto-char (point-min))
-  (let ((regexp
+  (let ((case-fold-search nil)
+        (regexp
          (format
           "^[ \t]*@[[:alpha:]][[:alnum:]_-]*[ \t\n]*[{(][ \t\n]*%s[ \t\n]*,"
           (regexp-quote citekey))))
@@ -478,7 +480,8 @@
         (when (or (string-empty-p accepted)
                   (p3/reference-provisional-key-p accepted)
                   (not (p3/reference--portable-citekey-p accepted))
-                  (p3/reference--entry-alist accepted))
+                  (p3/reference--entry-alist accepted)
+                  (p3/reference--casefold-colliding-key accepted))
           (user-error
            "Permanent citekey must be portable, non-provisional, and unused"))
         (p3/reference--rename-provisional-entry-head citekey accepted)
@@ -628,10 +631,26 @@
     (user-error "Citar is unavailable"))
   (when (and allowed-p (null allowed-keys))
     (user-error "No references are available in this scope"))
-  (if allowed-p
-      (let ((allowed (copy-sequence allowed-keys)))
-        (citar-select-ref :filter (lambda (key) (member key allowed))))
-    (citar-select-ref)))
+  (let* ((configured (p3/reference--bibliography-configured-p))
+         (canonical
+          (when configured
+            (p3/reference--entry-keys-from-content
+             (p3/reference--bibliography-content))))
+         (scope
+          (cond
+           ((and configured allowed-p)
+            (seq-filter (lambda (key) (member key canonical)) allowed-keys))
+           (configured canonical)
+           (allowed-p (copy-sequence allowed-keys))
+           (t nil))))
+    (when (and configured (null scope))
+      (user-error "No references are available in this scope"))
+    (let ((citar-bibliography
+           (and configured (list (p3/reference--bibliography-path)))))
+      (with-temp-buffer
+        (if scope
+            (citar-select-ref :filter (lambda (key) (member key scope)))
+          (citar-select-ref))))))
 
 (defun p3/reference--key-at-point ()
   "Return the Citar citekey at point when one is available."
@@ -639,24 +658,46 @@
     (ignore-errors (citar-key-at-point))))
 
 (defun p3/reference-open-url (citekey)
-  "Open CITEKEY's URL, falling back to its DOI URL."
-  (unless (require 'citar nil t)
-    (user-error "Citar is unavailable"))
-  (let ((url (citar-get-value "url" citekey))
-        (doi (citar-get-value "doi" citekey)))
-    (cond
-     ((and url (not (string-empty-p (string-trim url))))
-      (browse-url url))
-     ((p3/reference-normalize-doi doi)
-      (browse-url (concat "https://doi.org/" (p3/reference-normalize-doi doi))))
-     (t
-      (user-error "Reference has no URL or DOI: %s" citekey)))))
+  "Open CITEKEY's canonical URL, falling back to its DOI URL."
+  (if (p3/reference--bibliography-configured-p)
+      (let* ((entry (p3/reference--entry-alist citekey))
+             (url (cdr (assoc "url" entry)))
+             (doi (cdr (assoc "doi" entry))))
+        (unless entry
+          (user-error "Unknown reference: %s" citekey))
+        (cond
+         ((and url (not (string-empty-p (string-trim url))))
+          (browse-url url))
+         ((p3/reference-normalize-doi doi)
+          (browse-url
+           (concat "https://doi.org/" (p3/reference-normalize-doi doi))))
+         (t
+          (user-error "Reference has no URL or DOI: %s" citekey))))
+    (unless (require 'citar nil t)
+      (user-error "Citar is unavailable"))
+    (let ((url (citar-get-value "url" citekey))
+          (doi (citar-get-value "doi" citekey)))
+      (cond
+       ((and url (not (string-empty-p (string-trim url))))
+        (browse-url url))
+       ((p3/reference-normalize-doi doi)
+        (browse-url
+         (concat "https://doi.org/" (p3/reference-normalize-doi doi))))
+       (t
+        (user-error "Reference has no URL or DOI: %s" citekey))))))
 
 (defun p3/reference-edit-entry (citekey)
   "Open CITEKEY in its canonical bibliography."
-  (unless (require 'citar nil t)
-    (user-error "Citar is unavailable"))
-  (citar-open-entry citekey))
+  (let ((path (p3/reference--bibliography-path)))
+    (unless (p3/reference--entry-alist citekey)
+      (user-error "Unknown reference: %s" citekey))
+    (find-file path)
+    (unless (derived-mode-p 'bibtex-mode)
+      (bibtex-mode))
+    (bibtex-set-dialect 'biblatex t)
+    (unless (p3/reference--goto-entry citekey)
+      (user-error "Unknown reference: %s" citekey))
+    (point)))
 
 (defun p3/reference-insert-citation (&optional citekey)
   "Insert a native citation for CITEKEY, finalizing provisional keys first."
@@ -691,13 +732,12 @@
         (funcall fn key)))))
 
 (defun p3/reference--display-title (citekey)
-  "Return a human-readable title for CITEKEY without making Citar authoritative."
-  (or (when (require 'citar nil t)
-        (citar-get-value "title" citekey))
-      (condition-case nil
-          (cdr (assoc "title" (p3/reference--entry-alist citekey)))
-        (error nil))
-      citekey))
+  "Return a human-readable title for canonical CITEKEY."
+  (if (p3/reference--bibliography-configured-p)
+      (or (cdr (assoc "title" (p3/reference--entry-alist citekey))) citekey)
+    (or (when (require 'citar nil t)
+          (citar-get-value "title" citekey))
+        citekey)))
 
 (defun p3/reference--note-file-has-ref-p (path citekey)
   "Return non-nil when Org file PATH declares ROAM_REFS for CITEKEY."
@@ -883,7 +923,8 @@ When WRITE is non-nil, persist changes unless FILE already had unsaved edits."
       (p3/reference--call-with-project-buffer
        file
        (lambda ()
-         (let ((bounds (p3/reference--project-reference-bounds))
+         (let ((case-fold-search nil)
+               (bounds (p3/reference--project-reference-bounds))
                (regexp (format "^[ \t]*\\[cite:@%s\\][ \t]*\\n?"
                                (regexp-quote citekey))))
            (when bounds
