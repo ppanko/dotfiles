@@ -53,9 +53,10 @@ backups, Dired, and the keybinding atlas live in =lisp/p3-config-base.el=.
 
 * Editing
 
-Generic editing semantics and packages live in =lisp/p3-config-editing.el=.
-This loads before completion so Consult retains the final =C-s= and =C-r=
-bindings below.
+Generic editing semantics and package setup live in =lisp/p3-config-editing.el=.
+The owner loads before completion so Consult retains the final =C-s= and =C-r=
+bindings; staged setup calls below preserve the original activation positions
+without coupling configuration modules to one another.
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-editing)
@@ -91,25 +92,7 @@ live in =lisp/p3-config-completion.el=.
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-completion)
-#+END_SRC
-
-Thesaurus
-
-#+BEGIN_SRC emacs-lisp
-  (use-package synosaurus
-    :diminish synosaurus-mode
-    :init    (synosaurus-mode)
-    :config  (setq synosaurus-choose-method 'popup))
-#+END_SRC
-
-Code snippets
-
-#+BEGIN_SRC emacs-lisp
-  (use-package yasnippet
-    :init
-    (yas-global-mode 1)
-    :config
-    (add-to-list 'yas-snippet-dirs "~/.emacs.d/snippets"))
+  (p3/config-editing-setup-thesaurus-and-snippets)
 #+END_SRC
 
 ** C++
@@ -167,17 +150,7 @@ Task prompts, streaming/rollback behavior, and the task command map remain in
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-gptel)
-#+END_SRC
-
-** Flycheck
-Flycheck mode (but not for org/latex).
-
-#+BEGIN_SRC emacs-lisp
-  (use-package flycheck
-    :hook (after-init . global-flycheck-mode)
-    :config
-    (setq flycheck-global-modes '(not LaTeX-mode latex-mode org-mode))
-    (setq flycheck-checker-error-threshold 1000))
+  (p3/config-editing-setup-diagnostics)
 #+END_SRC
 
 ** Buffers, Windows, and Frames
@@ -328,13 +301,7 @@ Reusable interpreter, language-server, and REPL behavior remains in
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-python)
-#+END_SRC
-
-** Rainbow
-#+BEGIN_SRC emacs-lisp
-  (use-package rainbow-mode
-    :config
-    (add-hook 'prog-mode-hook #'rainbow-mode))
+  (p3/config-editing-setup-color-helper)
 #+END_SRC
 
 ** Shell
@@ -345,28 +312,7 @@ Terminal package wiring and platform-specific shell activation live in
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-terminal)
-#+END_SRC
-
-** Spelling
-#+BEGIN_SRC emacs-lisp
-  (use-package ispell
-    :defer nil
-    :ensure nil
-    :init
-    (cond
-     ((eq system-type 'windows-nt)
-      (when p3/windows-hunspell-program
-        (setq ispell-program-name p3/windows-hunspell-program))
-      (when p3/windows-hunspell-dictionary-directory
-        (setenv "DICTPATH" p3/windows-hunspell-dictionary-directory))
-      (setenv "DICTIONARY" "en_US"))
-     ((eq system-type 'gnu/linux)
-      (setq ispell-program-name "hunspell")))
-    :config
-    (setq ispell-local-dictionary "en_US"
-          ispell-dictionary "english"
-          ispell-local-dictionary-alist
-          '(("en_US" "[[:alpha:]]" "[^[:alpha:]]" "[']" nil ("-d" "en_US") nil utf-8))))
+  (p3/config-editing-setup-spelling)
 #+END_SRC
 
 ** TRAMP

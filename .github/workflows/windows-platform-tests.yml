@@ -31,6 +31,8 @@ on:
       - "test/p3-config-project-test.el"
       - "test/p3-config-loader-test.el"
       - "test/p3-config-test.el"
+      - "test/p3-config-editing-ownership-test.el"
+      - "test/p3-config-editing-windows-test.el"
       - "test/p3-config-ess-test.el"
       - "test/p3-config-python-test.el"
       - "test/p3-config-org-test.el"
@@ -91,7 +93,15 @@ jobs:
           lisp/p3-reference.el
           lisp/p3-config-reference.el
           lisp/p3-git.el
+          lisp/p3-config-editing.el
           lisp/p3-config-terminal.el
+
+      - name: Run Windows editing configuration regression
+        shell: powershell
+        run: >-
+          emacs -Q --batch -L lisp
+          -l test/p3-config-editing-windows-test.el
+          -f ert-run-tests-batch-and-exit
 
       - name: Smoke-load Windows terminal configuration boundary
         shell: powershell
@@ -114,6 +124,7 @@ jobs:
           emacs -Q --batch -L lisp
           -l test/p3-config-loader-test.el
           -l test/p3-config-test.el
+          -l test/p3-config-editing-ownership-test.el
           -l test/p3-config-project-test.el
           -l test/p3-config-ess-test.el
           -l test/p3-config-python-test.el

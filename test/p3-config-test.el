@@ -187,19 +187,18 @@
 
 (ert-deftest p3-config-python-preserves-subsystem-timing ()
   (let* ((contents (p3-config-test--contents "config.org"))
-         (flycheck (p3-config-test--position "(use-package flycheck" contents))
+         (editing (p3-config-test--position
+                   "(p3/config-load-module 'p3-config-editing)" contents))
          (project-config
           (p3-config-test--position
            "(p3/config-load-module 'p3-config-project)" contents))
          (python (p3-config-test--position
                   "(p3/config-load-module 'p3-config-python)" contents))
-         (rainbow (p3-config-test--position "(use-package rainbow-mode" contents))
          (terminal (p3-config-test--position
                     "(p3/config-load-module 'p3-config-terminal)" contents)))
-    (should (< flycheck project-config))
+    (should (< editing project-config))
     (should (< project-config python))
-    (should (< python rainbow))
-    (should (< rainbow terminal))))
+    (should (< python terminal))))
 
 (ert-deftest p3-config-org-source-loads-fourteen-config-modules ()
   (let ((contents (p3-config-test--contents "config.org")))
