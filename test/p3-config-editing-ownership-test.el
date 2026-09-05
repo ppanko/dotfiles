@@ -46,6 +46,17 @@
                "ispell-dictionary \"english\""))
       (should (string-match-p (regexp-quote setting) editing)))))
 
+(ert-deftest p3-config-editing-preserves-original-activation-boundaries ()
+  (let ((editing
+         (p3-config-editing-ownership-test--contents
+          "lisp/p3-config-editing.el")))
+    (dolist (boundary
+             '("(with-eval-after-load 'p3-config-completion"
+               "(with-eval-after-load 'p3-config-gptel"
+               "(with-eval-after-load 'p3-config-python"
+               "(with-eval-after-load 'p3-config-terminal"))
+      (should (string-match-p (regexp-quote boundary) editing)))))
+
 (ert-deftest p3-config-editing-remains-early-owner ()
   (let* ((config (p3-config-editing-ownership-test--contents "config.org"))
          (editing
