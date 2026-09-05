@@ -68,7 +68,7 @@
     (let ((root (expand-file-name "analysis-demo" parent)))
       (p3-r-new-project root 'analysis)
       (should (file-exists-p (expand-file-name "analysis-demo.Rproj" root)))
-      (should (file-exists-p (expand-file-name ".projectile" root)))
+      (should-not (file-exists-p (expand-file-name ".projectile" root)))
       (should (file-exists-p (expand-file-name "R/01_prepareData.R" root)))
       (should (file-exists-p (expand-file-name "R/utils.R" root)))
       (should-not (file-exists-p (expand-file-name "_targets.R" root)))
