@@ -60,6 +60,106 @@
             (should (= 1 (how-many "^@" (point-min) (point-max))))))
       (delete-directory directory t))))
 
+(ert-deftest p3-reference-project-association-updates-live-project-buffer ()
+  (let* ((directory (make-temp-file "p3-live-project-" t))
+         (project (expand-file-name "project.org" directory))
+         buffer)
+    (unwind-protect
+        (progn
+          (with-temp-file project
+            (insert "#+title: Project\n#+filetags: :project:\n"))
+          (setq buffer (find-file-noselect project))
+          (with-current-buffer buffer
+            (goto-char (point-max))
+            (insert "\nUnsaved local project edit\n")
+            (cl-letf (((symbol-function 'p3/reference--project-file)
+                       (lambda (_node) project))
+                      ((symbol-function 'p3/reference--project-node-p)
+                       (lambda (_node) t)))
+              (p3/reference-associate-project "alpha2020" 'project-node))
+            (should (buffer-modified-p))
+            (should (save-excursion
+                      (goto-char (point-min))
+                      (search-forward "[cite:@alpha2020]" nil t)))
+            (save-buffer))
+          (with-temp-buffer
+            (insert-file-contents project)
+            (should (search-forward "Unsaved local project edit" nil t))
+            (should (search-forward "[cite:@alpha2020]" nil t))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (delete-directory directory t))))
+
+(ert-deftest p3-reference-project-removal-updates-live-project-buffer ()
+  (let* ((directory (make-temp-file "p3-live-project-" t))
+         (project (expand-file-name "project.org" directory))
+         buffer)
+    (unwind-protect
+        (progn
+          (with-temp-file project
+            (insert "#+title: Project\n#+filetags: :project:\n\n* References\n\n[cite:@alpha2020]\n"))
+          (setq buffer (find-file-noselect project))
+          (with-current-buffer buffer
+            (goto-char (point-max))
+            (insert "\nUnsaved local project edit\n")
+            (cl-letf (((symbol-function 'p3/reference--project-file)
+                       (lambda (_node) project))
+                      ((symbol-function 'p3/reference--project-node-p)
+                       (lambda (_node) t)))
+              (p3/reference-remove-project-association
+               "alpha2020" 'project-node))
+            (should (buffer-modified-p))
+            (should-not (save-excursion
+                          (goto-char (point-min))
+                          (search-forward "[cite:@alpha2020]" nil t)))
+            (save-buffer))
+          (with-temp-buffer
+            (insert-file-contents project)
+            (should (search-forward "Unsaved local project edit" nil t))
+            (goto-char (point-min))
+            (should-not (search-forward "[cite:@alpha2020]" nil t))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (delete-directory directory t))))
+
+(ert-deftest p3-reference-finalization-offers-portable-citekey-default ()
+  (let* ((directory (make-temp-file "p3-portable-key-" t))
+         (p3/reference-bibliography-file
+          (expand-file-name "references.bib" directory))
+         offered)
+    (unwind-protect
+        (progn
+          (with-temp-file p3/reference-bibliography-file
+            (insert "@article{p3-inbox-1, title={Alpha Study}}\n"))
+          (cl-letf (((symbol-function 'p3/reference--propose-citekey)
+                     (lambda (_key) "alpha2020:_study"))
+                    ((symbol-function 'read-string)
+                     (lambda (_prompt initial &rest _)
+                       (setq offered initial)
+                       initial)))
+            (let ((result (p3/reference-finalize "p3-inbox-1")))
+              (should (equal offered result))
+              (should (string-match-p
+                       "\\`[A-Za-z0-9][A-Za-z0-9._-]*\\'" result)))))
+      (delete-directory directory t))))
+
+(ert-deftest p3-reference-finalization-rejects-nonportable-citekey ()
+  (let* ((directory (make-temp-file "p3-portable-key-" t))
+         (p3/reference-bibliography-file
+          (expand-file-name "references.bib" directory)))
+    (unwind-protect
+        (progn
+          (with-temp-file p3/reference-bibliography-file
+            (insert "@article{p3-inbox-1, title={Alpha Study}}\n"))
+          (cl-letf (((symbol-function 'p3/reference--propose-citekey)
+                     (lambda (_key) "alpha2020"))
+                    ((symbol-function 'read-string)
+                     (lambda (&rest _) "alpha:2020")))
+            (should-error
+             (p3/reference-finalize "p3-inbox-1")
+             :type 'user-error)))
+      (delete-directory directory t))))
+
 (provide 'p3-reference-reconstruction-test)
 
 ;;; p3-reference-reconstruction-test.el ends here
