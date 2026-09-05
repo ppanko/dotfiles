@@ -14,6 +14,9 @@
      ("C-c ?" . "open this atlas")
      ("C-h B" . "show context-sensitive bindings")
      ("M-o" . "select window"))
+    ("Project"
+     ("C-c p / C-x p" . "native project commands")
+     ("s-p" . "native project commands"))
     ("R / ESS"
      ("C-c R" . "R project, templates, and tools")
      ("C-c i" . "evaluate library section")
