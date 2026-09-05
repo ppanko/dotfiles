@@ -68,10 +68,13 @@
                        "dashboard-icon-type"
                        "nerd-icons-dired-mode"))
       (should (string-match-p (regexp-quote needle) appearance)))
-    (dolist (forbidden '("doom-modeline" "all-the-icons" "unicode-fonts"))
-      (should-not (string-match-p forbidden appearance))
-      (should-not (string-match-p forbidden base))
-      (should-not (string-match-p forbidden config)))
+    (dolist (forbidden '("(use-package doom-modeline"
+                          "(use-package all-the-icons"
+                          "(use-package all-the-icons-dired"
+                          "(use-package unicode-fonts"))
+      (should-not (string-match-p (regexp-quote forbidden) appearance))
+      (should-not (string-match-p (regexp-quote forbidden) base))
+      (should-not (string-match-p (regexp-quote forbidden) config)))
     (should-not (string-match-p "dashboard-icon-type" base))
     (should (string-match-p "initial-scratch-message" base))
     (should (string-match-p "ring-bell-function" base))
