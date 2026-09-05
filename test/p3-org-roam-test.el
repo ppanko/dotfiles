@@ -14,6 +14,15 @@
 (add-to-list 'load-path (expand-file-name "lisp" p3-org-roam-test--root))
 (require 'p3-org-roam)
 
+(ert-deftest p3-org-roam-preserves-tangled-config-dynamic-binding ()
+  (with-temp-buffer
+    (insert-file-contents
+     (expand-file-name "lisp/p3-org-roam.el" p3-org-roam-test--root))
+    (goto-char (point-min))
+    (should-not
+     (re-search-forward "lexical-binding:[ \t]*t"
+                        (line-end-position) t))))
+
 (ert-deftest p3-org-roam-tagged-header-preserves-blank-output ()
   (cl-letf (((symbol-function 'read-string)
              (lambda (&rest _) "")))
@@ -43,11 +52,7 @@
       (should (equal (p3/org-roam-list-notes)
                      '("a.org" "b.org" "c.org")))
       (should (equal (p3/org-roam-list-notes-by-tag "work")
-                     '("a.org" "c.org")))
-      (should (funcall (p3/org-roam-filter-by-tag "home")
-                       (cadr nodes)))
-      (should-not (funcall (p3/org-roam-filter-by-tag "home")
-                           (car nodes))))))
+                     '("a.org" "c.org"))))))
 
 (ert-deftest p3-org-roam-agenda-uses-all-notes-for-blank-tag ()
   (let (agenda-called

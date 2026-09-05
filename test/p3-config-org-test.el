@@ -105,13 +105,14 @@
 
 (ert-deftest p3-config-org-preserves-export-pdf-and-agenda-wiring ()
   (let* ((forms (p3-config-org-test--forms "lisp/p3-config-org.el"))
-         (require-position
-          (seq-position forms '(require 'p3-org-export) #'equal))
          (package-form (p3-config-org-test--use-package-form 'p3-org-export))
          (package-position (seq-position forms package-form #'equal)))
-    (should (integerp require-position))
+    (should
+     (member
+      '(declare-function p3-org-export-setup "p3-org-export" nil)
+      forms))
+    (should-not (member '(require 'p3-org-export) forms))
     (should (integerp package-position))
-    (should (< require-position package-position))
     (should
      (equal
       package-form
