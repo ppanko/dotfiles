@@ -57,13 +57,24 @@
 - Consumes: built-in `project-current`, `project-root`, `project-files`, and `project-vc-extra-root-markers`.
 - Produces: unchanged `p3/project-root` and `p3/use-project-root-as-default-dir`; marker policy recognizing both legacy `.projectile` and forward `*.Rproj`.
 
-- [ ] **Step 1: Add failing `*.Rproj` marker tests before changing production code**
+- [ ] **Step 1: Add failing forward-marker and runtime-retirement tests before changing production code**
 
-Keep the existing `.projectile` descendant test, but rename it to make its compatibility role explicit. Remove the obsolete `p3-project-projectile-mode-hook-restores-native-provider` test only when the provider-defense production code is removed in Step 3.
-
-Add these tests to `test/p3-project-test.el`:
+Replace the existing `p3-project-marker-only-project-is-detected-from-descendant` test with the explicitly named compatibility test below, then add the two `*.Rproj` tests and the source-policy test:
 
 ```elisp
+(ert-deftest p3-project-legacy-projectile-marker-is-detected-from-descendant ()
+  (let* ((root (make-temp-file "p3-project-marker-" t))
+         (child (expand-file-name "R/subdir" root)))
+    (unwind-protect
+        (progn
+          (make-directory child t)
+          (with-temp-file (expand-file-name ".projectile" root))
+          (let ((default-directory child))
+            (should
+             (equal (p3-project-test--canonical-directory (p3/project-root))
+                    (p3-project-test--canonical-directory root)))))
+      (delete-directory root t))))
+
 (ert-deftest p3-project-rproj-marker-only-project-is-detected-from-descendant ()
   (let* ((root (make-temp-file "p3-project-rproj-" t))
          (child (expand-file-name "R/subdir" root)))
@@ -104,16 +115,25 @@ Add these tests to `test/p3-project-test.el`:
             (should (member (file-truename inner-file) files))
             (should-not (member (file-truename outer-file) files))))
       (delete-directory outer t))))
+
+(ert-deftest p3-project-source-has-no-projectile-runtime-policy ()
+  (let ((path (expand-file-name "lisp/p3-project.el" p3-project-test--root)))
+    (with-temp-buffer
+      (insert-file-contents path)
+      (let ((contents (buffer-string)))
+        (dolist (forbidden '("project-projectile"
+                            "projectile-mode-hook"
+                            "p3/project-keep-native-provider"))
+          (should-not (string-match-p (regexp-quote forbidden) contents)))
+        (should (string-match-p
+                 (regexp-quote "\".projectile\"") contents))
+        (should (string-match-p
+                 (regexp-quote "\"*.Rproj\"") contents))))))
 ```
 
-Rename the existing compatibility test to:
+Keep `p3-project-projectile-mode-hook-restores-native-provider` in place for this red run; remove it only when the provider-defense production code is removed in Step 3.
 
-```elisp
-(ert-deftest p3-project-legacy-projectile-marker-is-detected-from-descendant ()
-  ...existing test body unchanged...)
-```
-
-- [ ] **Step 2: Run the focused project tests and verify the new forward-marker tests fail**
+- [ ] **Step 2: Run the focused project tests and verify the new tests fail**
 
 Run:
 
@@ -123,11 +143,16 @@ emacs -Q --batch -L lisp \
   -f ert-run-tests-batch-and-exit
 ```
 
-Expected: the new `*.Rproj` tests fail because `p3-project.el` currently registers only `.projectile`; the existing `.projectile` compatibility and helper tests still pass.
+Expected failures:
+- `p3-project-rproj-marker-only-project-is-detected-from-descendant` because `*.Rproj` is not registered yet;
+- `p3-project-inner-rproj-marker-bounds-project-files` for the same reason;
+- `p3-project-source-has-no-projectile-runtime-policy` because the provider-defense code still exists.
+
+The legacy `.projectile` compatibility and existing project helper tests must still pass.
 
 - [ ] **Step 3: Remove Projectile provider-defense code and register the forward marker**
 
-Change the top of `lisp/p3-project.el` to retain the existing Emacs-version guard and marker compatibility while removing all Projectile-specific runtime policy:
+Change the top of `lisp/p3-project.el` to:
 
 ```elisp
 ;;; p3-project.el --- Shared project identity for the personal Emacs config -*- lexical-binding: t; -*-
@@ -141,32 +166,43 @@ Change the top of `lisp/p3-project.el` to retain the existing Emacs-version guar
   (add-to-list 'project-vc-extra-root-markers marker))
 ```
 
-Delete these forms entirely:
+Delete these exact existing forms and comments from `lisp/p3-project.el`:
 
 ```elisp
 (declare-function project-projectile "projectile" (directory))
 
 (defun p3/project-keep-native-provider ()
-  ...)
+  "Keep Projectile from overriding native `project.el' project discovery."
+  (remove-hook 'project-find-functions #'project-projectile))
 
+;; Projectile intentionally registers itself as a project.el provider whenever
+;; `projectile-mode' changes state.  Keep its UI and commands, but remove that
+;; provider after the mode has finished updating its hooks.
 (add-hook 'projectile-mode-hook #'p3/project-keep-native-provider)
 (p3/project-keep-native-provider)
 ```
 
-Leave `p3/project-root`, `p3/use-project-root-as-default-dir`, `provide`, and the file footer unchanged.
+Leave these existing definitions unchanged:
 
-At the same time remove `p3-project-projectile-mode-hook-restores-native-provider` from `test/p3-project-test.el`; that behavior is intentionally gone rather than replaced.
+```elisp
+(defun p3/project-root ()
+  "Return the current built-in `project.el' root, if any."
+  (when-let ((project (project-current nil)))
+    (project-root project)))
+
+(defun p3/use-project-root-as-default-dir ()
+  "Use the current project root as the buffer's default directory."
+  (when-let ((root (p3/project-root)))
+    (setq-local default-directory root)))
+```
+
+Remove the obsolete `p3-project-projectile-mode-hook-restores-native-provider` test from `test/p3-project-test.el`; that behavior is intentionally deleted rather than replaced.
 
 - [ ] **Step 4: Run the focused project tests and verify marker/root/file semantics pass**
 
-Run the same focused command from Step 2.
+Run the same command from Step 2.
 
-Expected: PASS, including:
-- normal helper delegation;
-- legacy `.projectile` descendant detection;
-- `*.Rproj` descendant detection;
-- nested `*.Rproj` root selection;
-- `project-files` includes `inside.R` and excludes outer `outside.R`.
+Expected: PASS, including legacy `.projectile` detection, `*.Rproj` detection, nested `*.Rproj` root/file boundaries, and the assertion that no Projectile runtime policy remains in `p3-project.el`.
 
 - [ ] **Step 5: Commit the native project semantic change**
 
@@ -189,14 +225,17 @@ git commit -m "Retire Projectile project provider policy"
 
 - [ ] **Step 1: Change the R scaffolding test to require the new forward state**
 
-In `p3-r-new-analysis-project-generates-expected-files`, replace the current positive `.projectile` assertion with:
+In `p3-r-new-analysis-project-generates-expected-files`, use these assertions:
 
 ```elisp
 (should (file-exists-p (expand-file-name "analysis-demo.Rproj" root)))
 (should-not (file-exists-p (expand-file-name ".projectile" root)))
+(should (file-exists-p (expand-file-name "R/01_prepareData.R" root)))
+(should (file-exists-p (expand-file-name "R/utils.R" root)))
+(should-not (file-exists-p (expand-file-name "_targets.R" root)))
 ```
 
-Keep the existing generated-script/profile assertions unchanged.
+Keep the existing generated-script content assertion unchanged.
 
 - [ ] **Step 2: Run the focused R-tools tests and verify the changed assertion fails**
 
@@ -212,21 +251,7 @@ Expected: `p3-r-new-analysis-project-generates-expected-files` fails because `.p
 
 - [ ] **Step 3: Remove `.projectile` from the common R project scaffold**
 
-Change `p3-r--common-project-files` in `lisp/p3-r-tools.el` from:
-
-```elisp
-(defconst p3-r--common-project-files
-  '((:path "{{project-name}}.Rproj" :template "project.Rproj.tmpl")
-    (:path ".gitignore" :template "gitignore.tmpl")
-    (:path ".projectile" :content "")
-    (:path "R/01_prepareData.R" :template "script.R.tmpl"
-           :title "Preprocess data")
-    (:path "R/02_computeResults.R" :template "script.R.tmpl"
-           :title "Compute results"))
-  "Files shared by all R project profiles.")
-```
-
-to:
+Replace the current constant with:
 
 ```elisp
 (defconst p3-r--common-project-files
@@ -252,7 +277,7 @@ emacs -Q --batch -L lisp \
   -f ert-run-tests-batch-and-exit
 ```
 
-Expected: PASS. This proves the generated `.Rproj` file is sufficient for the native project policy established in Task 1 and that `.projectile` is no longer emitted.
+Expected: PASS.
 
 - [ ] **Step 5: Commit the scaffolding migration**
 
@@ -341,17 +366,26 @@ Create `test/p3-config-project-test.el` with:
 
 In `test/p3-config-test.el`:
 
-1. Replace ordering lookups for `"(use-package projectile"` with:
+1. In both `p3-config-org-subsystem-order-is-explicit` and `p3-config-python-preserves-subsystem-timing`, replace the Projectile lookup with:
 
 ```elisp
-"(p3/config-load-module 'p3-config-project)"
+(project-config
+ (p3-config-test--position
+  "(p3/config-load-module 'p3-config-project)" contents))
 ```
 
-Use a local variable named `project-config`, not `projectile`, in both `p3-config-org-subsystem-order-is-explicit` and `p3-config-python-preserves-subsystem-timing`.
+and use `project-config` in the existing ordering assertions.
 
-2. Rename `p3-config-org-source-loads-twelve-config-modules` to `p3-config-org-source-loads-thirteen-config-modules`, change the expected count from `12` to `13`, and add `p3-config-project` to the explicit owner list.
+2. Rename `p3-config-org-source-loads-twelve-config-modules` to `p3-config-org-source-loads-thirteen-config-modules`, change the expected count from `12` to `13`, and make the owner list:
 
-3. Add these Projectile forms to `p3-config-moved-implementation-is-not-inline`:
+```elisp
+'(p3-config-base p3-config-editing p3-config-completion
+  p3-config-ess p3-config-gptel p3-config-org
+  p3-config-org-roam p3-config-org-present p3-config-project
+  p3-config-python p3-config-terminal p3-config-workspace p3-config-git)
+```
+
+3. Add these forms to `p3-config-moved-implementation-is-not-inline`:
 
 ```elisp
 "(use-package projectile"
@@ -361,7 +395,7 @@ Use a local variable named `project-config`, not `projectile`, in both `p3-confi
 "(projectile-mode +1)"
 ```
 
-4. Add a dedicated owner assertion:
+4. Add:
 
 ```elisp
 (ert-deftest p3-config-project-orchestration-has-one-owner ()
@@ -400,11 +434,11 @@ emacs -Q --batch -L lisp \
   -f ert-run-tests-batch-and-exit
 ```
 
-Expected: failures because `p3-config-project.el` does not yet exist, `config.org` still contains the inline Projectile block, the module count is still 12, and the atlas has no Project section.
+Expected failures: the owner file does not exist, `config.org` still contains Projectile, the config owner count is still 12, and the atlas has no Project section.
 
 - [ ] **Step 4: Create the native project config owner**
 
-Create `lisp/p3-config-project.el` exactly as a small declarative owner:
+Create `lisp/p3-config-project.el` exactly as:
 
 ```elisp
 ;;; p3-config-project.el --- Native project configuration -*- lexical-binding: t; -*-
@@ -423,7 +457,7 @@ Do not add `use-package projectile`, compatibility wrappers, custom project comm
 
 - [ ] **Step 5: Replace the inline Projectile block in `config.org` at the same orchestration position**
 
-Replace the current `** Projectile` section with:
+Replace the entire current `** Projectile` section with:
 
 ```org
 ** Project
@@ -464,7 +498,7 @@ emacs -Q --batch -L lisp \
   -f ert-run-tests-batch-and-exit
 ```
 
-Expected: PASS. In particular, `C-c p`, `s-p`, and `C-x p` resolve to the same built-in `project-prefix-map`, and `config.org` has exactly one native project config owner with no inline Projectile runtime forms.
+Expected: PASS. `C-c p`, `s-p`, and `C-x p` resolve to the same built-in `project-prefix-map`, and `config.org` has exactly one native project config owner with no inline Projectile runtime forms.
 
 - [ ] **Step 8: Commit the native project UI/config boundary**
 
@@ -514,7 +548,7 @@ In `.github/workflows/emacs-tests.yml`:
 
 1. Add `lisp/p3-config-project.el` to `Byte-compile extracted modules`, immediately after `lisp/p3-project.el`.
 
-2. Add a smoke step after package installation and before the existing Python smoke:
+2. Add this smoke step before the existing Python smoke:
 
 ```yaml
       - name: Smoke-load Project configuration boundary
@@ -566,7 +600,7 @@ emacs -Q --batch -L lisp \
   -f ert-run-tests-batch-and-exit
 ```
 
-Expected: PASS on the current platform. `p3-project-windows-test.el` is deliberately not used as proof on non-Windows; the native Windows PR workflow is the authoritative gate for that contract.
+Expected: PASS on the current platform. `p3-project-windows-test.el` is not proof on non-Windows; the native Windows PR workflow remains authoritative for that contract.
 
 - [ ] **Step 5: Commit the CI/platform durability changes**
 
@@ -584,7 +618,7 @@ git commit -m "Verify native project boundary across platforms"
 
 **Files:**
 - Verify all files changed in Tasks 1–4.
-- No production changes should be introduced after the final PR-triggering commit unless verification exposes a real defect.
+- Do not introduce production changes after the final PR-triggering commit unless verification demonstrates a real defect.
 
 **Interfaces:**
 - Consumes: the complete implementation and tests from Tasks 1–4.
@@ -625,34 +659,82 @@ Expected:
 - Ubuntu compile/smoke/full-suite coverage;
 - Windows path/compile/test coverage.
 
-Also verify the order in `config.org` remains:
+Verify `config.org` ordering remains:
 
 ```text
 Org -> Org-roam -> Poly-R -> Presentation -> Project -> Python -> Rainbow -> Shell
 ```
 
-- [ ] **Step 3: Run the full local Ubuntu-equivalent ERT command before opening the PR**
+- [ ] **Step 3: Run the full Ubuntu-equivalent ERT suite before opening the PR**
 
-Run the exact `Run ERT test suite` command from `.github/workflows/emacs-tests.yml`, including the new `test/p3-config-project-test.el` entry.
+Run:
 
-Expected: zero unexpected failures. Skips are acceptable only where already intentional for unavailable platform/tool contracts.
+```bash
+emacs -Q --batch \
+  -L lisp \
+  -l test/p3-config-loader-test.el \
+  -l test/p3-config-test.el \
+  -l test/p3-config-ess-test.el \
+  -l test/p3-project-test.el \
+  -l test/p3-config-project-test.el \
+  -l test/p3-core-test.el \
+  -l test/p3-platform-test.el \
+  -l test/p3-config-python-test.el \
+  -l test/p3-python-test.el \
+  -l test/p3-terminal-test.el \
+  -l test/p3-config-terminal-test.el \
+  -l test/p3-ess-test.el \
+  -l test/p3-gptel-test.el \
+  -l test/p3-config-gptel-test.el \
+  -l test/p3-r-tools-test.el \
+  -l test/p3-org-test.el \
+  -l test/p3-config-org-test.el \
+  -l test/p3-org-roam-test.el \
+  -l test/p3-config-org-roam-test.el \
+  -l test/p3-org-present-test.el \
+  -l test/p3-config-org-present-test.el \
+  -l test/p3-org-export-test.el \
+  -l test/p3-commands-test.el \
+  -l test/p3-git-test.el \
+  -f ert-run-tests-batch-and-exit
+```
+
+Expected: zero unexpected failures. Existing intentional skips for unavailable platform/tool contracts are acceptable.
 
 - [ ] **Step 4: Open PR #19 only after static/local verification is clean**
 
-PR title:
+Use title:
 
 ```text
 Retire Projectile in favor of project.el
 ```
 
-PR body must summarize:
-- Projectile removed from active runtime/configuration;
-- native `project-prefix-map` now owns `C-c p` and `s-p` while `C-x p` remains native;
-- new R projects use `*.Rproj` and stop creating `.projectile`;
-- legacy `.projectile` remains a compatibility marker;
-- native `project.el` switch/list semantics are intentionally not made Projectile-compatible;
-- one Emacs restart is required after adoption if `projectile-mode` is already running;
-- do not merge without explicit approval.
+Use body:
+
+```markdown
+## Summary
+
+- remove Projectile from active Emacs configuration and project identity/runtime policy
+- bind `C-c p` and `s-p` directly to the built-in `project-prefix-map`; leave native `C-x p` unchanged
+- use `*.Rproj` as the forward marker for generated R projects and stop creating `.projectile`
+- retain `.projectile` only as a legacy `project.el` compatibility marker
+- preserve existing ESS, Python, R-tool, terminal, and Windows project-root contracts
+
+## Intentional transition behavior
+
+- native `project.el` switching and remembered-project behavior is not made Projectile-compatible
+- global project aliases use the global map rather than a Projectile minor-mode map
+- if `projectile-mode` is already active when this change is adopted, restart Emacs once; `C-c r` alone is not expected to retire that existing session state
+- no Projectile cache importer, runtime shutdown shim, or package uninstall mechanism is added
+
+## Verification
+
+- focused ERT coverage proves legacy `.projectile` compatibility, `*.Rproj` project detection, nested `project-files` boundaries, native project prefix bindings, and R scaffold output
+- Ubuntu CI byte-compiles and smoke-loads the native project config owner and runs the full ERT suite
+- Windows CI exercises `*.Rproj` marker detection/file enumeration after normal Rtools/MSYS2 setup and includes the new config owner in durable path/compile/test coverage
+
+Do not merge without explicit approval.
+```
 
 Opening the PR is the single intended trigger for the final Ubuntu and Windows Actions gate.
 
