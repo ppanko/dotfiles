@@ -49,7 +49,7 @@
                         (p3-project-test--canonical-directory root)))))))
       (delete-directory root t))))
 
-(ert-deftest p3-project-marker-only-project-is-detected-from-descendant ()
+(ert-deftest p3-project-legacy-projectile-marker-is-detected-from-descendant ()
   (let* ((root (make-temp-file "p3-project-marker-" t))
          (child (expand-file-name "R/subdir" root)))
     (unwind-protect
@@ -62,22 +62,60 @@
                     (p3-project-test--canonical-directory root)))))
       (delete-directory root t))))
 
-(ert-deftest p3-project-inner-marker-wins-over-outer-git-root ()
+(ert-deftest p3-project-rproj-marker-only-project-is-detected-from-descendant ()
+  (let* ((root (make-temp-file "p3-project-rproj-" t))
+         (child (expand-file-name "R/subdir" root)))
+    (unwind-protect
+        (progn
+          (make-directory child t)
+          (with-temp-file (expand-file-name "analysis.Rproj" root))
+          (let ((default-directory child))
+            (should
+             (equal (p3-project-test--canonical-directory (p3/project-root))
+                    (p3-project-test--canonical-directory root)))))
+      (delete-directory root t))))
+
+(ert-deftest p3-project-inner-rproj-marker-bounds-project-files ()
   (skip-unless (executable-find "git"))
-  (let* ((outer (make-temp-file "p3-project-outer-" t))
+  (let* ((outer (make-temp-file "p3-project-outer-rproj-" t))
          (inner (expand-file-name "analysis" outer))
-         (child (expand-file-name "R" inner)))
+         (child (expand-file-name "R/subdir" inner))
+         (inner-file (expand-file-name "R/inside.R" inner))
+         (outer-file (expand-file-name "outside.R" outer)))
     (unwind-protect
         (progn
           (should
            (zerop (call-process "git" nil nil nil "-C" outer "init" "-q")))
           (make-directory child t)
-          (with-temp-file (expand-file-name ".projectile" inner))
-          (let ((default-directory child))
+          (with-temp-file (expand-file-name "analysis.Rproj" inner))
+          (with-temp-file inner-file
+            (insert "inside <- TRUE\n"))
+          (with-temp-file outer-file
+            (insert "outside <- TRUE\n"))
+          (let* ((default-directory child)
+                 (project (project-current nil))
+                 (files (mapcar #'file-truename (project-files project))))
+            (should project)
             (should
-             (equal (p3-project-test--canonical-directory (p3/project-root))
-                    (p3-project-test--canonical-directory inner)))))
+             (equal (p3-project-test--canonical-directory (project-root project))
+                    (p3-project-test--canonical-directory inner)))
+            (should (member (file-truename inner-file) files))
+            (should-not (member (file-truename outer-file) files))))
       (delete-directory outer t))))
+
+(ert-deftest p3-project-source-has-no-projectile-runtime-policy ()
+  (let ((path (expand-file-name "lisp/p3-project.el" p3-project-test--root)))
+    (with-temp-buffer
+      (insert-file-contents path)
+      (let ((contents (buffer-string)))
+        (dolist (forbidden '("project-projectile"
+                            "projectile-mode-hook"
+                            "p3/project-keep-native-provider"))
+          (should-not (string-match-p (regexp-quote forbidden) contents)))
+        (should (string-match-p
+                 (regexp-quote "\".projectile\"") contents))
+        (should (string-match-p
+                 (regexp-quote "\"*.Rproj\"") contents))))))
 
 (ert-deftest p3-project-default-directory-is-buffer-local ()
   (with-temp-buffer
