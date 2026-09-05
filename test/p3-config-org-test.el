@@ -111,6 +111,7 @@
       '(use-package p3-org-export
          :ensure nil
          :demand t
+         :functions p3-org-export-setup
          :config
          (p3-org-export-setup))))
     (should-not (member '(p3/config-load-module 'p3-org-export) forms))
