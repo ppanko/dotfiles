@@ -428,7 +428,6 @@ Use the active region when available; otherwise process the entire buffer."
 (defalias 'p3/ess-library-and-source #'p3-r-evaluate-library-section)
 (defalias 'write-to-read-conversion-multi #'p3-r-write-to-read)
 (defalias 'p3/archive-r-scripts #'p3-r-archive-scripts)
-(defalias 'p3/projectile-open-r-helper-functions-file #'p3-r-open-helper-file)
 
 (defun p3/generate-roxygen-header (title &optional minimal)
   "Return a rendered R script header for TITLE.
