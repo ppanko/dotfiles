@@ -72,6 +72,8 @@ The commented-out `org-bullets` block has no runtime effect and does not need to
 
 `p3-org.el` must not require Org merely to define its commands. It should use declarations where needed so exact-source loading the behavior library does not force Org earlier than the current configuration does.
 
+The existing anonymous timestamp-on-save hook is preserved as an anonymous hook form in this PR. Do not opportunistically name, deduplicate, or otherwise change its reload behavior while moving it.
+
 ### Existing exporter timing
 
 `p3-org-export.el` already requires Org. Therefore `p3-config-org.el` must not exact-source load it at module entry.
@@ -149,7 +151,15 @@ The agenda helper retains its existing semantics: prompt for a tag, set `org-age
 - the current enter/quit hooks;
 - `org-present-text-scale 4`.
 
-The module exact-source loads `p3-org-present.el` after the prerequisite declaration/load point needed to preserve the current `face-remap` relationship and before binding the behavior commands.
+The module preserves the current executable sequence exactly in substance:
+
+1. declare `hide-mode-line` with `:after (org-present)`;
+2. declare/load `visual-fill-column` as it is loaded today;
+3. require built-in `face-remap`;
+4. exact-source load `p3-org-present.el` so the presentation commands/state functions exist;
+5. evaluate the `use-package org-present` declaration that binds those commands and installs the existing hooks.
+
+This sequence avoids moving `face-remap`, `visual-fill-column`, or presentation behavior across a package-loading boundary merely because the code is being extracted.
 
 No new display-buffer or window-placement policy is introduced.
 
@@ -226,7 +236,8 @@ Specifically:
 - no agenda workflow is redesigned;
 - no Roam path/template/database behavior is redesigned;
 - no presentation UX is redesigned;
-- no broad window-management rule is introduced.
+- no broad window-management rule is introduced;
+- no anonymous hooks, legacy function names, or other odd-but-working forms are opportunistically normalized merely because they move files.
 
 ## Exact-Source Reload Semantics
 
@@ -258,6 +269,7 @@ Add source-semantic tests for `p3-config-org.el` that verify:
 - Babel confirmation remains `t`;
 - Org visual/source settings and ellipsis are unchanged;
 - `C-c s` and `C-c C-x C-o` remain bound to the same behavior;
+- the anonymous timestamp hook remains behaviorally unchanged;
 - `p3-org-export.el` is loaded/activated after the Org declaration rather than at module entry;
 - Linux PDF handling remains unchanged;
 - TODO keywords/faces remain unchanged;
@@ -306,11 +318,10 @@ The state-restoration test is important because moving these functions is the hi
 Source-semantic tests should pin:
 
 - package relationships for `hide-mode-line`, `visual-fill-column`, and `org-present`;
-- prerequisite `face-remap` availability/order;
+- the exact sequence `hide-mode-line -> visual-fill-column -> face-remap -> p3-org-present -> org-present`;
 - all current presentation bindings;
 - both presentation hooks;
-- `org-present-text-scale 4`;
-- exact-source loading of `p3-org-present.el` at the intended point.
+- `org-present-text-scale 4`.
 
 ### Architecture tests
 
@@ -371,6 +382,7 @@ The refactor is complete when:
 9. Poly-R remains between Roam and Presentation;
 10. citation/BibTeX/RefTeX and LaTeX configuration remain outside this refactor;
 11. existing keybindings/settings/templates are semantically unchanged;
-12. new modules/libraries byte-compile cleanly without optional-package installation churn;
-13. focused and full regression suites pass on the intended CI platforms;
-14. no unrelated subsystem or behavior change is included.
+12. no odd-but-working hooks or legacy command names are normalized as part of the move;
+13. new modules/libraries byte-compile cleanly without optional-package installation churn;
+14. focused and full regression suites pass on the intended CI platforms;
+15. no unrelated subsystem or behavior change is included.
