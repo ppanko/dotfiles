@@ -204,8 +204,10 @@
 
 (defun p3/appearance--mode-segment ()
   "Return major-mode identity with an optional icon and mandatory text."
-  (let* ((text (or (and mode-name (format-mode-line mode-name))
-                   (symbol-name major-mode)))
+  (let* ((text (cond
+                ((stringp mode-name) mode-name)
+                (mode-name (format-mode-line mode-name))
+                (t (symbol-name major-mode))))
          (icon (p3/appearance--safe-icon
                 #'nerd-icons-icon-for-mode major-mode :height 0.95)))
     (if icon (format "%s %s" icon text) text)))
@@ -213,7 +215,10 @@
 (defun p3/appearance--process-segment ()
   "Return existing mode-provided process state on sufficiently wide windows."
   (when (and (>= (window-total-width) 100) mode-line-process)
-    (let ((text (string-trim (format-mode-line mode-line-process))))
+    (let ((text (string-trim
+                 (if (stringp mode-line-process)
+                     mode-line-process
+                   (format-mode-line mode-line-process)))))
       (unless (string-empty-p text) text))))
 
 (defun p3/appearance--left-segment ()
@@ -234,7 +239,10 @@
 (defun p3/appearance--vc-segment ()
   "Return bounded presentation of existing VC state."
   (when vc-mode
-    (let* ((raw (string-trim (format-mode-line vc-mode)))
+    (let* ((raw (string-trim
+                 (if (stringp vc-mode)
+                     vc-mode
+                   (format-mode-line vc-mode))))
            (text (truncate-string-to-width raw 12 nil nil "…")))
       (format "%s %s" (p3/appearance--git-icon) text))))
 
