@@ -38,6 +38,23 @@
                     (p3-project-test--canonical-directory root)))))
       (delete-directory root t))))
 
+(ert-deftest p3-project-legacy-projectile-marker-wins-over-outer-git-root ()
+  (skip-unless (executable-find "git"))
+  (let* ((outer (make-temp-file "p3-project-legacy-outer-" t))
+         (inner (expand-file-name "analysis" outer))
+         (child (expand-file-name "R" inner)))
+    (unwind-protect
+        (progn
+          (should
+           (zerop (call-process "git" nil nil nil "-C" outer "init" "-q")))
+          (make-directory child t)
+          (with-temp-file (expand-file-name ".projectile" inner))
+          (let ((default-directory child))
+            (should
+             (equal (p3-project-test--canonical-directory (p3/project-root))
+                    (p3-project-test--canonical-directory inner)))))
+      (delete-directory outer t))))
+
 (ert-deftest p3-project-rproj-marker-only-project-is-detected-from-descendant ()
   (let* ((root (make-temp-file "p3-project-rproj-" t))
          (child (expand-file-name "R/subdir" root)))
