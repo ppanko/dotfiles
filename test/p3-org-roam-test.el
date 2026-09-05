@@ -3,6 +3,8 @@
 (require 'cl-lib)
 (require 'ert)
 
+(defvar org-roam-directory nil)
+
 (defconst p3-org-roam-test--root
   (file-name-directory
    (directory-file-name
