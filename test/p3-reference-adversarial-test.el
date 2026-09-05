@@ -12,6 +12,7 @@
              (expand-file-name "lisp" p3-reference-adversarial-test--root))
 (require 'p3-reference)
 
+(defvar citar-bibliography)
 (defvar org-roam-directory)
 
 (defmacro p3-reference-adversarial-test--with-library (content &rest body)
@@ -54,6 +55,92 @@
     (should-error
      (p3/reference-pdf-path "smith2024")
      :type 'user-error)))
+
+(ert-deftest p3-reference-entry-lookup-is-case-sensitive ()
+  (p3-reference-adversarial-test--with-library
+      "@article{Smith2024, title={Upper}}\n@article{smith2024, title={Lower}}\n"
+    (should (equal "Upper"
+                   (cdr (assoc "title"
+                               (p3/reference--entry-alist "Smith2024")))))
+    (should (equal "Lower"
+                   (cdr (assoc "title"
+                               (p3/reference--entry-alist "smith2024")))))))
+
+(ert-deftest p3-reference-project-removal-is-case-sensitive ()
+  (let ((file (make-temp-file
+               "p3-project-case-" nil ".org"
+               "#+title: Example\n#+filetags: :project:\n\n* References\n\n[cite:@Smith2024]\n[cite:@smith2024]\n")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'p3/reference--project-file)
+                   (lambda (_node) file))
+                  ((symbol-function 'p3/reference--project-node-p)
+                   (lambda (_node) t)))
+          (p3/reference-remove-project-association "smith2024" 'project-node)
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (search-forward "[cite:@Smith2024]" nil t))
+            (goto-char (point-min))
+            (should-not (search-forward "[cite:@smith2024]" nil t))))
+      (delete-file file))))
+
+(ert-deftest p3-reference-selector-is-confined-to-canonical-bibliography ()
+  (p3-reference-adversarial-test--with-library
+      "@article{alpha2020, title={Canonical}}\n"
+    (let (seen-bibliography seen-mode seen-filter)
+      (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
+                ((symbol-function 'citar-select-ref)
+                 (lambda (&rest args)
+                   (setq seen-bibliography citar-bibliography
+                         seen-mode major-mode
+                         seen-filter (plist-get args :filter))
+                   "alpha2020")))
+        (should (equal "alpha2020" (p3/reference--select-key)))
+        (should (equal (list p3/reference-bibliography-file)
+                       seen-bibliography))
+        (should (eq 'fundamental-mode seen-mode))
+        (should (funcall seen-filter "alpha2020"))
+        (should-not (funcall seen-filter "local-only"))))))
+
+(ert-deftest p3-reference-display-title-prefers-canonical-entry ()
+  (p3-reference-adversarial-test--with-library
+      "@article{alpha2020, title={Canonical title}}\n"
+    (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
+              ((symbol-function 'citar-get-value)
+               (lambda (&rest _) "Shadow title")))
+      (should (equal "Canonical title"
+                     (p3/reference--display-title "alpha2020"))))))
+
+(ert-deftest p3-reference-open-url-prefers-canonical-entry ()
+  (p3-reference-adversarial-test--with-library
+      "@online{alpha2020, title={Canonical}, url={https://canonical.example/paper}}\n"
+    (let (opened)
+      (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
+                ((symbol-function 'citar-get-value)
+                 (lambda (field _key)
+                   (when (equal field "url") "https://shadow.example/paper")))
+                ((symbol-function 'browse-url)
+                 (lambda (url &rest _) (setq opened url))))
+        (p3/reference-open-url "alpha2020")
+        (should (equal "https://canonical.example/paper" opened))))))
+
+(ert-deftest p3-reference-edit-entry-opens-canonical-bibliography ()
+  (p3-reference-adversarial-test--with-library
+      "@article{Smith2024, title={Upper}}\n@article{smith2024, title={Lower}}\n"
+    (let (bibliography-buffer)
+      (unwind-protect
+          (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
+                    ((symbol-function 'citar-open-entry)
+                     (lambda (&rest _)
+                       (ert-fail "Citar must not choose the bibliography file"))))
+            (p3/reference-edit-entry "smith2024")
+            (setq bibliography-buffer (current-buffer))
+            (should (file-equal-p p3/reference-bibliography-file
+                                  (buffer-file-name bibliography-buffer)))
+            (should (equal "smith2024"
+                           (cdr (assoc "=key=" (bibtex-parse-entry t))))))
+        (when (buffer-live-p bibliography-buffer)
+          (set-buffer-modified-p nil)
+          (kill-buffer bibliography-buffer))))))
 
 (ert-deftest p3-reference-note-rejects-unrelated-existing-citekey-file ()
   (let* ((directory (make-temp-file "p3-note-collision-" t))
