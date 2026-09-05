@@ -31,6 +31,7 @@ on:
       - "test/p3-config-project-test.el"
       - "test/p3-config-loader-test.el"
       - "test/p3-config-test.el"
+      - "test/p3-config-editing-ownership-test.el"
       - "test/p3-config-ess-test.el"
       - "test/p3-config-python-test.el"
       - "test/p3-config-org-test.el"
@@ -114,6 +115,7 @@ jobs:
           emacs -Q --batch -L lisp
           -l test/p3-config-loader-test.el
           -l test/p3-config-test.el
+          -l test/p3-config-editing-ownership-test.el
           -l test/p3-config-project-test.el
           -l test/p3-config-ess-test.el
           -l test/p3-config-python-test.el
