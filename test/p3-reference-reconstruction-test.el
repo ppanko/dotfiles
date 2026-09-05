@@ -255,6 +255,52 @@
         (kill-buffer buffer))
       (delete-directory directory t))))
 
+(ert-deftest p3-reference-live-bibliography-drives-duplicate-reads ()
+  (let* ((directory (make-temp-file "p3-live-bib-read-" t))
+         (p3/reference-bibliography-file
+          (expand-file-name "references.bib" directory))
+         buffer)
+    (unwind-protect
+        (progn
+          (with-temp-file p3/reference-bibliography-file
+            (insert "@article{alpha2020, title={Alpha Study}}\n"))
+          (setq buffer (find-file-noselect p3/reference-bibliography-file))
+          (with-current-buffer buffer
+            (goto-char (point-min))
+            (p3/reference--set-field "doi" "10.1000/live")
+            (should (buffer-modified-p)))
+          (should
+           (equal "alpha2020"
+                  (p3/reference--strong-duplicate-key
+                   '(("doi" . "10.1000/live"))))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (delete-directory directory t))))
+
+(ert-deftest p3-reference-live-bibliography-refuses-external-file-change ()
+  (let* ((directory (make-temp-file "p3-live-bib-external-" t))
+         (p3/reference-bibliography-file
+          (expand-file-name "references.bib" directory))
+         buffer)
+    (unwind-protect
+        (progn
+          (with-temp-file p3/reference-bibliography-file
+            (insert "@article{alpha2020, title={Alpha Study}}\n"))
+          (setq buffer (find-file-noselect p3/reference-bibliography-file))
+          (sleep-for 1)
+          (with-temp-file p3/reference-bibliography-file
+            (insert "@article{alpha2020, title={Externally Changed}}\n"))
+          (should-error
+           (p3/reference-add-keyword "alpha2020" "topic/live")
+           :type 'user-error)
+          (with-temp-buffer
+            (insert-file-contents p3/reference-bibliography-file)
+            (should (search-forward "Externally Changed" nil t))
+            (should-not (search-forward "topic/live" nil t))))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer))
+      (delete-directory directory t))))
+
 (provide 'p3-reference-reconstruction-test)
 
 ;;; p3-reference-reconstruction-test.el ends here
