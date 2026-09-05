@@ -6,6 +6,7 @@ on:
       - "config.org"
       - "lisp/p3-platform.el"
       - "lisp/p3-project.el"
+      - "lisp/p3-config-project.el"
       - "lisp/p3-config-loader.el"
       - "lisp/p3-commands.el"
       - "lisp/p3-git.el"
@@ -25,6 +26,7 @@ on:
       - "test/p3-platform-test.el"
       - "test/p3-project-test.el"
       - "test/p3-project-windows-test.el"
+      - "test/p3-config-project-test.el"
       - "test/p3-config-loader-test.el"
       - "test/p3-config-test.el"
       - "test/p3-config-ess-test.el"
@@ -77,6 +79,7 @@ jobs:
           -f batch-byte-compile
           lisp/p3-platform.el
           lisp/p3-project.el
+          lisp/p3-config-project.el
           lisp/p3-config-loader.el
           lisp/p3-commands.el
           lisp/p3-git.el
@@ -103,6 +106,7 @@ jobs:
           emacs -Q --batch -L lisp
           -l test/p3-config-loader-test.el
           -l test/p3-config-test.el
+          -l test/p3-config-project-test.el
           -l test/p3-config-ess-test.el
           -l test/p3-config-python-test.el
           -l test/p3-config-org-test.el

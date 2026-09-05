@@ -25,31 +25,39 @@
              (lambda (_project) "/tmp/native-project/")))
     (should (equal (p3/project-root) "/tmp/native-project/"))))
 
-(ert-deftest p3-project-projectile-mode-hook-restores-native-provider ()
+(ert-deftest p3-project-plain-git-project-is-detected-from-descendant ()
   (skip-unless (executable-find "git"))
-  (let ((root (make-temp-file "p3-project-provider-" t)))
+  (let* ((root (make-temp-file "p3-project-git-" t))
+         (child (expand-file-name "src/subdir" root)))
     (unwind-protect
         (progn
           (should
            (zerop (call-process "git" nil nil nil "-C" root "init" "-q")))
-          (let ((project-find-functions '(project-projectile project-try-vc))
-                (default-directory root))
-            (cl-letf (((symbol-function 'project-projectile)
-                       (lambda (_directory)
-                         (ert-fail
-                          "Projectile must not provide P3 project identity"))))
-              (run-hooks 'projectile-mode-hook)
-              (should-not (memq #'project-projectile project-find-functions))
-              (should (memq #'project-try-vc project-find-functions))
-              (let ((project (project-current nil)))
-                (should project)
-                (should
-                 (equal (p3-project-test--canonical-directory
-                         (project-root project))
-                        (p3-project-test--canonical-directory root)))))))
+          (make-directory child t)
+          (let ((default-directory child))
+            (should
+             (equal (p3-project-test--canonical-directory (p3/project-root))
+                    (p3-project-test--canonical-directory root)))))
       (delete-directory root t))))
 
-(ert-deftest p3-project-marker-only-project-is-detected-from-descendant ()
+(ert-deftest p3-project-init-prefers-newer-source-before-early-local-requires ()
+  (let ((path (expand-file-name "init.el" p3-project-test--root)))
+    (with-temp-buffer
+      (insert-file-contents path)
+      (let* ((contents (buffer-string))
+             (newer (string-match
+                     (regexp-quote "(setq load-prefer-newer t)") contents))
+             (project (string-match
+                       (regexp-quote "(require 'p3-project)") contents))
+             (loader (string-match
+                      (regexp-quote "(require 'p3-config-loader)") contents)))
+        (should newer)
+        (should project)
+        (should loader)
+        (should (< newer project))
+        (should (< newer loader))))))
+
+(ert-deftest p3-project-legacy-projectile-marker-is-detected-from-descendant ()
   (let* ((root (make-temp-file "p3-project-marker-" t))
          (child (expand-file-name "R/subdir" root)))
     (unwind-protect
@@ -62,9 +70,9 @@
                     (p3-project-test--canonical-directory root)))))
       (delete-directory root t))))
 
-(ert-deftest p3-project-inner-marker-wins-over-outer-git-root ()
+(ert-deftest p3-project-legacy-projectile-marker-wins-over-outer-git-root ()
   (skip-unless (executable-find "git"))
-  (let* ((outer (make-temp-file "p3-project-outer-" t))
+  (let* ((outer (make-temp-file "p3-project-legacy-outer-" t))
          (inner (expand-file-name "analysis" outer))
          (child (expand-file-name "R" inner)))
     (unwind-protect
@@ -78,6 +86,61 @@
              (equal (p3-project-test--canonical-directory (p3/project-root))
                     (p3-project-test--canonical-directory inner)))))
       (delete-directory outer t))))
+
+(ert-deftest p3-project-rproj-marker-only-project-is-detected-from-descendant ()
+  (let* ((root (make-temp-file "p3-project-rproj-" t))
+         (child (expand-file-name "R/subdir" root)))
+    (unwind-protect
+        (progn
+          (make-directory child t)
+          (with-temp-file (expand-file-name "analysis.Rproj" root))
+          (let ((default-directory child))
+            (should
+             (equal (p3-project-test--canonical-directory (p3/project-root))
+                    (p3-project-test--canonical-directory root)))))
+      (delete-directory root t))))
+
+(ert-deftest p3-project-inner-rproj-marker-bounds-project-files ()
+  (skip-unless (executable-find "git"))
+  (let* ((outer (make-temp-file "p3-project-outer-rproj-" t))
+         (inner (expand-file-name "analysis" outer))
+         (child (expand-file-name "R/subdir" inner))
+         (inner-file (expand-file-name "R/inside.R" inner))
+         (outer-file (expand-file-name "outside.R" outer)))
+    (unwind-protect
+        (progn
+          (should
+           (zerop (call-process "git" nil nil nil "-C" outer "init" "-q")))
+          (make-directory child t)
+          (with-temp-file (expand-file-name "analysis.Rproj" inner))
+          (with-temp-file inner-file
+            (insert "inside <- TRUE\n"))
+          (with-temp-file outer-file
+            (insert "outside <- TRUE\n"))
+          (let* ((default-directory child)
+                 (project (project-current nil))
+                 (files (mapcar #'file-truename (project-files project))))
+            (should project)
+            (should
+             (equal (p3-project-test--canonical-directory (project-root project))
+                    (p3-project-test--canonical-directory inner)))
+            (should (member (file-truename inner-file) files))
+            (should-not (member (file-truename outer-file) files))))
+      (delete-directory outer t))))
+
+(ert-deftest p3-project-source-has-no-projectile-runtime-policy ()
+  (let ((path (expand-file-name "lisp/p3-project.el" p3-project-test--root)))
+    (with-temp-buffer
+      (insert-file-contents path)
+      (let ((contents (buffer-string)))
+        (dolist (forbidden '("project-projectile"
+                            "projectile-mode-hook"
+                            "p3/project-keep-native-provider"))
+          (should-not (string-match-p (regexp-quote forbidden) contents)))
+        (should (string-match-p
+                 (regexp-quote "\".projectile\"") contents))
+        (should (string-match-p
+                 (regexp-quote "\"*.Rproj\"") contents))))))
 
 (ert-deftest p3-project-default-directory-is-buffer-local ()
   (with-temp-buffer

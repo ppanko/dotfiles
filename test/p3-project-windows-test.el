@@ -35,7 +35,7 @@
           (should (file-readable-p bash))
           (should (file-readable-p find))
           (make-directory child t)
-          (with-temp-file (expand-file-name ".projectile" root))
+          (with-temp-file (expand-file-name "windows-test.Rproj" root))
           (with-temp-file data-file
             (insert "x <- 1\n"))
           (p3/windows-configure-rtools)

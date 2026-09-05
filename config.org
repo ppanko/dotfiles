@@ -378,20 +378,14 @@ state capture/restoration and presentation commands live in
   (p3/config-load-module 'p3-config-org-present)
 #+END_SRC
 
-** Projectile
-#+BEGIN_SRC emacs-lisp
-  (defun p3/projectile-r-project-file-p (&optional directory)
-    (or (projectile-verify-file-wildcard "?*.r" directory)
-        (projectile-verify-file-wildcard "?*.R" directory)))
+** Project
 
-  (use-package projectile
-    :bind (:map projectile-mode-map
-                ("s-p" . projectile-command-map)
-                ("C-c p" . projectile-command-map))
-    :init
-    (projectile-mode +1)
-    :config
-    (projectile-register-project-type 'r #'p3/projectile-r-project-file-p))
+Native project identity is established early by =lisp/p3-project.el=.
+User-facing project bindings live in =lisp/p3-config-project.el= and use the
+built-in =project.el= command map.
+
+#+BEGIN_SRC emacs-lisp
+  (p3/config-load-module 'p3-config-project)
 #+END_SRC
 
 ** Python

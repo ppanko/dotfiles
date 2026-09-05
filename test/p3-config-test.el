@@ -93,7 +93,7 @@
                               contents)))
     (dolist (module '(p3-config-ess p3-config-gptel p3-config-org
                       p3-config-org-roam p3-config-org-present
-                      p3-config-python p3-config-terminal))
+                      p3-config-project p3-config-python p3-config-terminal))
       (should
        (string-match-p
         (regexp-quote (format "(p3/config-load-module '%s)" module))
@@ -170,38 +170,43 @@
          (poly-r (p3-config-test--position "(use-package poly-R" contents))
          (present (p3-config-test--position
                    "(p3/config-load-module 'p3-config-org-present)" contents))
-         (projectile (p3-config-test--position "(use-package projectile" contents))
+         (project-config
+          (p3-config-test--position
+           "(p3/config-load-module 'p3-config-project)" contents))
          (python (p3-config-test--position
                   "(p3/config-load-module 'p3-config-python)" contents)))
     (should (< org roam))
     (should (< roam poly-r))
     (should (< poly-r present))
-    (should (< present projectile))
-    (should (< projectile python))))
+    (should (< present project-config))
+    (should (< project-config python))))
 
 (ert-deftest p3-config-python-preserves-subsystem-timing ()
   (let* ((contents (p3-config-test--contents "config.org"))
          (flycheck (p3-config-test--position "(use-package flycheck" contents))
-         (projectile (p3-config-test--position "(use-package projectile" contents))
+         (project-config
+          (p3-config-test--position
+           "(p3/config-load-module 'p3-config-project)" contents))
          (python (p3-config-test--position
                   "(p3/config-load-module 'p3-config-python)" contents))
          (rainbow (p3-config-test--position "(use-package rainbow-mode" contents))
          (terminal (p3-config-test--position
                     "(p3/config-load-module 'p3-config-terminal)" contents)))
-    (should (< flycheck projectile))
-    (should (< projectile python))
+    (should (< flycheck project-config))
+    (should (< project-config python))
     (should (< python rainbow))
     (should (< rainbow terminal))))
 
-(ert-deftest p3-config-org-source-loads-twelve-config-modules ()
+(ert-deftest p3-config-org-source-loads-thirteen-config-modules ()
   (let ((contents (p3-config-test--contents "config.org")))
-    (should (= 12
+    (should (= 13
                (p3-config-test--count-occurrences
                 "(p3/config-load-module 'p3-config-" contents)))
     (dolist (module '(p3-config-base p3-config-editing p3-config-completion
                       p3-config-ess p3-config-gptel p3-config-org
-                      p3-config-org-roam p3-config-org-present p3-config-python
-                      p3-config-terminal p3-config-workspace p3-config-git))
+                      p3-config-org-roam p3-config-org-present p3-config-project
+                      p3-config-python p3-config-terminal p3-config-workspace
+                      p3-config-git))
       (should
        (string-match-p
         (regexp-quote (format "(p3/config-load-module '%s)" module))
@@ -270,7 +275,12 @@
                "(p3/windows-configure-shell)"
                "(use-package vterm"
                "(use-package gptel"
-               "(use-package p3-gptel"))
+               "(use-package p3-gptel"
+               "(use-package projectile"
+               "(defun p3/projectile-r-project-file-p"
+               "projectile-command-map"
+               "projectile-register-project-type"
+               "(projectile-mode +1)"))
       (should-not (string-match-p (regexp-quote implementation) contents)))
     (dolist (package '(dashboard which-key vertico company undo-tree super-save
                        multiple-cursors magit git-gutter-fringe+ transpose-frame
@@ -298,6 +308,17 @@
      (string-match-p
       (regexp-quote "(keymap-global-set \"C-c R\"") contents))
     (should (< ess r-program))))
+
+(ert-deftest p3-config-project-orchestration-has-one-owner ()
+  (let* ((contents (p3-config-test--contents "config.org"))
+         (owner "(p3/config-load-module 'p3-config-project)"))
+    (should (= 1 (p3-config-test--count-occurrences owner contents)))
+    (dolist (forbidden '("(use-package projectile"
+                          "p3/projectile-r-project-file-p"
+                          "projectile-command-map"
+                          "projectile-register-project-type"
+                          "(projectile-mode +1)"))
+      (should-not (string-match-p (regexp-quote forbidden) contents)))))
 
 (ert-deftest p3-config-python-orchestration-has-one-owner ()
   (let* ((contents (p3-config-test--contents "config.org"))
