@@ -2,10 +2,14 @@
 
 (require 'face-remap)
 
+(defvar display-line-numbers-mode)
+(defvar hide-mode-line-mode)
 (defvar org-inline-image-overlays)
 (defvar visual-fill-column-center-text)
+(defvar visual-fill-column-mode)
 (defvar visual-fill-column-width)
 
+(declare-function display-line-numbers-mode "display-line-numbers" (&optional arg))
 (declare-function hide-mode-line-mode "hide-mode-line" (&optional arg))
 (declare-function org-display-inline-images "org" (&rest args))
 (declare-function org-present "org-present" ())
