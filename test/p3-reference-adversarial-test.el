@@ -102,8 +102,8 @@
                      (if (equal field "title") "Alpha Study" nil))))
           (p3/reference-note "alpha2020")
           (setq note-buffer (current-buffer))
-          (should (equal (expand-file-name "alpha2020.org" directory)
-                         (buffer-file-name note-buffer)))
+          (should (file-equal-p (expand-file-name "alpha2020.org" directory)
+                                (buffer-file-name note-buffer)))
           (should (= (point) (point-max)))
           (should (> (point)
                      (save-excursion
