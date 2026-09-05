@@ -163,6 +163,13 @@
         (apply function args)
       (error nil))))
 
+(defun p3/appearance--format-construct (construct)
+  "Format mode-line CONSTRUCT using the current buffer's state."
+  (cond
+   ((null construct) "")
+   ((stringp construct) construct)
+   (t (format-mode-line construct nil nil (current-buffer)))))
+
 (defun p3/appearance--remote-host ()
   "Return the current buffer's remote host without remote I/O."
   (file-remote-p (or buffer-file-name default-directory) 'host))
@@ -204,10 +211,9 @@
 
 (defun p3/appearance--mode-segment ()
   "Return major-mode identity with an optional icon and mandatory text."
-  (let* ((text (cond
-                ((stringp mode-name) mode-name)
-                (mode-name (format-mode-line mode-name))
-                (t (symbol-name major-mode))))
+  (let* ((text (or (p3/appearance--format-construct mode-name)
+                   (symbol-name major-mode)))
+         (text (if (string-empty-p text) (symbol-name major-mode) text))
          (icon (p3/appearance--safe-icon
                 #'nerd-icons-icon-for-mode major-mode :height 0.95)))
     (if icon (format "%s %s" icon text) text)))
@@ -216,9 +222,7 @@
   "Return existing mode-provided process state on sufficiently wide windows."
   (when (and (>= (window-total-width) 100) mode-line-process)
     (let ((text (string-trim
-                 (if (stringp mode-line-process)
-                     mode-line-process
-                   (format-mode-line mode-line-process)))))
+                 (p3/appearance--format-construct mode-line-process))))
       (unless (string-empty-p text) text))))
 
 (defun p3/appearance--left-segment ()
@@ -239,10 +243,7 @@
 (defun p3/appearance--vc-segment ()
   "Return bounded presentation of existing VC state."
   (when vc-mode
-    (let* ((raw (string-trim
-                 (if (stringp vc-mode)
-                     vc-mode
-                   (format-mode-line vc-mode))))
+    (let* ((raw (string-trim (p3/appearance--format-construct vc-mode)))
            (text (truncate-string-to-width raw 12 nil nil "…")))
       (format "%s %s" (p3/appearance--git-icon) text))))
 
