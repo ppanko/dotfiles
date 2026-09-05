@@ -99,8 +99,17 @@
         dashboard-set-heading-icons p3/appearance--icons-available
         dashboard-set-file-icons p3/appearance--icons-available))
 
-(with-eval-after-load 'dashboard
-  (p3/appearance-configure-dashboard-icons))
+(defun p3/appearance--configure-dashboard-after-load (&rest _)
+  "Apply Dashboard appearance once Dashboard becomes available."
+  (when (featurep 'dashboard)
+    (p3/appearance-configure-dashboard-icons)
+    (remove-hook 'after-load-functions
+                 #'p3/appearance--configure-dashboard-after-load)))
+
+(remove-hook 'after-load-functions #'p3/appearance--configure-dashboard-after-load)
+(if (featurep 'dashboard)
+    (p3/appearance-configure-dashboard-icons)
+  (add-hook 'after-load-functions #'p3/appearance--configure-dashboard-after-load))
 
 (use-package nerd-icons-dired
   :commands nerd-icons-dired-mode)
