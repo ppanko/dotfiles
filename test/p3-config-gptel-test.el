@@ -2,6 +2,7 @@
 
 (require 'ert)
 (require 'seq)
+(require 'p3-config-loader)
 
 (defconst p3-config-gptel-test--root
   (file-name-directory
@@ -66,6 +67,41 @@
     (dolist (forbidden '("(use-package gptel"
                           "(use-package p3-gptel"))
       (should-not (string-match-p (regexp-quote forbidden) contents)))))
+
+(ert-deftest p3-config-gptel-owner-reloads-command-map-source ()
+  "Reloading the GPTel owner must rebuild command-map definitions from source."
+  (let* ((directory (make-temp-file "p3-gptel-owner-reload-" t))
+         (p3/config-lisp-directory directory)
+         (owner (expand-file-name "p3-config-gptel.el" directory))
+         (behavior (expand-file-name "p3-gptel.el" directory))
+         (old-map (and (boundp 'p3/gptel-command-map) p3/gptel-command-map))
+         (old-binding (key-binding (kbd "C-c g"))))
+    (unwind-protect
+        (progn
+          (copy-file (p3-config-gptel-test--path "lisp/p3-config-gptel.el") owner)
+          (copy-file (p3-config-gptel-test--path "lisp/p3-gptel.el") behavior)
+          (provide 'gptel)
+          (p3/config-load-module 'p3-config-gptel)
+          (with-temp-buffer
+            (insert-file-contents behavior)
+            (goto-char (point-min))
+            (should
+             (search-forward
+              "(define-key map (kbd \"l\") #'p3/gptel-send-current-line)"
+              nil t))
+            (replace-match
+             "(define-key map (kbd \"x\") #'p3/gptel-send-current-line)"
+             t t)
+            (write-region (point-min) (point-max) behavior nil 'silent))
+          (p3/config-load-module 'p3-config-gptel)
+          (should
+           (eq (keymap-lookup p3/gptel-command-map "x")
+               #'p3/gptel-send-current-line)))
+      (if old-map
+          (setq p3/gptel-command-map old-map)
+        (makunbound 'p3/gptel-command-map))
+      (define-key global-map (kbd "C-c g") old-binding)
+      (delete-directory directory t))))
 
 (provide 'p3-config-gptel-test)
 
