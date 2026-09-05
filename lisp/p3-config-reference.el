@@ -4,11 +4,14 @@
 (require 'p3-config-loader)
 
 (defvar biblio-selection-mode-actions-alist)
+(defvar bibtex-align-at-equal-sign)
+(defvar bibtex-dialect)
 (defvar citar-bibliography)
 (defvar org-cite-activate-processor)
 (defvar org-cite-follow-processor)
 (defvar org-cite-global-bibliography)
 (defvar org-cite-insert-processor)
+(defvar p3/reference-command-map)
 
 (defcustom p3/reference-bibliography-file
   (expand-file-name "~/org/bib/main.bib")

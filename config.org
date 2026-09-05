@@ -75,82 +75,13 @@ literate file responsible for loading the module and exposing its bindings.
 #+END_SRC
 
 * Modes
-** Bibtex & citation-related
+** References
 
-Bibtex user configs
-
-#+BEGIN_SRC emacs-lisp
-  (setq bibtex-user-optional-fields
-       '(("keywords" "Keywords to describe the entry" "")
-         ("file" "Link to document file." ":"))
-       bibtex-align-at-equal-sign t)
-
-  (add-hook 'bibtex-mode-hook 'flyspell-mode)
-  (setq bibtex-dialect 'biblatex)
-#+END_SRC
-
-Bibtex library path
+Reference capture, retrieval, citation, literature-note, project-association,
+and PDF behavior lives in =lisp/p3-config-reference.el=.
 
 #+BEGIN_SRC emacs-lisp
-   (setq bib-files-directory (directory-files
-                             (concat (getenv "HOME") "/org/bib") t
-                             "^[A-Z|a-z].+.bib$")
-        pdf-files-directory (concat (getenv "HOME") "/org/lib/"))
-#+END_SRC
-
-Set reftex default dir to bibtex library dir
-
-#+BEGIN_SRC emacs-lisp
-    (setq reftex-default-bibliography bib-files-directory)
-#+END_SRC
-
-Turn on reftex in markdown mode ([[https://www.gnu.org/software/auctex/manual/reftex.pdf][source]])
-
-#+BEGIN_SRC emacs-lisp
-  (add-hook 'markdown-mode-hook 'turn-on-reftex)
-#+END_SRC
-
-Set reftex format as shown [[https://stackoverflow.com/questions/13607156/autocomplete-pandoc-style-citations-from-a-bibtex-file-in-emacs][here]]
-
-#+BEGIN_SRC emacs-lisp
-  (eval-after-load 'reftex-vars
-  '(progn
-     (setq reftex-cite-format "@%l")))
-  ;; (setq bib-files-directory (directory-files
-  ;;                           (concat (getenv "HOME") "/org/bib") t
-  ;;                           "^[A-Z|a-z].+.bib$")
-  ;;      pdf-files-directory (concat (getenv "HOME") "/org/lib/"))
-#+END_SRC
-
-#+BEGIN_SRC emacs-lisp
-  (defconst p3/bib-library (list (concat (getenv "HOME") "/org/bib/main.bib")))
-  (defconst p3/pdf-library (list (concat (getenv "HOME") "/org/lib/")))
-#+END_SRC
-
-#+BEGIN_SRC emacs-lisp
-  (use-package citar
-    :no-require
-    :custom
-    (org-cite-global-bibliography p3/bib-library)
-    (org-cite-insert-processor 'citar)
-    (org-cite-follow-processor 'citar)
-    (org-cite-activate-processor 'citar)
-    (citar-bibliography org-cite-global-bibliography)
-    :config
-    (setq citar-bibliography p3/bib-library
-        citar-library-paths p3/pdf-library
-        citar-file-extensions '("pdf" "org" "md")
-        citar-file-open-function #'find-file)
-    ;; optional: org-cite-insert is also bound to C-c C-x C-@
-    :bind
-    (:map org-mode-map :package org ("C-c b" . #'org-cite-insert)))
-
-  (use-package citar-org-roam
-    :after (citar org-roam)
-    :config
-    (setq citar-org-roam-note-title-template "${author} - ${title}")
-    (setq citar-org-roam-capture-template-key "n")
-    (citar-org-roam-mode))
+  (p3/config-load-module 'p3-config-reference)
 #+END_SRC
 
 ** Completion-related

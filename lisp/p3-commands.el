@@ -26,12 +26,19 @@
      ("C-c l" . "load targets object")
      ("S-RET" . "evaluate and step"))
     ("Org"
-     ("C-c b" . "insert citation")
      ("C-c s" . "insert source block")
      ("C-c C-o" . "open link at point")
      ("C-c E" . "export Org file")
      ("C-c C-x C-o" . "sort TODO entries")
      ("C-c P" . "start presentation"))
+    ("References"
+     ("C-c b a" . "add reference")
+     ("C-c b f" . "find reference")
+     ("C-c b i" . "insert citation")
+     ("C-c b n" . "literature note")
+     ("C-c b p" . "open reference PDF")
+     ("C-c b t" . "classify / associate")
+     ("C-c b r" . "project references"))
     ("Presentation"
      ("SPC / right" . "next slide")
      ("DEL / left" . "previous slide")

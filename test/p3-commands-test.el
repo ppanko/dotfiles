@@ -51,6 +51,23 @@
     (should (equal (cdr (assoc "s-p" (cdr section)))
                    "native project commands"))))
 
+(ert-deftest p3-commands-atlas-describes-reference-prefix ()
+  (let ((section (assoc "References" p3/keybinding-sections)))
+    (should
+     (equal
+      (cdr section)
+      '(("C-c b a" . "add reference")
+        ("C-c b f" . "find reference")
+        ("C-c b i" . "insert citation")
+        ("C-c b n" . "literature note")
+        ("C-c b p" . "open reference PDF")
+        ("C-c b t" . "classify / associate")
+        ("C-c b r" . "project references"))))))
+
+(ert-deftest p3-commands-org-atlas-no-longer-owns-reference-prefix ()
+  (let ((section (assoc "Org" p3/keybinding-sections)))
+    (should-not (assoc "C-c b" (cdr section)))))
+
 (provide 'p3-commands-test)
 
 ;;; p3-commands-test.el ends here
