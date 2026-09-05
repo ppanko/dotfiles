@@ -376,13 +376,13 @@
         accepted))))
 
 (defun p3/reference--doi-in-string (string)
-  "Return a normalized DOI recognized directly in STRING, or nil."
+  "Return a normalized DOI when STRING is a direct DOI representation."
   (when (stringp string)
-    (let ((case-fold-search t))
-      (when (string-match
-             "\\(10\\.[0-9][0-9][0-9][0-9]+/[[:alnum:]._()/:;-]+\\)"
-             string)
-        (p3/reference-normalize-doi (match-string 1 string))))))
+    (let ((doi (p3/reference-normalize-doi string)))
+      (when (and doi
+                 (string-match-p
+                  "\\`10\\.[0-9][0-9][0-9][0-9]+/\\S-+\\'" doi))
+        doi))))
 
 (defun p3/reference--input-kind (input)
   "Classify INPUT as BibTeX, DOI, URL, or bibliographic search text."
@@ -395,16 +395,20 @@
      (t 'search))))
 
 (defun p3/reference--capture-url (url)
-  "Save URL immediately as a provisional offline reference."
-  (let ((key (p3/reference--new-provisional-key)))
-    (p3/reference--transaction
-     (lambda ()
-       (goto-char (point-max))
-       (unless (bolp) (insert "\n"))
-       (insert (format
-                "@online{%s,\n  url = {%s},\n  urldate = {%s},\n  keywords = {status/inbox}\n}\n"
-                key url (format-time-string "%Y-%m-%d")))))
-    key))
+  "Save URL immediately unless it already exists in the canonical library."
+  (let ((duplicate
+         (p3/reference--strong-duplicate-key `(("url" . ,url)))))
+    (if duplicate
+        duplicate
+      (let ((key (p3/reference--new-provisional-key)))
+        (p3/reference--transaction
+         (lambda ()
+           (goto-char (point-max))
+           (unless (bolp) (insert "\n"))
+           (insert (format
+                    "@online{%s,\n  url = {%s},\n  urldate = {%s},\n  keywords = {status/inbox}\n}\n"
+                    key url (format-time-string "%Y-%m-%d")))))
+        key))))
 
 (defun p3/reference--lookup-doi (input &optional target-key)
   "Look up DOI from INPUT and import it, or merge into TARGET-KEY."
