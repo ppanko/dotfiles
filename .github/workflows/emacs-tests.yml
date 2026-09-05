@@ -88,7 +88,7 @@ jobs:
             --eval '(provide (quote org-roam))' \
             -l lisp/p3-config-loader.el \
             -l lisp/p3-config-org-roam.el \
-            --eval '(unless (and (featurep (quote p3-config-org-roam)) (featurep (quote p3-org-roam)) (equal org-roam-directory "~/org/notes/roam/")) (kill-emacs 1))'
+            --eval '(unless (and (featurep (quote p3-config-org-roam)) (featurep (quote p3-org-roam)) (fboundp (quote p3/org-roam-get-agenda))) (kill-emacs 1))'
 
       - name: Smoke-load Org presentation configuration boundary
         run: |
@@ -104,7 +104,7 @@ jobs:
             --eval '(provide (quote org-present))' \
             -l lisp/p3-config-loader.el \
             -l lisp/p3-config-org-present.el \
-            --eval '(unless (and (featurep (quote p3-config-org-present)) (featurep (quote p3-org-present)) (featurep (quote face-remap)) (equal org-present-text-scale 4)) (kill-emacs 1))'
+            --eval '(unless (and (featurep (quote p3-config-org-present)) (featurep (quote p3-org-present)) (featurep (quote face-remap)) (fboundp (quote p3/org-present-start))) (kill-emacs 1))'
 
       - name: Run ERT test suite
         run: |
