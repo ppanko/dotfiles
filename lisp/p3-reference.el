@@ -653,9 +653,13 @@
           (citar-select-ref))))))
 
 (defun p3/reference--key-at-point ()
-  "Return the Citar citekey at point when one is available."
+  "Return the canonical Citar citekey at point when one is available."
   (when (require 'citar nil t)
-    (ignore-errors (citar-key-at-point))))
+    (let ((key (ignore-errors (citar-key-at-point))))
+      (when (and key
+                 (or (not (p3/reference--bibliography-configured-p))
+                     (p3/reference--entry-alist key)))
+        key))))
 
 (defun p3/reference-open-url (citekey)
   "Open CITEKEY's canonical URL, falling back to its DOI URL."
