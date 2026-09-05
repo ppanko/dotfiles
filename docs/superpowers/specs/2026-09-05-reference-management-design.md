@@ -12,7 +12,7 @@ The system must make common reference operations easier than the current ad hoc 
 
 The system must support these common workflows:
 
-1. Save an interesting publication when only a URL, DOI, title/search result, or complete citation is available.
+1. Save an interesting publication when only a URL, DOI, title/search result, pasted formatted citation, or complete BibTeX/BibLaTeX record is available.
 2. Keep general-interest references without forcing a project assignment.
 3. Search the entire reference library by title, author, year, topic, or status.
 4. Search the references associated with a particular Org-roam project.
@@ -85,11 +85,33 @@ status/to-read
 status/read
 ```
 
+These keywords are descriptive metadata. They do not determine whether a record is technically provisional or mature.
+
 Project membership is deliberately not stored as bibliography metadata.
 
-### Citekeys
+### Provisional records and citekeys
 
-The citekey is the stable join across the system:
+A record is technically provisional if and only if its citekey uses the reserved prefix:
+
+```text
+p3-inbox-
+```
+
+For example:
+
+```text
+p3-inbox-20260905-140501
+```
+
+This reserved prefix is the sole machine-readable provisional-state contract. A `status/inbox` keyword may also be present for human workflow purposes, but commands must not use that keyword to decide whether a record is provisional.
+
+A provisional record cannot be cited, receive a literature note, be associated with a project, or receive a citekey-based PDF attachment directory.
+
+Finalization proposes a deterministic permanent citekey from mature bibliographic metadata. The proposed key is shown to the user before acceptance and may be edited at that point. The exact author/year/title formatting convention is configuration, not corpus structure.
+
+After finalization, the citekey is immutable within v1. The v1 reference workflow does not provide mature-citekey renaming or migration. If that need arises later, it requires a separately designed migration operation because the key may already appear in Org citations, `ROAM_REFS`, project reference registries, and PDF paths.
+
+The mature citekey is the stable join across the system:
 
 ```text
 BibLaTeX        @fellegi1969
@@ -98,17 +120,11 @@ Literature note :ROAM_REFS: @fellegi1969
 PDF directory   ~/papers/fellegi1969/
 ```
 
-A provisional URL-only inbox record may have a temporary key, but it cannot become part of the durable knowledge graph until the key is finalized. A provisional reference cannot be cited, receive a literature note, be associated with a project, or receive a citekey-based PDF attachment directory.
-
-Finalization uses a deterministic BibTeX autokey convention based on mature bibliographic metadata. The proposed permanent key is shown before it is accepted and may be edited at that point. The exact author/year/title formatting convention is configuration, not corpus structure.
-
-After finalization, citekeys are effectively immutable. Changing one is an explicit migration operation, never a side effect of enrichment.
-
 ### PDFs
 
 PDFs remain outside Git and outside the bibliography's consistency model.
 
-Use a configurable attachment root and a deterministic citekey-based layout:
+Use a configurable attachment root and a deterministic mature-citekey layout:
 
 ```text
 ~/papers/
@@ -144,7 +160,7 @@ The bibliography owns bibliographic facts. The literature note owns the user's i
 
 Project relationships belong in the Org knowledge graph, not in `references.bib`.
 
-A machine-readable `project` Org-roam tag identifies project notes. Each project note uses one top-level `* References` subtree as the canonical explicit association list:
+A machine-readable `project` Org-roam tag identifies project notes. Each project note uses one top-level `* References` subtree as the canonical explicit association registry:
 
 ```org
 #+title: SAIDS
@@ -156,9 +172,11 @@ A machine-readable `project` Org-roam tag identifies project notes. Each project
 [cite:@smith2024]
 ```
 
-The reference workflow creates the `* References` subtree when necessary and keeps associations unique. `C-c b r` reads this subtree, rather than treating every narrative citation elsewhere in the project note as an automatic project association.
+The reference workflow creates the `* References` subtree when necessary and keeps associations unique. `C-c b r` reads this subtree rather than treating every narrative citation elsewhere in the project note as an automatic project association.
 
-This keeps ordinary prose citations semantically distinct from the explicit project-reference registry while leaving the registry itself as plain Org citation text.
+The registry intentionally uses real native Org citations. Org and Org-roam may therefore index these entries as citations and expose their citation backlinks. That behavior is part of the design, not an implementation accident.
+
+Ordinary narrative citations elsewhere in the project note remain semantically distinct from the explicit project-reference registry.
 
 One reference may therefore relate to zero, one, or many projects without duplicating or modifying the bibliographic record.
 
@@ -170,6 +188,8 @@ Project association and literature-note creation remain independent. A project m
 
 Expose one stable reference prefix, initially `C-c b`. Package-specific commands should remain implementation details.
 
+This intentionally replaces the current Org-local `C-c b` binding that directly invokes `org-cite-insert`. Citation insertion moves to `C-c b i`. Tests should pin this transition so it is not an incidental side effect of deleting the old citation block.
+
 ### `C-c b a` — add reference
 
 Accept the material the user already has rather than forcing a capture mode first.
@@ -178,16 +198,17 @@ Recognize these inputs:
 
 - DOI -> metadata lookup;
 - BibTeX/BibLaTeX -> normalize and import;
-- URL -> attempt enrichment, otherwise save URL-only;
-- ordinary title/author text -> bibliographic search.
+- URL -> extract/use a DOI when one is directly recognizable; otherwise save immediately as a provisional URL-only record;
+- ordinary title/author text -> bibliographic search;
+- pasted formatted citation text -> treat as bibliographic search input and present structured matches; do not parse arbitrary citation styles into records directly.
 
-Capture follows **save first, enrich second**. Network or metadata lookup failure must not prevent saving a URL-only inbox record.
+Capture follows **save first, enrich second**. Network or metadata lookup failure must not prevent saving a URL-only provisional record.
 
-Google Scholar is treated as an import source, not as a scraped dependency. The supported low-friction path is Scholar's BibTeX export copied into `C-c b a`.
+Google Scholar is treated as an import source, not as a scraped dependency. The supported low-friction path is Scholar's BibTeX export copied into `C-c b a`; a copied formatted Scholar citation may instead be used as search input.
 
 ### `C-c b f` — find reference
 
-Fuzzy-search the complete library by useful bibliographic fields and keywords.
+Fuzzy-search the complete library by useful bibliographic fields and keywords. An empty query must allow browsing the full library, so v1 does not need a separate library command.
 
 This is the central retrieval interface. A selected reference exposes actions such as:
 
@@ -210,7 +231,7 @@ Search the same library and insert native Org citation syntax, e.g.:
 
 Documents must not depend on Citar-specific citation syntax.
 
-If the selected record is still provisional, citation insertion first enters the explicit finalization flow.
+If the selected record is provisional, citation insertion first enters the explicit finalization flow.
 
 ### `C-c b n` — literature note
 
@@ -224,7 +245,7 @@ Repeated invocation must not create duplicate literature notes.
 
 ### `C-c b p` — open PDF
 
-Resolve the selected citekey to its attachment directory and open `main.pdf` when present.
+Resolve the selected mature citekey to its attachment directory and open `main.pdf` when present.
 
 If the selected record is provisional and an attachment is being added, finalize it first. Missing attachment root or PDF is a normal condition, not a knowledge-base error.
 
@@ -251,22 +272,19 @@ When invoked from an Org-roam project note:
 
 If the current context is not an unambiguous project, prompt for a project note.
 
-### `C-c b l` — library
-
-Provide a full-library browsing entry point. It should reuse the same reference candidates and actions as `C-c b f`, not create a second database UI.
-
 ## Capture and enrichment
 
 Use `biblio.el` where it provides stable bibliographic search/lookup functionality, especially DOI/title lookup through sources such as Crossref. Do not reimplement remote metadata protocols in `p3-reference.el`.
+
+V1 does not implement a generic webpage metadata scraper or site-specific URL enrichment engine. URL capture may use a DOI directly recognizable in the URL or supplied metadata; otherwise the URL is saved immediately as a provisional record. Later enrichment proceeds through DOI or title search.
 
 Enrichment may run opportunistically during capture and explicitly later.
 
 Preferred lookup order for an incomplete record:
 
 1. DOI when present;
-2. metadata available from the URL through a supported resolver;
-3. title search;
-4. manual editing.
+2. title/author search;
+3. manual editing.
 
 Enrichment may fill blank fields automatically. It must not silently overwrite populated user data when the retrieved value differs materially.
 
@@ -282,9 +300,28 @@ Strong duplicates should lead to the existing record rather than add a second co
 
 The design prefers a visible possible duplicate over an incorrect automatic merge.
 
+## Bibliography mutation and validation
+
+The workflow modifies a durable Git-friendly text file, so mutations must preserve unrelated bibliography text where practical.
+
+Library-writing commands should perform targeted entry-level edits or append/import operations rather than parse and reserialize the entire bibliography on every mutation. Unrelated entries, comments, ordering, and formatting should remain byte-for-byte unchanged where the underlying operation permits it.
+
+Before committing a mutation to `references.bib`:
+
+1. write the candidate result to a temporary file in the same filesystem;
+2. parse it using established BibTeX/BibLaTeX support sufficient to detect syntactic invalidity;
+3. verify citekey uniqueness;
+4. only then replace the original file atomically.
+
+If validation fails, leave the original bibliography untouched and retain no hidden package state as an alternative source of truth.
+
+V1 does not attempt to implement a complete semantic BibLaTeX validator.
+
 ## PDF reading and annotations
 
 `pdf-tools` belongs in the initial subsystem because the intended workflow includes reading stored papers in Emacs and opening them from reference actions.
+
+PDF support is optional at runtime. The reference subsystem must not eagerly require or initialize `pdf-tools` in a way that makes startup or bibliography/citation functions fail when its native backend is unavailable. PDF support should load lazily when a PDF action is invoked or when a PDF buffer is opened; missing native support is reported locally to that action.
 
 Precise source-linked annotation is deferred from v1.
 
@@ -319,7 +356,7 @@ Reference features should degrade independently:
 - missing PDF -> report unavailable and continue;
 - unavailable network -> local library/citation functions continue and URL/BibTeX capture remains possible;
 - unavailable Org-roam -> bibliography and citation functions continue, literature-note action reports the missing capability;
-- unavailable optional PDF support -> bibliography and citation functions continue.
+- unavailable or broken PDF support -> bibliography and citation functions continue.
 
 The bibliography subsystem must not make normal Emacs startup fail merely because reference resources are absent.
 
@@ -335,7 +372,7 @@ Own declarative/package wiring:
 - Citar package configuration;
 - Org-cite processor configuration;
 - Biblio setup;
-- pdf-tools setup;
+- lazy/non-fatal pdf-tools setup;
 - `C-c b` prefix exposure;
 - exact-source load of `p3-reference.el` before wiring its commands.
 
@@ -344,22 +381,25 @@ Own declarative/package wiring:
 Own reusable workflow behavior:
 
 - capture/import orchestration;
+- provisional-key generation and finalization guards;
 - duplicate checks;
 - enrichment orchestration;
+- targeted bibliography mutations and validation orchestration;
 - reference lookup/action helpers;
-- citekey finalization guards;
 - literature-note lookup/creation;
 - project association/removal;
 - project-reference retrieval;
 - attachment-path resolution/opening.
 
-The behavior layer should use established package APIs for bibliography parsing, completion, Org-roam access, and metadata retrieval. It must not become a private bibliography database or remote metadata implementation.
+The behavior layer should use established package APIs for bibliography parsing, completion, Org-roam access, and metadata retrieval. It must not become a private bibliography database, generic webpage scraper, or remote metadata implementation.
 
 ## Existing citation configuration
 
 The current BibTeX/RefTeX/Citar block is treated as abandoned experimental configuration, not behavior that must be preserved.
 
 The implementation should remove obsolete or overlapping citation machinery unless a current user-facing behavior is identified and intentionally carried forward.
+
+The current Org-local `C-c b` -> `org-cite-insert` binding is intentionally retired in favor of the reference prefix; native citation insertion remains available through `C-c b i` and Org's own standard citation commands.
 
 Initial exclusions include:
 
@@ -372,6 +412,7 @@ Initial exclusions include:
 - helm-bibtex/ivy-bibtex;
 - custom database formats;
 - custom browser scraping;
+- mature-citekey migration machinery;
 - built-in PDF synchronization.
 
 These are not permanently forbidden. They may be introduced later only to solve an observed problem that the simpler architecture does not handle well.
@@ -379,16 +420,18 @@ These are not permanently forbidden. They may be introduced later only to solve 
 ## Integrity invariants
 
 1. `references.bib` must remain valid BibLaTeX after every successful mutation.
-2. Library mutations write and validate a temporary result before atomically replacing the original file; failed validation leaves the original untouched.
-3. Mature citekeys are unique and effectively immutable.
-4. Provisional records cannot be cited, linked to literature notes, associated with projects, or assigned citekey-based attachment paths until finalized.
-5. Enrichment may fill missing metadata automatically but may not silently overwrite populated conflicting data.
-6. DOI and normalized-URL equality may identify strong duplicates; title similarity may only warn.
-7. Project associations are represented only by unique citekeys in the canonical `* References` subtree of project notes; narrative citations elsewhere do not implicitly modify that registry.
-8. Optional package state is never required to reconstruct citation identity, literature-note links, or project associations.
-9. Missing PDFs do not invalidate references or notes.
-10. Network failure does not block local retrieval or basic capture.
-11. Package-specific PDF annotation state must remain supplemental to durable Org text.
+2. Library mutations preserve unrelated bibliography text where practical, validate a temporary candidate, verify unique citekeys, and atomically replace the original only after validation succeeds.
+3. A citekey beginning with `p3-inbox-` is provisional; no other field determines provisional state.
+4. Mature citekeys are unique and immutable in v1; mature-key rename/migration is unsupported.
+5. Provisional records cannot be cited, linked to literature notes, associated with projects, or assigned citekey-based attachment paths until finalized.
+6. Enrichment may fill missing metadata automatically but may not silently overwrite populated conflicting data.
+7. DOI and normalized-URL equality may identify strong duplicates; title similarity may only warn.
+8. Project associations are represented only by unique native Org citations in the canonical `* References` subtree of project notes; narrative citations elsewhere do not implicitly modify that registry.
+9. Citation indexing/backlinks produced by the project registry are intentional.
+10. Optional package state is never required to reconstruct citation identity, literature-note links, or project associations.
+11. Missing PDFs do not invalidate references or notes.
+12. Network failure does not block local retrieval or basic capture.
+13. Package-specific PDF annotation state must remain supplemental to durable Org text.
 
 ## Testing strategy
 
@@ -399,22 +442,31 @@ Focused automated coverage should include:
 - safe creation of an empty bibliography;
 - valid BibLaTeX import;
 - malformed import rejected without modifying the library;
-- URL-only capture creates an inbox record;
+- targeted mutation preserves unrelated bibliography text;
+- duplicate citekeys are rejected before atomic replacement;
+- URL-only capture creates a `p3-inbox-*` provisional record;
+- `status/inbox` alone does not make a mature citekey provisional;
 - DOI duplicate detection;
 - normalized-URL duplicate detection;
 - similar-title warning without automatic merge;
+- formatted citation text is treated as search input rather than parsed directly;
+- generic URL capture does not depend on webpage scraping;
 - enrichment fills missing fields without overwriting populated fields;
 - finalization presents a deterministic proposed citekey and accepts an explicit user choice;
 - finalized citekey cannot change as an incidental enrichment side effect;
+- mature citekey rename is not exposed by the v1 workflow;
 - provisional record cannot be cited, linked, project-associated, or attached before finalization;
 - citation insertion emits native Org citation syntax;
+- `C-c b` is the reference prefix and `C-c b i` performs citation insertion;
 - literature-note creation writes the correct `ROAM_REFS`;
 - repeated note creation opens the existing note;
 - project association creates/uses the canonical `* References` subtree and is idempotent;
+- project-registry citations are ordinary Org citations and remain indexable;
 - narrative citations outside that subtree do not become project associations;
 - project-reference retrieval resolves the intended bibliography subset;
-- attachment lookup follows the citekey directory convention;
-- missing PDF root/PDF/network/optional packages degrade without corrupting state;
+- attachment lookup follows the mature-citekey directory convention;
+- missing PDF root/PDF/network/Org-roam degrade without corrupting state;
+- missing or unusable pdf-tools backend does not prevent reference configuration or citation functions from loading;
 - configuration loads without requiring the user's bibliography or PDFs to exist at startup.
 
 A durable architecture regression should prove that, given only `references.bib` and the Org corpus, reference identity, citations, literature-note relationships, and project associations remain reconstructable without Citar, Biblio, pdf-tools, or `p3-reference` private state.
@@ -427,24 +479,28 @@ V1 includes:
 - `p3-config-reference.el` and `p3-reference.el`;
 - Citar-based retrieval/actions;
 - native Org-cite insertion;
-- Biblio-backed acquisition/enrichment where practical;
+- Biblio-backed DOI/title acquisition and enrichment where practical;
 - URL/BibLaTeX capture that survives network failure;
-- explicit citekey finalization before durable relationships are created;
+- formatted-citation-to-search workflow;
+- explicit provisional-key contract and citekey finalization before durable relationships are created;
+- targeted, validated, atomic bibliography mutations;
 - literature-note creation/opening through Org-roam;
 - project association and project-scoped retrieval through canonical Org project-note reference subtrees;
 - citekey-based PDF directory convention;
-- pdf-tools reading integration;
+- lazy/non-fatal pdf-tools reading integration;
 - focused regression tests and existing architecture/CI integration.
 
 V1 explicitly defers:
 
 - browser extension/integration;
 - Google Scholar scraping;
+- generic webpage metadata scraping;
 - automatic PDF acquisition;
 - PDF synchronization;
 - precise PDF-to-Org annotation synchronization;
 - org-noter/org-pdftools adoption;
 - external reference-manager integration;
+- mature-citekey migration/rename tooling;
 - a custom standalone bibliography database UI.
 
 ## Success criterion
