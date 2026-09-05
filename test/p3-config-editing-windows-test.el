@@ -3,6 +3,13 @@
 (require 'ert)
 (require 'use-package-ensure)
 
+(defvar p3/windows-hunspell-program)
+(defvar p3/windows-hunspell-dictionary-directory)
+(defvar ispell-program-name)
+(defvar ispell-local-dictionary)
+(defvar ispell-dictionary)
+(defvar ispell-local-dictionary-alist)
+
 (defconst p3-config-editing-windows-test--root
   (file-name-directory
    (directory-file-name
@@ -17,6 +24,11 @@
 (load-file
  (expand-file-name "lisp/p3-config-editing.el"
                    p3-config-editing-windows-test--root))
+
+;; smartparens is intentionally absent from the bare CI Emacs.  Loading the
+;; owner still installs its hook, so remove that unrelated hook before ERT
+;; creates diagnostic Emacs Lisp buffers.
+(remove-hook 'prog-mode-hook #'smartparens-mode)
 
 (ert-deftest p3-config-editing-windows-spelling-uses-rtools-hunspell ()
   "Spelling setup should consume the Hunspell paths discovered by Rtools."
