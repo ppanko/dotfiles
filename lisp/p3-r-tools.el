@@ -56,7 +56,6 @@
 (defconst p3-r--common-project-files
   '((:path "{{project-name}}.Rproj" :template "project.Rproj.tmpl")
     (:path ".gitignore" :template "gitignore.tmpl")
-    (:path ".projectile" :content "")
     (:path "R/01_prepareData.R" :template "script.R.tmpl"
            :title "Preprocess data")
     (:path "R/02_computeResults.R" :template "script.R.tmpl"
