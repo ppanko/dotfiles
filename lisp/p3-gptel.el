@@ -208,16 +208,18 @@ its existing list rather than replace a local plist binding."
   (interactive)
   (p3/gptel-send-task "Translate Code" 'append))
 
-(defvar p3/gptel-command-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "l") #'p3/gptel-send-current-line)
-    (define-key map (kbd "r") #'p3/gptel-refactor-region)
-    (define-key map (kbd "d") #'p3/gptel-generate-doc)
-    (define-key map (kbd "t") #'p3/gptel-write-tests)
-    (define-key map (kbd "c") #'p3/gptel-translate-code)
-    (define-key map (kbd "w") #'p3/gptel-write-code)
-    map)
+(defvar p3/gptel-command-map nil
   "Prefix map for project-local GPTel tasks.")
+
+(setq p3/gptel-command-map
+      (let ((map (make-sparse-keymap)))
+        (define-key map (kbd "l") #'p3/gptel-send-current-line)
+        (define-key map (kbd "r") #'p3/gptel-refactor-region)
+        (define-key map (kbd "d") #'p3/gptel-generate-doc)
+        (define-key map (kbd "t") #'p3/gptel-write-tests)
+        (define-key map (kbd "c") #'p3/gptel-translate-code)
+        (define-key map (kbd "w") #'p3/gptel-write-code)
+        map))
 
 (defun p3/gptel-setup ()
   "Install the global key prefix for custom GPTel tasks."
