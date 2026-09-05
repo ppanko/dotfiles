@@ -189,6 +189,7 @@
         (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
                   ((symbol-function 'org-roam-node-from-ref) (lambda (_ref) nil))
                   ((symbol-function 'org-id-new) (lambda () "note-id"))
+                  ((symbol-function 'citar-get-value) (lambda (&rest _) "Alpha Study"))
                   ((symbol-function 'find-file) #'ignore))
           (should-error
            (p3/reference-note "alpha:2020")
