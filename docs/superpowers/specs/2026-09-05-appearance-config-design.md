@@ -75,7 +75,7 @@ early orchestration
   -> remaining configuration modules
 ```
 
-Loading appearance before base has one practical benefit: `nerd-icons` is available before Dashboard and Dired integrations in `p3-config-base.el` are configured. No configuration module references another configuration module, so this is top-level sequencing rather than a module dependency.
+Loading appearance before base has one practical benefit: `nerd-icons` is available before Dashboard and Dired integrations in `p3-config-base.el` are configured. The appearance module's `nerd-icons` declaration should therefore be eager (`:demand t` or equivalent): the appearance module itself uses the package for the mode line, and base follows immediately with supported Dashboard/Dired integrations. Base must not call appearance-specific helper functions, so this remains top-level sequencing rather than a configuration-module dependency.
 
 `p3-config-appearance.el` owns:
 
@@ -161,6 +161,17 @@ When Nerd Font rendering is available:
 - major-mode identity uses the corresponding `nerd-icons` mode icon where available.
 
 The file name and mode name remain textual, so the icon never becomes the only carrier of identity.
+
+### Narrow-window behavior
+
+The mode line must degrade deliberately rather than simply overflow. Keep the implementation simple:
+
+- preserve the actual filename before parent-path detail when shortening project-relative identity;
+- preserve line/column position;
+- allow lower-priority detail such as encoding/EOL text or extended diagnostic/process text to disappear or shorten in narrow windows;
+- use only a small number of direct width checks rather than a generic priority/segment engine.
+
+This is a readability rule, not a request for a dynamic layout framework.
 
 ### Git and diagnostics
 
