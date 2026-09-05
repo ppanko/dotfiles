@@ -160,6 +160,41 @@
              :type 'user-error)))
       (delete-directory directory t))))
 
+(ert-deftest p3-reference-import-rejects-new-nonportable-mature-citekey ()
+  (let* ((directory (make-temp-file "p3-import-portable-" t))
+         (p3/reference-bibliography-file
+          (expand-file-name "references.bib" directory)))
+    (unwind-protect
+        (progn
+          (should-error
+           (p3/reference-import-bibtex
+            "@article{alpha:2020, title={Alpha Study}}")
+           :type 'user-error)
+          (should-not (file-exists-p p3/reference-bibliography-file)))
+      (delete-directory directory t))))
+
+(ert-deftest p3-reference-pdf-path-rejects-legacy-nonportable-mature-citekey ()
+  (let* ((directory (make-temp-file "p3-pdf-portable-" t))
+         (p3/reference-pdf-directory directory))
+    (unwind-protect
+        (should-error
+         (p3/reference-pdf-path "alpha:2020")
+         :type 'user-error)
+      (delete-directory directory t))))
+
+(ert-deftest p3-reference-note-rejects-legacy-nonportable-mature-citekey ()
+  (let* ((directory (make-temp-file "p3-note-portable-" t))
+         (org-roam-directory directory))
+    (unwind-protect
+        (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
+                  ((symbol-function 'org-roam-node-from-ref) (lambda (_ref) nil))
+                  ((symbol-function 'org-id-new) (lambda () "note-id"))
+                  ((symbol-function 'find-file) #'ignore))
+          (should-error
+           (p3/reference-note "alpha:2020")
+           :type 'user-error))
+      (delete-directory directory t))))
+
 (provide 'p3-reference-reconstruction-test)
 
 ;;; p3-reference-reconstruction-test.el ends here
