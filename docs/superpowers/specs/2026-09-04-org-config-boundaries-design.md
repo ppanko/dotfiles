@@ -16,7 +16,7 @@ The remaining Org area in `config.org` combines several distinct responsibilitie
 - Org-roam helper behavior for tagged note insertion, ripgrep search, tag filtering, note enumeration, and agenda construction;
 - Org presentation package wiring plus substantial stateful presentation behavior.
 
-`lisp/p3-org-export.el` is already a focused reusable behavior library and has its own tests. It should remain intact.
+`lisp/p3-org-export.el` is already a focused reusable behavior library and has its own tests. It should remain intact and retain its current loading/reload semantics.
 
 Citation/BibTeX/RefTeX configuration and LaTeX configuration are adjacent to Org functionality but have distinct dependencies and ownership. They are deliberately excluded from this PR.
 
@@ -29,7 +29,7 @@ config.org
   |
   +--> p3-config-org
   |      +--> p3-org
-  |      +--> p3-org-export   ; existing library, unchanged
+  |      +--> p3-org-export   ; existing library, activated as today
   |
   +--> p3-config-org-roam
   |      +--> p3-org-roam
@@ -74,18 +74,28 @@ The commented-out `org-bullets` block has no runtime effect and does not need to
 
 The existing anonymous timestamp-on-save hook is preserved as an anonymous hook form in this PR. Do not opportunistically name, deduplicate, or otherwise change its reload behavior while moving it.
 
-### Existing exporter timing
+### Existing exporter timing and reload behavior
 
-`p3-org-export.el` already requires Org. Therefore `p3-config-org.el` must not exact-source load it at module entry.
+`p3-org-export.el` already requires Org and is currently activated through:
+
+```elisp
+(use-package p3-org-export
+  :ensure nil
+  :demand t
+  :config
+  (p3-org-export-setup))
+```
+
+That activation form moves into `p3-config-org.el` unchanged in substance. The configuration module must **not** exact-source load `p3-org-export.el` through `p3/config-load-module`.
 
 The current order is preserved semantically:
 
 1. establish the Org core settings/hooks and evaluate the existing `use-package org` declaration, including Babel setup;
 2. define/bind the extracted core Org commands;
-3. at the point corresponding to the current `use-package p3-org-export` block, exact-source load `p3-org-export.el` and call `p3-org-export-setup`;
-4. continue with the remaining Org settings such as PDF opening, TODO configuration, and agenda configuration in their current relative order where that order can be observed.
+3. evaluate the existing `use-package p3-org-export` activation at the point where it exists today;
+4. continue with PDF opening, TODO configuration, and agenda configuration in their current relative order where that order can be observed.
 
-This keeps the exporter reloadable through `C-c r` without moving its `require 'org` side effect earlier in startup.
+This preserves both startup timing and current reload behavior. `C-c r` will re-evaluate the moved `use-package p3-org-export` declaration just as it re-evaluates that declaration today, but it will not gain new exact-source reload semantics for the exporter implementation.
 
 `p3-org-export.el` itself is unchanged in this PR.
 
@@ -138,13 +148,14 @@ The library may require generic built-ins such as `seq` and `subr-x`, but it mus
 
 The agenda helper retains its existing semantics: prompt for a tag, set `org-agenda-files` to all Roam notes or only tagged notes, then invoke `org-agenda`.
 
+The current nonblank branch of `org-roam-generate-tagged-header` produces a header string whose final line ends with a stray `#`. That output is odd but observable behavior. This structural PR preserves it exactly and tests for it explicitly rather than silently correcting it.
+
 ## `p3-config-org-present.el`
 
 `lisp/p3-config-org-present.el` becomes the declarative presentation owner. It preserves:
 
 - `use-package hide-mode-line` with the current `:after (org-present)` relationship;
 - `use-package visual-fill-column`;
-- the current `face-remap` availability before presentation behavior is exercised;
 - the existing `use-package org-present` declaration;
 - `C-c P` from `org-mode-map`;
 - all current presentation-mode navigation/fullscreen/quit bindings;
@@ -155,11 +166,10 @@ The module preserves the current executable sequence exactly in substance:
 
 1. declare `hide-mode-line` with `:after (org-present)`;
 2. declare/load `visual-fill-column` as it is loaded today;
-3. require built-in `face-remap`;
-4. exact-source load `p3-org-present.el` so the presentation commands/state functions exist;
-5. evaluate the `use-package org-present` declaration that binds those commands and installs the existing hooks.
+3. exact-source load `p3-org-present.el`, which itself requires built-in `face-remap` before defining the presentation behavior;
+4. evaluate the `use-package org-present` declaration that binds those commands and installs the existing hooks.
 
-This sequence avoids moving `face-remap`, `visual-fill-column`, or presentation behavior across a package-loading boundary merely because the code is being extracted.
+This keeps `face-remap` at the same effective point in the sequence while giving the behavior library direct ownership of the built-in dependency it actually calls.
 
 No new display-buffer or window-placement policy is introduced.
 
@@ -174,6 +184,8 @@ No new display-buffer or window-placement policy is introduced.
 - `p3/org-present-quit-hook`;
 - `p3/org-present-prev`;
 - `p3/org-present-next`.
+
+The library directly requires built-in `face-remap`, because its enter/quit behavior calls `face-remap-add-relative` and `face-remap-remove-relative`. It must not rely on its configuration owner having loaded that dependency incidentally.
 
 The exact presentation behavior is frozen:
 
@@ -229,23 +241,24 @@ Specifically:
 - the earlier Citar/BibTeX/RefTeX configuration stays where it is;
 - `citar-org-roam` remains outside the new Roam module and retains its `:after` relationship;
 - LaTeX configuration stays where it is;
-- the existing Pandoc exporter implementation stays unchanged;
+- the existing Pandoc exporter implementation and its current loading/reload semantics stay unchanged;
 - no keybindings are renamed or moved to new keys;
 - no Org Babel language is added or removed;
 - Babel confirmation remains enabled;
 - no agenda workflow is redesigned;
 - no Roam path/template/database behavior is redesigned;
+- the stray trailing `#` in nonblank tagged Roam headers is preserved;
 - no presentation UX is redesigned;
 - no broad window-management rule is introduced;
 - no anonymous hooks, legacy function names, or other odd-but-working forms are opportunistically normalized merely because they move files.
 
 ## Exact-Source Reload Semantics
 
-The new configuration modules are loaded through `p3/config-load-module`, so `C-c r` re-evaluates their current tracked source.
+The three new configuration modules are loaded through `p3/config-load-module`, so `C-c r` re-evaluates their current tracked source.
 
-Each new configuration owner also exact-source loads its behavior library so edits to `p3-org.el`, `p3-org-roam.el`, and `p3-org-present.el` are picked up by configuration reload, matching the pattern already used for migrated ESS/Python behavior boundaries.
+Each new configuration owner exact-source loads its newly extracted behavior library so edits to `p3-org.el`, `p3-org-roam.el`, and `p3-org-present.el` are picked up by configuration reload, matching the pattern already used for migrated ESS/Python behavior boundaries.
 
-`p3-org-export.el` is exact-source loaded at its preserved activation point within `p3-config-org.el`, so exporter edits also remain visible to reload without moving Org loading earlier.
+The existing exporter is the deliberate exception. `p3-config-org.el` retains the current `use-package p3-org-export :demand t` activation instead of exact-source loading `p3-org-export.el`, so this PR does not change exporter implementation reload semantics.
 
 No module registry, scanning, autoload framework, or recursive generic reload mechanism is added.
 
@@ -270,7 +283,7 @@ Add source-semantic tests for `p3-config-org.el` that verify:
 - Org visual/source settings and ellipsis are unchanged;
 - `C-c s` and `C-c C-x C-o` remain bound to the same behavior;
 - the anonymous timestamp hook remains behaviorally unchanged;
-- `p3-org-export.el` is loaded/activated after the Org declaration rather than at module entry;
+- the existing `use-package p3-org-export` activation remains after the Org declaration and is not replaced with exact-source loading;
 - Linux PDF handling remains unchanged;
 - TODO keywords/faces remain unchanged;
 - Org Agenda sorting remains `priority-down`.
@@ -279,7 +292,8 @@ Add source-semantic tests for `p3-config-org.el` that verify:
 
 Add focused tests for `p3-org-roam.el` using stubs rather than a real Org-roam database. Cover at minimum:
 
-- tagged-header output for blank and nonblank tags;
+- tagged-header output for a blank tag;
+- the exact nonblank tagged-header string, including its current trailing `#`;
 - tag predicate behavior;
 - note enumeration from stubbed nodes;
 - tagged note filtering;
@@ -305,6 +319,7 @@ Tests should not create a real Roam database or depend on the user's notes direc
 
 Add focused tests for `p3-org-present.el` with external presentation/display functions stubbed. Cover at minimum:
 
+- direct ownership of the built-in `face-remap` dependency;
 - non-Org start rejection;
 - fullscreen toggle behavior;
 - enter hook captures relevant prior buffer state and applies presentation state;
@@ -318,7 +333,7 @@ The state-restoration test is important because moving these functions is the hi
 Source-semantic tests should pin:
 
 - package relationships for `hide-mode-line`, `visual-fill-column`, and `org-present`;
-- the exact sequence `hide-mode-line -> visual-fill-column -> face-remap -> p3-org-present -> org-present`;
+- the exact effective sequence `hide-mode-line -> visual-fill-column -> p3-org-present[face-remap] -> org-present`;
 - all current presentation bindings;
 - both presentation hooks;
 - `org-present-text-scale 4`.
@@ -335,18 +350,31 @@ Update `test/p3-config-test.el` to verify:
 - Org Babel's Python/R/etc. references are not mistaken for configuration-ownership leaks;
 - `p3-org-export.el` remains a behavior library rather than being folded into a new module.
 
+### Runtime-load smoke tests
+
+The CI design must verify evaluation, not only parsing and byte compilation.
+
+Ubuntu should smoke-load each new configuration owner in batch Emacs with package installation suppressed:
+
+- `p3-config-org.el` must evaluate successfully and provide `p3-config-org` and `p3-org` while preserving the expected core Org configuration state;
+- `p3-config-org-roam.el` must evaluate successfully with the optional Org-roam package surface stubbed/provided by the test harness rather than installed, and must provide both `p3-config-org-roam` and `p3-org-roam`;
+- `p3-config-org-present.el` must evaluate successfully with `hide-mode-line`, `visual-fill-column`, and `org-present` package surfaces stubbed/provided by the harness rather than installed, and must provide both `p3-config-org-present` and `p3-org-present`.
+
+The smoke harness must avoid opening a real Roam database, touching the user's notes directory, starting presentation mode, or installing optional third-party packages. Its purpose is to catch load-order, missing-variable, missing-function, and package-wiring failures in the actual modules.
+
 ### CI
 
 Ubuntu should:
 
 - byte-compile all six new Lisp files with warnings treated as errors and package installation suppressed;
+- run all three runtime-load smoke checks;
 - run the new focused behavior/configuration-boundary tests;
 - run the existing `p3-org-export` tests unchanged;
 - run the full ERT suite as the final regression gate.
 
 Windows should cover source-level architecture/configuration-boundary tests when the changed files participate in portable configuration structure. It should not install Org-roam or presentation packages or create a second broad runtime suite solely for this refactor.
 
-Optional third-party packages must not be installed merely to byte-compile the new modules. Compiler-only `defvar` and `declare-function` forms are acceptable when needed and must not change runtime behavior.
+Optional third-party packages must not be installed merely to byte-compile or smoke-load the new modules. Compiler-only `defvar` and `declare-function` forms and smoke-test-only package stubs are acceptable when needed and must not change runtime behavior.
 
 ## Out of Scope
 
@@ -357,8 +385,9 @@ This PR does not:
 - rename existing Org commands;
 - change Org Agenda semantics;
 - redesign Org-roam capture templates, database settings, note paths, or keybindings;
+- fix the current trailing `#` emitted by nonblank tagged Roam headers;
 - redesign the presentation experience;
-- change the Pandoc export implementation or supported formats;
+- change the Pandoc export implementation, supported formats, or reload semantics;
 - reorganize Citar, `citar-org-roam`, BibTeX, RefTeX, or citation configuration;
 - reorganize LaTeX configuration;
 - change Poly-R;
@@ -374,15 +403,16 @@ The refactor is complete when:
 1. `p3-config-org.el` is the sole declarative owner for Org core/Agenda/export activation configuration in this scope;
 2. `p3-org.el` owns the extracted reusable Org commands with unchanged behavior;
 3. `p3-config-org-roam.el` is the sole declarative Org-roam owner;
-4. `p3-org-roam.el` owns the extracted Roam helper behavior with unchanged semantics;
+4. `p3-org-roam.el` owns the extracted Roam helper behavior with unchanged semantics, including the current trailing `#` in nonblank tagged headers;
 5. `p3-config-org-present.el` is the sole declarative Org presentation owner;
-6. `p3-org-present.el` owns the stateful presentation behavior with correct restoration semantics;
-7. `p3-org-export.el` remains unchanged and is activated at its preserved point after Org core setup;
+6. `p3-org-present.el` owns the stateful presentation behavior, directly owns its `face-remap` dependency, and preserves restoration semantics;
+7. `p3-org-export.el` remains unchanged and retains its current `use-package`-based activation/reload behavior;
 8. `config.org` contains the three concise loader stanzas in the same broad positions as the old sections;
 9. Poly-R remains between Roam and Presentation;
 10. citation/BibTeX/RefTeX and LaTeX configuration remain outside this refactor;
 11. existing keybindings/settings/templates are semantically unchanged;
 12. no odd-but-working hooks or legacy command names are normalized as part of the move;
 13. new modules/libraries byte-compile cleanly without optional-package installation churn;
-14. focused and full regression suites pass on the intended CI platforms;
-15. no unrelated subsystem or behavior change is included.
+14. each new configuration owner passes a runtime-load smoke check without optional-package installation or external side effects;
+15. focused and full regression suites pass on the intended CI platforms;
+16. no unrelated subsystem or behavior change is included.
