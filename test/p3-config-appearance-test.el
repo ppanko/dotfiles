@@ -4,6 +4,11 @@
 (require 'ert)
 (require 'subr-x)
 
+(defvar flycheck-mode)
+(defvar flycheck-last-status-change)
+(defvar flycheck-current-errors)
+(defvar vc-mode)
+
 (defconst p3-config-appearance-test--root
   (file-name-directory
    (directory-file-name
