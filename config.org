@@ -337,228 +337,22 @@ Interactive commands to connect to default connection.
 
 ** org
 
-Set org default startup display for bullets globally
+Org core behavior lives in =lisp/p3-org.el=. Declarative Org, Babel, TODO,
+Agenda, PDF-opening, and export-activation configuration lives in
+=lisp/p3-config-org.el=.
 
 #+BEGIN_SRC emacs-lisp
-  (setq org-startup-folded 'content)
-#+END_SRC
-
-Update last modified as shown [[https://org-roam.discourse.group/t/update-a-field-last-modified-at-save/321][here]]
-
-#+BEGIN_SRC emacs-lisp
-  (add-hook 'org-mode-hook (lambda ()
-                             (setq-local time-stamp-active t
-                                         time-stamp-start "#\\+last_modified:[ \t]*"
-                                         time-stamp-end "$"
-                                         time-stamp-format "\[%Y-%m-%d %3a %02H:%02M\]")
-                             (add-hook 'before-save-hook 'time-stamp nil 'local)))
-#+END_SRC
-
-#+BEGIN_SRC emacs-lisp
-    (use-package org
-      :defer t
-      :bind (:map org-mode-map
-                  ("C-c s" lambda() (interactive)
-                   (insert "#+BEGIN_SRC emacs-lisp\n#+END_SRC")))
-      :hook ((org-mode . flyspell-mode)
-             (org-mode . visual-line-mode)
-             (org-mode . org-indent-mode))
-      :init
-      ;; Load some languages for org-babel
-      (org-babel-do-load-languages
-       'org-babel-load-languages
-       '((emacs-lisp .t)
-         (R . t)
-         (C . t)
-         (python . t)
-         (latex . t)
-         (shell . t)))
-      :config
-      ;; Treat every code block as executable and confirm before running it.
-      (setq org-confirm-babel-evaluate t
-            ;; Native font coloring
-            org-src-fontify-natively t
-            org-src-tab-acts-natively t
-            org-hide-emphasis-markers t
-            ;; Change ellipsis to dropdown thing
-            org-ellipsis " ↴"))
-#+END_SRC
-
-Turn org-mode bullets into utf-8 characters
-
-#+BEGIN_SRC emacs-lisp
-  ;; (use-package org-bullets
-  ;;       :defer t
-  ;;       :init (add-hook 'org-mode-hook 'org-bullets-mode))
-#+END_SRC
-
-Sort TODOs
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/org-sort-todos ()
-    "Sort sibling entries by TODO state without changing outline hierarchy.
-Run this on a parent heading to sort its children; DONE entries follow active
-TODO states according to `org-todo-keywords'."
-    (interactive)
-    (org-sort-entries nil ?o))
-
-  (define-key org-mode-map (kbd "C-c C-x C-o") #'p3/org-sort-todos)
-#+END_SRC
-
-Load the Pandoc-backed Org export workflow from =lisp/p3-org-export.el=.
-This keeps the literate config responsible for enabling the workflow while the
-implementation remains independently testable.
-
-#+BEGIN_SRC emacs-lisp
-  (use-package p3-org-export
-    :ensure nil
-    :demand t
-    :config
-    (p3-org-export-setup))
-#+END_SRC
-
-Make sure org-mode calls evince (gnome pdf viewer) to [[https://emacs.stackexchange.com/questions/28037/org-mode-file-hyperlinks-always-use-doc-view-cant-force-it-to-use-external-pdf][open up pdf files]]
-
-#+BEGIN_SRC emacs-lisp
-  (when (eq system-type 'gnu/linux)
-    (add-to-list 'org-file-apps '("pdf" . "evince %s")))
-#+END_SRC
-
-Set region to checkboxes
-
-#+BEGIN_SRC emacs-lisp
-  (defun org-set-line-checkbox (arg)
-    (interactive "p")
-    (let ((n (or arg 1)))
-      (when (region-active-p)
-        (setq n (count-lines (region-beginning)
-                             (region-end)))
-        (goto-char (region-beginning)))
-      (dotimes (i n)
-        (beginning-of-line)
-        (insert "- [ ] ")
-        (forward-line))
-      (beginning-of-line)))
-#+END_SRC
-
-Include additional states in TODO cycle, as shown [[https://christiantietze.de/posts/2021/02/emacs-org-todo-doing-done-checkbox-cycling/][here]]
-
-#+BEGIN_SRC emacs-lisp
-    (setq org-todo-keywords
-        (quote ((sequence "TODO(t)" "WAIT(w)" "|" "DONE(d)")))
-        org-todo-keyword-faces
-        '(("WAIT" .  "DarkOrange" )))
-#+END_SRC
-
-** org-agenda
-
-org-agenda defaults, as shown [[https://orgmode.org/worg/org-tutorials/org-custom-agenda-commands.html][here]]
-
-#+BEGIN_SRC emacs-lisp
-  (use-package org-agenda
-    :ensure nil
-    ;; :bind ("C-c a" . org-agenda)
-    :config
-    (setq org-agenda-sorting-strategy '(priority-down))) ;;effort-down
+  (p3/config-load-module 'p3-config-org)
 #+END_SRC
 
 ** org-roam
 
-[[https://systemcrafters.net/build-a-second-brain-in-emacs/5-org-roam-hacks/#fast-note-insertion-for-a-smoother-writing-flow][From SC]], edited by p3 to include optional tags
+Org-roam package configuration lives in =lisp/p3-config-org-roam.el= and
+reusable Roam search, capture, filtering, and agenda helpers live in
+=lisp/p3-org-roam.el=.
 
 #+BEGIN_SRC emacs-lisp
-  (defun org-roam-generate-tagged-header ()
-    (let ((tag (read-string "Enter tag: ")))
-      (if (string-empty-p tag)
-          (concat "#+title: ${title}\n#+category:${title}\n#+created: %U\n#+last_modified: %U\n")
-        (concat "#+title: ${title}\n#+category:${title}\n#+filetags: " tag "\n#+created: %U\n#+last_modified: %U\n#"))))
-
-  (defun org-roam-node-insert-immediate-with-tag (arg &rest args)
-        (interactive "p")
-        (let ((args (cons arg args))
-              (org-roam-capture-templates (list (append (car
-                                                         '(("t" "tagged" plain "%?"
-                :if-new (file+head "%<%Y%m%d%H%M%S>-${slug}.org" org-roam-generate-tagged-header)
-                :unnarrowed t)))
-                                                        '(:immediate-finish t)))))
-          (apply #'org-roam-node-insert args)))
-#+END_SRC
-
-[[https://www.reddit.com/r/orgmode/comments/vvx54j/comment/ifn434u/?utm_source=share&utm_medium=web2x&context=3][Search roam for...]] anything
-
-#+BEGIN_SRC emacs-lisp
-  (defun org-roam-rg-search ()
-    "Search org-roam directory using consult-ripgrep. With live-preview."
-    (interactive)
-    (consult-ripgrep org-roam-directory))
-#+END_SRC
-
-[[https://systemcrafters.net/build-a-second-brain-in-emacs/5-org-roam-hacks/#build-your-org-agenda-from-org-roam-notes][org-roam with org-agenda]]
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/org-roam-filter-by-tag (tag-name)
-    (lambda (node)
-      (member tag-name (org-roam-node-tags node))))
-
-  (defun p3/org-roam-list-notes ()
-    (mapcar #'org-roam-node-file
-             (org-roam-node-list)))
-
-  (defun p3/org-roam-list-notes-by-tag (tag-name)
-    (mapcar #'org-roam-node-file
-            (seq-filter
-             (p3/org-roam-filter-by-tag tag-name)
-             (org-roam-node-list))))
-
-  (defun p3/org-roam-get-agenda ()
-    (interactive)
-    (let ((tag (read-string "Enter tag: ")))
-      (if (string-empty-p tag)
-          (setq org-agenda-files (p3/org-roam-list-notes))
-        (setq org-agenda-files (p3/org-roam-list-notes-by-tag tag))))
-    (org-agenda))
-#+END_SRC
-
-Config from [[https://config.daviwil.com/emacs][System crafters]] with changes based on the basic config from the [[https://github.com/org-roam/org-roam][Github page]]
-See [[https://earvingad.github.io/posts/org_roam_windows/][the following]] for a installation walkthrough for windows
-
-#+BEGIN_SRC emacs-lisp
-  (use-package org-roam
-    :hook
-    (after-init . org-roam-mode)
-    :custom
-    (org-roam-database-connector 'sqlite-builtin)
-    (org-roam-directory "~/org/notes/roam/")
-    (org-roam-completion-everywhere t)
-    (org-roam-completion-system 'default)
-    (org-roam-capture-templates
-     '(("d" "default" plain "%?"
-        :if-new (file+head "%<%Y%m%d%H%M%S>-${slug}.org" "#+title: ${title}\n#+category:${title}\n#+created: %U\n#+last_modified: %U\n")
-        :unnarrowed t)
-       ("n" "literature note" plain "* Heading\n %?"
-        :target (file+head "%(expand-file-name (or citar-org-roam-subdir \"\") org-roam-directory)/${citar-citekey}.org"
-                           "#+title: ${citar-citekey} (${citar-date}). ${note-title}.\n#+created: %U\n#+last_modified: %U\n\n")
-        :unnarrowed t)))
-    (org-roam-dailies-directory "journal/")
-    (org-roam-dailies-capture-templates
-      '(("d" "default" entry "* %<%I:%M %p>: %?"
-         :target (file+head "%<%Y-%m-%d>.org" "#+title: %<%Y-%m-%d %a>\n#+created: %U\n#+last_modified: %U\n"))))
-
-    :bind (("C-c n l" . org-roam-buffer-toggle)
-           ("C-c n f" . org-roam-node-find)
-           ("C-c n g" . org-roam-graph)
-           ("C-c n i" . org-roam-node-insert)
-           ("C-c n c" . org-roam-capture)
-           ("C-c n n" . org-roam-node-insert-immediate-with-tag)
-           ("C-c n s" . org-roam-rg-search)
-         ;; Dailies
-           ("C-c n d" . org-roam-dailies-goto-today)
-           ("C-c n t" . org-roam-dailies-capture-today)
-           ("C-c n C-t" . org-roam-tag-add)
-           ("C-c n a" . p3/org-roam-get-agenda))
-    :config
-    (setq org-roam-node-display-template (concat "${title:*} " (propertize "${tags:10}" 'face 'org-tag)))
-    (org-roam-db-autosync-mode))
+  (p3/config-load-module 'p3-config-org-roam)
 #+END_SRC
 
 ** Poly-R
@@ -587,111 +381,12 @@ Require poly-R
 
 ** Presentation
 
-Do presentations with org-present
+Org presentation package wiring lives in =lisp/p3-config-org-present.el=;
+state capture/restoration and presentation commands live in
+=lisp/p3-org-present.el=.
 
 #+BEGIN_SRC emacs-lisp
-  (use-package hide-mode-line
-    :after (org-present))
-
-  (use-package visual-fill-column)
-
-  (require 'face-remap)
-
-  (defvar-local p3/org-present--state nil
-    "Saved buffer state while `org-present' is active.")
-
-  (defun p3/org-present-start ()
-    "Start a presentation in the current Org buffer."
-    (interactive)
-    (unless (derived-mode-p 'org-mode)
-      (user-error "Presentation mode requires an Org buffer"))
-    (org-present))
-
-  (defun p3/org-present-toggle-fullscreen ()
-    "Toggle fullscreen for the current presentation frame."
-    (interactive)
-    (set-frame-parameter
-     nil 'fullscreen
-     (unless (frame-parameter nil 'fullscreen) 'fullboth)))
-
-  (defun p3/org-present-hook ()
-    "Prepare the current Org buffer for presentation mode."
-    (setq-local p3/org-present--state
-                (list :header-line header-line-format
-                      :line-numbers (bound-and-true-p display-line-numbers-mode)
-                      :inline-images (and (boundp 'org-inline-image-overlays)
-                                          org-inline-image-overlays)
-                      :visual-fill (bound-and-true-p visual-fill-column-mode)
-                      :visual-fill-width visual-fill-column-width
-                      :visual-fill-center visual-fill-column-center-text
-                      :hide-mode-line (bound-and-true-p hide-mode-line-mode)
-                      :face-remap-cookies nil))
-    (setq-local header-line-format " ")
-    (display-line-numbers-mode -1)
-    (org-present-big)
-    (unless (and (boundp 'org-inline-image-overlays)
-                 org-inline-image-overlays)
-      (org-display-inline-images))
-    (setq-local visual-fill-column-width 90
-                visual-fill-column-center-text t)
-    (visual-fill-column-mode 1)
-    (hide-mode-line-mode +1)
-    (setf (plist-get p3/org-present--state :face-remap-cookies)
-          (list (face-remap-add-relative 'org-level-1 :height 1.5)
-                (face-remap-add-relative 'org-level-2 :height 1.2)
-                (face-remap-add-relative 'org-level-3 :height 1.1))))
-
-  (defun p3/org-present-quit-hook ()
-    "Restore the buffer state saved by `p3/org-present-hook'."
-    (let ((state p3/org-present--state))
-      (org-present-small)
-      (when state
-        (setq-local header-line-format (plist-get state :header-line))
-        (if (plist-get state :line-numbers)
-            (display-line-numbers-mode +1)
-          (display-line-numbers-mode -1))
-        (unless (plist-get state :inline-images)
-          (org-remove-inline-images))
-        (setq-local visual-fill-column-width
-                    (plist-get state :visual-fill-width)
-                    visual-fill-column-center-text
-                    (plist-get state :visual-fill-center))
-        (if (plist-get state :visual-fill)
-            (visual-fill-column-mode +1)
-          (visual-fill-column-mode -1))
-        (if (plist-get state :hide-mode-line)
-            (hide-mode-line-mode +1)
-          (hide-mode-line-mode -1))
-        (dolist (cookie (plist-get state :face-remap-cookies))
-          (face-remap-remove-relative cookie)))
-      (setq-local p3/org-present--state nil)))
-
-  (defun p3/org-present-prev ()
-    "Move to the previous presentation slide."
-    (interactive)
-    (org-present-prev))
-
-  (defun p3/org-present-next ()
-    "Move to the next presentation slide."
-    (interactive)
-    (org-present-next))
-
-  (use-package org-present
-    :bind ((:map org-mode-map
-                 ("C-c P" . p3/org-present-start))
-           (:map org-present-mode-keymap
-                 ("C-c C-j" . p3/org-present-next)
-                 ("C-c C-k" . p3/org-present-prev)
-                 ("SPC" . p3/org-present-next)
-                 ("<backspace>" . p3/org-present-prev)
-                 ("n" . p3/org-present-next)
-                 ("p" . p3/org-present-prev)
-                 ("f" . p3/org-present-toggle-fullscreen)
-                 ("q" . org-present-quit)) )
-    :hook ((org-present-mode . p3/org-present-hook)
-           (org-present-mode-quit . p3/org-present-quit-hook))
-    :config
-    (setq org-present-text-scale 4))
+  (p3/config-load-module 'p3-config-org-present)
 #+END_SRC
 
 ** Projectile
@@ -777,7 +472,6 @@ preserve its original startup timing. Project-aware vterm behavior remains in
 #+END_SRC
 
 ** Spelling
-
 #+BEGIN_SRC emacs-lisp
   (use-package ispell
     :defer nil
