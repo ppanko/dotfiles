@@ -222,6 +222,8 @@
 
 (ert-deftest p3-config-python-config-org-delegates-python-wiring ()
   (let* ((contents (p3-config-python-test--contents "config.org"))
+         (org-config
+          (p3-config-python-test--contents "lisp/p3-config-org.el"))
          (owner "(p3/config-load-module 'p3-config-python)"))
     (should (= 1 (p3-config-python-test--count-occurrences owner contents)))
     (dolist (forbidden '("(use-package p3-python"
@@ -230,7 +232,7 @@
                           "(add-hook 'python-ts-mode-hook"
                           "flycheck-python-flake8-executable"))
       (should-not (string-match-p (regexp-quote forbidden) contents)))
-    (should (string-match-p (regexp-quote "(python . t)") contents))))
+    (should (string-match-p (regexp-quote "(python . t)") org-config))))
 
 (provide 'p3-config-python-test)
 

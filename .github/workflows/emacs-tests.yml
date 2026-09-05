@@ -28,6 +28,7 @@ jobs:
             -L lisp \
             --eval '(require (quote use-package-ensure))' \
             --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
+            --eval '(require (quote p3-org-export))' \
             --eval '(setq byte-compile-error-on-warn t)' \
             -f batch-byte-compile \
             lisp/p3-platform.el \
@@ -47,7 +48,13 @@ jobs:
             lisp/p3-terminal.el \
             lisp/p3-ess.el \
             lisp/p3-r-tools.el \
-            lisp/p3-gptel.el
+            lisp/p3-gptel.el \
+            lisp/p3-org.el \
+            lisp/p3-config-org.el \
+            lisp/p3-org-roam.el \
+            lisp/p3-config-org-roam.el \
+            lisp/p3-org-present.el \
+            lisp/p3-config-org-present.el
 
       - name: Smoke-load Python configuration boundary
         run: |
@@ -59,6 +66,46 @@ jobs:
             -l lisp/p3-config-loader.el \
             -l lisp/p3-config-python.el \
             --eval '(unless (and (featurep (quote p3-config-python)) (featurep (quote p3-python)) (equal flycheck-python-flake8-executable "flake8")) (kill-emacs 1))'
+
+      - name: Smoke-load Org configuration boundary
+        run: |
+          emacs -Q --batch \
+            -L lisp \
+            --eval '(setq user-emacs-directory (file-name-as-directory default-directory))' \
+            --eval '(require (quote use-package-ensure))' \
+            --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
+            -l lisp/p3-config-loader.el \
+            -l lisp/p3-config-org.el \
+            --eval '(unless (and (featurep (quote p3-config-org)) (featurep (quote p3-org)) (eq org-startup-folded (quote content)) (eq org-confirm-babel-evaluate t) (featurep (quote p3-org-export))) (kill-emacs 1))'
+
+      - name: Smoke-load Org-roam configuration boundary
+        run: |
+          emacs -Q --batch \
+            -L lisp \
+            --eval '(setq user-emacs-directory (file-name-as-directory default-directory))' \
+            --eval '(require (quote use-package-ensure))' \
+            --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
+            --eval '(defun org-roam-db-autosync-mode (&optional _arg) t)' \
+            --eval '(provide (quote org-roam))' \
+            -l lisp/p3-config-loader.el \
+            -l lisp/p3-config-org-roam.el \
+            --eval '(unless (and (featurep (quote p3-config-org-roam)) (featurep (quote p3-org-roam)) (fboundp (quote p3/org-roam-get-agenda))) (kill-emacs 1))'
+
+      - name: Smoke-load Org presentation configuration boundary
+        run: |
+          emacs -Q --batch \
+            -L lisp \
+            --eval '(setq user-emacs-directory (file-name-as-directory default-directory))' \
+            --eval '(require (quote use-package-ensure))' \
+            --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
+            --eval '(require (quote org))' \
+            --eval '(defvar org-present-mode-keymap (make-sparse-keymap))' \
+            --eval '(provide (quote hide-mode-line))' \
+            --eval '(provide (quote visual-fill-column))' \
+            --eval '(provide (quote org-present))' \
+            -l lisp/p3-config-loader.el \
+            -l lisp/p3-config-org-present.el \
+            --eval '(unless (and (featurep (quote p3-config-org-present)) (featurep (quote p3-org-present)) (featurep (quote face-remap)) (fboundp (quote p3/org-present-start))) (kill-emacs 1))'
 
       - name: Run ERT test suite
         run: |
@@ -76,6 +123,12 @@ jobs:
             -l test/p3-ess-test.el \
             -l test/p3-gptel-test.el \
             -l test/p3-r-tools-test.el \
+            -l test/p3-org-test.el \
+            -l test/p3-config-org-test.el \
+            -l test/p3-org-roam-test.el \
+            -l test/p3-config-org-roam-test.el \
+            -l test/p3-org-present-test.el \
+            -l test/p3-config-org-present-test.el \
             -l test/p3-org-export-test.el \
             -l test/p3-commands-test.el \
             -l test/p3-git-test.el \
