@@ -64,19 +64,9 @@
 
 **Interfaces:**
 - Consumes: built-in `bibtex`; dynamically bound `p3/reference-bibliography-file`.
-- Produces:
-  - `p3/reference-provisional-key-p (citekey) -> boolean`
-  - `p3/reference--new-provisional-key () -> string`
-  - `p3/reference--bibliography-path () -> absolute path or user-error`
-  - `p3/reference--goto-entry (citekey) -> boolean`
-  - `p3/reference--entry-alist (citekey) -> alist or nil`
-  - `p3/reference--entry-keys-from-content (content) -> list[string]`
-  - `p3/reference--validate-content (content) -> t or signal`
-  - `p3/reference--transaction (edit-fn) -> edit-fn result`
+- Produces: `p3/reference-provisional-key-p`, `p3/reference--new-provisional-key`, `p3/reference--bibliography-path`, `p3/reference--goto-entry`, `p3/reference--entry-alist`, `p3/reference--entry-keys-from-content`, `p3/reference--validate-content`, `p3/reference--transaction`.
 
-- [ ] **Step 1: Add a reusable temporary-library test harness and the first failing tests**
-
-Create `test/p3-reference-test.el` with:
+- [ ] **Step 1: Write the test harness and failing provisional/bootstrap tests**
 
 ```elisp
 ;;; p3-reference-test.el --- Reference workflow tests -*- lexical-binding: t; -*-
@@ -124,19 +114,15 @@ Create `test/p3-reference-test.el` with:
     (should-not (file-exists-p p3/reference-bibliography-file))))
 ```
 
-- [ ] **Step 2: Run the focused tests and verify red**
+- [ ] **Step 2: Run red**
 
 ```bash
-emacs -Q --batch -L lisp \
-  -l test/p3-reference-test.el \
-  -f ert-run-tests-batch-and-exit
+emacs -Q --batch -L lisp -l test/p3-reference-test.el -f ert-run-tests-batch-and-exit
 ```
 
 Expected: FAIL because `p3-reference.el` does not exist.
 
-- [ ] **Step 3: Add the load-safe behavior skeleton**
-
-Create `lisp/p3-reference.el` using only built-ins at load time:
+- [ ] **Step 3: Implement the load-safe skeleton**
 
 ```elisp
 ;;; p3-reference.el --- Portable reference workflow -*- lexical-binding: t; -*-
@@ -164,11 +150,7 @@ Create `lisp/p3-reference.el` using only built-ins at load time:
 (provide 'p3-reference)
 ```
 
-Do not require Citar, Biblio, Org-roam, or pdf-tools here.
-
-- [ ] **Step 4: Add complete failing integrity tests**
-
-Add:
+- [ ] **Step 4: Add failing integrity tests**
 
 ```elisp
 (defconst p3-reference-test--two-entries
@@ -181,10 +163,9 @@ Add:
 
 (ert-deftest p3-reference-validation-rejects-malformed-bibtex ()
   (should-error
-   (p3/reference--validate-content
-    "@article{x, title={Unclosed}\n")))
+   (p3/reference--validate-content "@article{x, title={Unclosed}\n")))
 
-(ert-deftest p3-reference-transaction-leaves-original-on-validation-failure ()
+(ert-deftest p3-reference-transaction-leaves-original-on-failure ()
   (p3-reference-test--with-library p3-reference-test--two-entries
     (let ((before (with-temp-buffer
                     (insert-file-contents p3/reference-bibliography-file)
@@ -194,10 +175,9 @@ Add:
         (lambda ()
           (goto-char (point-max))
           (insert "\n@article{alpha2020, title={Duplicate}}\n"))))
-      (should (equal before
-                     (with-temp-buffer
-                       (insert-file-contents p3/reference-bibliography-file)
-                       (buffer-string)))))))
+      (with-temp-buffer
+        (insert-file-contents p3/reference-bibliography-file)
+        (should (equal before (buffer-string)))))))
 
 (ert-deftest p3-reference-targeted-edit-preserves-unrelated-tail ()
   (p3-reference-test--with-library p3-reference-test--two-entries
@@ -211,17 +191,19 @@ Add:
         (should (string-suffix-p tail (buffer-string)))))))
 ```
 
-- [ ] **Step 5: Run focused tests and verify the new cases fail**
+- [ ] **Step 5: Run red for integrity helpers**
 
-Expected: provisional tests PASS; integrity tests FAIL because transaction/validation helpers are absent.
+Use the focused command from Step 2. Expected: provisional tests PASS; integrity tests FAIL.
 
-- [ ] **Step 6: Implement targeted validated atomic transactions**
-
-Implement `p3/reference--bibliography-path`, `p3/reference--goto-entry`, and parsing helpers over a `bibtex-mode` buffer. `p3/reference--validate-content` must use built-in BibTeX parsing to reject malformed ordinary entries, collect ordinary citekeys while excluding `@string`, `@preamble`, and `@comment`, and reject duplicate keys.
-
-Implement the transaction with a same-directory temporary file:
+- [ ] **Step 6: Implement validated same-filesystem transactions**
 
 ```elisp
+(defun p3/reference--bibliography-path ()
+  (unless (and (stringp p3/reference-bibliography-file)
+               (not (string-empty-p p3/reference-bibliography-file)))
+    (user-error "Reference bibliography is not configured"))
+  (expand-file-name p3/reference-bibliography-file))
+
 (defun p3/reference--transaction (edit-fn)
   (let* ((target (p3/reference--bibliography-path))
          (directory (file-name-directory target))
@@ -239,10 +221,9 @@ Implement the transaction with a same-directory temporary file:
       (setq result (funcall edit-fn)
             candidate (buffer-string)))
     (p3/reference--validate-content candidate)
-    (setq temp
-          (make-temp-file
-           (expand-file-name ".p3-references-" directory)
-           nil ".bib" candidate))
+    (setq temp (make-temp-file
+                (expand-file-name ".p3-references-" directory)
+                nil ".bib" candidate))
     (unwind-protect
         (progn
           (when (file-exists-p target)
@@ -254,39 +235,28 @@ Implement the transaction with a same-directory temporary file:
     result))
 ```
 
-The edit callback works on the full text buffer but must mutate only its target entry/append location. Do not parse and reserialize the whole library.
+Implement `p3/reference--goto-entry` as an anchored regexp over `@type{key,`/`@type(key,` with `regexp-quote` on the key. Implement `p3/reference--validate-content` by opening CONTENT in `bibtex-mode`, walking ordinary entry heads, calling `bibtex-parse-entry` for each, rejecting parser errors, excluding `string/preamble/comment`, and rejecting any duplicate key before the transaction writes the candidate.
 
-- [ ] **Step 7: Run focused tests and verify Task 1 green**
-
-Expected: all Task 1 tests PASS without any external package.
-
-- [ ] **Step 8: Commit Task 1**
+- [ ] **Step 7: Run green and commit**
 
 ```bash
+emacs -Q --batch -L lisp -l test/p3-reference-test.el -f ert-run-tests-batch-and-exit
 git add lisp/p3-reference.el test/p3-reference-test.el
 git commit -m "Add safe reference bibliography core"
 ```
 
 ---
 
-### Task 2: Import, duplicates, classification, and citekey finalization
+### Task 2: Import, duplicate detection, classification fields, and finalization
 
 **Files:**
 - Modify: `lisp/p3-reference.el`
 - Modify: `test/p3-reference-test.el`
 
 **Interfaces:**
-- Consumes: Task 1 transaction/entry helpers.
-- Produces:
-  - `p3/reference-normalize-doi (doi) -> string or nil`
-  - `p3/reference-normalize-url (url) -> string or nil`
-  - `p3/reference-import-bibtex (bibtex) -> canonical citekey`
-  - `p3/reference-add-keyword (citekey keyword) -> t`
-  - `p3/reference-remove-keyword (citekey keyword) -> t`
-  - `p3/reference--propose-citekey (citekey) -> generated key or nil`
-  - `p3/reference-finalize (citekey) -> mature citekey`
+- Produces: `p3/reference-normalize-doi`, `p3/reference-normalize-url`, `p3/reference-import-bibtex`, `p3/reference-add-keyword`, `p3/reference-remove-keyword`, `p3/reference--propose-citekey`, `p3/reference-finalize`.
 
-- [ ] **Step 1: Add complete normalization/duplicate tests**
+- [ ] **Step 1: Add failing normalization/duplicate tests**
 
 ```elisp
 (ert-deftest p3-reference-normalizes-doi-and-url ()
@@ -328,35 +298,56 @@ git commit -m "Add safe reference bibliography core"
       (should-not (search-forward "beta2021" nil t)))))
 ```
 
-- [ ] **Step 2: Run focused tests and verify red**
+- [ ] **Step 2: Run red**
 
-Expected: normalization/import tests FAIL; Task 1 remains green.
+- [ ] **Step 3: Implement canonical import/duplicate logic**
 
-- [ ] **Step 3: Implement canonical duplicate checks and one-entry import**
+```elisp
+(defun p3/reference-import-bibtex (bibtex)
+  (let* ((incoming (p3/reference--parse-single-entry bibtex))
+         (key (cdr (assoc "=key=" incoming)))
+         (duplicate (p3/reference--strong-duplicate-key incoming)))
+    (when (p3/reference-provisional-key-p key)
+      (user-error "p3-inbox-* keys are reserved for URL-only captures"))
+    (cond
+     (duplicate duplicate)
+     ((and (p3/reference--possible-title-duplicate-keys incoming)
+           (not (y-or-n-p "Possible title duplicate; add as a distinct reference? ")))
+      (user-error "Reference import cancelled"))
+     (t
+      (p3/reference--transaction
+       (lambda ()
+         (goto-char (point-max))
+         (unless (bolp) (insert "\n"))
+         (insert bibtex)
+         (unless (bolp) (insert "\n"))))
+      key))))
+```
 
-`p3/reference-import-bibtex` must require exactly one ordinary entry, parse its key/DOI/URL/title, reject an incoming `p3-inbox-*` key as a structured mature import, and check the canonical file directly. Strong DOI/URL matches return the existing citekey without adding a record. A normalized-title match prompts with `y-or-n-p`; declining signals/cancels without mutation, accepting adds a distinct record. The append occurs through `p3/reference--transaction` and retains the supplied entry text rather than rewriting existing entries.
+`p3/reference--strong-duplicate-key` reads the canonical file directly and compares normalized DOI first, normalized URL second. `p3/reference--possible-title-duplicate-keys` lowercases, collapses whitespace, removes punctuation, and compares equality only; do not introduce fuzzy thresholds.
 
-- [ ] **Step 4: Add complete keyword/finalization tests**
+- [ ] **Step 4: Add failing keyword/finalization tests**
 
 ```elisp
 (ert-deftest p3-reference-status-inbox-is-not-technical-provisional-state ()
-  (p3-reference-test--with-library
-      "@article{alpha2020, title={Alpha}, keywords={status/inbox}}\n"
-    (should-not (p3/reference-provisional-key-p "alpha2020"))))
+  (should-not (p3/reference-provisional-key-p "alpha2020")))
 
 (ert-deftest p3-reference-keywords-are-entry-local-and-idempotent ()
   (p3-reference-test--with-library p3-reference-test--two-entries
     (p3/reference-add-keyword "alpha2020" "quantitative-methods")
     (p3/reference-add-keyword "alpha2020" "quantitative-methods")
     (let ((entry (p3/reference--entry-alist "alpha2020")))
-      (should (equal "quantitative-methods" (cdr (assoc "keywords" entry)))))
-    (should (equal "Beta" (cdr (assoc "title" (p3/reference--entry-alist "beta2021")))))))
+      (should (equal "quantitative-methods"
+                     (cdr (assoc "keywords" entry)))))
+    (should (equal "Beta"
+                   (cdr (assoc "title"
+                               (p3/reference--entry-alist "beta2021")))))))
 
 (ert-deftest p3-reference-finalize-leaves-mature-key-unchanged ()
   (p3-reference-test--with-library "@article{alpha2020, title={Alpha}}\n"
     (should (equal "alpha2020" (p3/reference-finalize "alpha2020")))))
 
-(ert-deftest p3-reference-finalize-needs-a-usable-generated-key ()
+(ert-deftest p3-reference-finalize-needs-usable-generated-key ()
   (p3-reference-test--with-library
       "@online{p3-inbox-1, url={https://example.com}}\n"
     (cl-letf (((symbol-function 'p3/reference--propose-citekey)
@@ -375,7 +366,7 @@ Expected: normalization/import tests FAIL; Task 1 remains green.
     (should (p3/reference--entry-alist "beta2021"))
     (should-not (p3/reference--entry-alist "p3-inbox-1"))))
 
-(ert-deftest p3-reference-finalize-rejects-colliding-mature-key ()
+(ert-deftest p3-reference-finalize-rejects-colliding-key ()
   (p3-reference-test--with-library
       "@article{p3-inbox-1, title={Alpha}}\n@article{alpha2020, title={Existing}}\n"
     (cl-letf (((symbol-function 'p3/reference--propose-citekey)
@@ -385,46 +376,48 @@ Expected: normalization/import tests FAIL; Task 1 remains green.
       (should-error (p3/reference-finalize "p3-inbox-1")))))
 ```
 
-- [ ] **Step 5: Run focused tests and verify the new cases red**
+- [ ] **Step 5: Implement entry-local keyword mutation and finalization**
 
-Expected: import tests PASS; keyword/finalization tests FAIL.
+Use `bibtex-set-field` only after `p3/reference--goto-entry`. Split keywords on commas, trim/de-duplicate, and leave all other entry text alone.
 
-- [ ] **Step 6: Implement entry-local keywords and finalization**
+```elisp
+(defun p3/reference-finalize (citekey)
+  (if (not (p3/reference-provisional-key-p citekey))
+      citekey
+    (let ((proposal (p3/reference--propose-citekey citekey)))
+      (unless (and proposal (not (string-empty-p proposal)))
+        (user-error "Reference needs more metadata before finalization"))
+      (let ((accepted (read-string "Permanent citekey: " proposal)))
+        (when (or (string-empty-p accepted)
+                  (p3/reference-provisional-key-p accepted)
+                  (p3/reference--entry-alist accepted))
+          (user-error "Permanent citekey is invalid or already used"))
+        (p3/reference--rename-provisional-entry-head citekey accepted)
+        accepted))))
+```
 
-Use `bibtex-set-field` only after locating the target entry. Split `keywords` on commas, trim/de-duplicate, and write the resulting single field.
+`p3/reference--propose-citekey` isolates the entry in a temporary BibTeX buffer and calls built-in `bibtex-generate-autokey`. `p3/reference--rename-provisional-entry-head` is private and refuses mature source keys. No public mature-key rename command exists.
 
-`p3/reference--propose-citekey` must isolate the provisional entry in a temporary BibTeX buffer and call built-in `bibtex-generate-autokey`. If generation errors or returns empty, finalization reports that the record needs enrichment/manual metadata before it can become durable. `p3/reference-finalize` shows the proposal through `read-string`, rejects empty/reserved/colliding keys, then replaces only the entry-head key inside a validated transaction. It returns mature keys unchanged and exposes no mature-key rename operation.
-
-- [ ] **Step 7: Run focused tests and verify Task 2 green**
-
-- [ ] **Step 8: Commit Task 2**
+- [ ] **Step 6: Run green and commit**
 
 ```bash
+emacs -Q --batch -L lisp -l test/p3-reference-test.el -f ert-run-tests-batch-and-exit
 git add lisp/p3-reference.el test/p3-reference-test.el
 git commit -m "Add reference import and finalization"
 ```
 
 ---
 
-### Task 3: Capture and enrichment through Biblio without hidden state
+### Task 3: Capture and non-destructive enrichment through Biblio
 
 **Files:**
 - Modify: `lisp/p3-reference.el`
 - Modify: `test/p3-reference-test.el`
 
 **Interfaces:**
-- Consumes: Task 2 import/finalization; Biblio APIs only when acquisition is invoked.
-- Produces:
-  - `p3/reference-add (&optional input)`
-  - `p3/reference--input-kind (input) -> 'bibtex | 'doi | 'url | 'search`
-  - `p3/reference--doi-in-string (string) -> DOI or nil`
-  - `p3/reference--capture-url (url) -> provisional citekey`
-  - `p3/reference-merge-bibtex (target-key bibtex) -> target-key`
-  - buffer-local `p3/reference--biblio-target-key`
-  - `p3/reference-biblio-save (metadata)`
-  - `p3/reference-enrich (citekey)`
+- Produces: `p3/reference-add`, `p3/reference--input-kind`, `p3/reference--doi-in-string`, `p3/reference--capture-url`, `p3/reference-merge-bibtex`, buffer-local `p3/reference--biblio-target-key`, `p3/reference-biblio-save`, `p3/reference-enrich`.
 
-- [ ] **Step 1: Add complete routing/offline-capture tests**
+- [ ] **Step 1: Add failing routing/offline-capture tests**
 
 ```elisp
 (ert-deftest p3-reference-routes-capture-inputs ()
@@ -449,23 +442,22 @@ git commit -m "Add reference import and finalization"
                                   (cdr (assoc "keywords" entry)))))))))
 ```
 
-- [ ] **Step 2: Run focused tests and verify red**
-
-- [ ] **Step 3: Implement one-prompt capture routing and provisional URL save**
-
-`p3/reference-add` prompts once when INPUT is nil. Dispatch exactly:
+- [ ] **Step 2: Implement local input routing**
 
 ```elisp
-(pcase (p3/reference--input-kind input)
-  ('bibtex (p3/reference-import-bibtex input))
-  ('doi    (p3/reference--lookup-doi input))
-  ('url    (p3/reference--capture-url input))
-  ('search (p3/reference--lookup-title input)))
+(defun p3/reference-add (&optional input)
+  (interactive)
+  (let ((input (or input (read-string "Reference (DOI, URL, BibTeX, or search): "))))
+    (pcase (p3/reference--input-kind input)
+      ('bibtex (p3/reference-import-bibtex input))
+      ('doi    (p3/reference--lookup-doi input))
+      ('url    (p3/reference--capture-url input))
+      ('search (p3/reference--lookup-title input)))))
 ```
 
-A URL without a directly recognizable DOI is appended immediately as one `@online{p3-inbox-..., ...}` record with `url`, current `urldate`, and `keywords={status/inbox}`. It never fetches the webpage.
+A URL without a directly recognizable DOI appends one `@online{p3-inbox-..., ...}` with `url`, current `urldate`, and `keywords={status/inbox}`. It does not retrieve the webpage.
 
-- [ ] **Step 4: Add complete Biblio acquisition/enrichment tests with stubs**
+- [ ] **Step 3: Add failing acquisition/enrichment tests with Biblio stubs**
 
 ```elisp
 (ert-deftest p3-reference-doi-result-enters-safe-import-path ()
@@ -482,7 +474,7 @@ A URL without a directly recognizable DOI is appended immediately as one `@onlin
         (p3/reference--lookup-doi "10.1000/alpha")
         (should (string-match-p "alpha2020" imported))))))
 
-(ert-deftest p3-reference-enrichment-fills-blank-field-without-changing-key ()
+(ert-deftest p3-reference-enrichment-fills-blanks-without-changing-key ()
   (p3-reference-test--with-library
       "@article{p3-inbox-1, title={Alpha}, year={}}\n"
     (p3/reference-merge-bibtex
@@ -492,7 +484,7 @@ A URL without a directly recognizable DOI is appended immediately as one `@onlin
       (should (equal "2024" (cdr (assoc "year" entry))))
       (should (equal "10.1000/alpha" (cdr (assoc "doi" entry)))))))
 
-(ert-deftest p3-reference-enrichment-does-not-silently-overwrite-conflict ()
+(ert-deftest p3-reference-enrichment-preserves-declined-conflict ()
   (p3-reference-test--with-library
       "@article{p3-inbox-1, title={My corrected title}, year={2024}}\n"
     (cl-letf (((symbol-function 'y-or-n-p) (lambda (&rest _) nil)))
@@ -503,11 +495,12 @@ A URL without a directly recognizable DOI is appended immediately as one `@onlin
                    (cdr (assoc "title"
                                (p3/reference--entry-alist "p3-inbox-1")))))))
 
-(ert-deftest p3-reference-biblio-action-enriches-target-instead-of-duplicating ()
+(ert-deftest p3-reference-biblio-action-enriches-target-not-new-identity ()
   (p3-reference-test--with-library
       "@article{p3-inbox-1, title={Alpha}}\n"
     (let ((p3/reference--biblio-target-key "p3-inbox-1"))
-      (cl-letf (((symbol-function 'biblio-format-bibtex) (lambda (text _autokey) text)))
+      (cl-letf (((symbol-function 'biblio-format-bibtex)
+                 (lambda (text _autokey) text)))
         (p3/reference-biblio-save
          `((backend . ,(lambda (command metadata callback)
                          (ignore metadata)
@@ -518,52 +511,47 @@ A URL without a directly recognizable DOI is appended immediately as one `@onlin
     (should-not (p3/reference--entry-alist "remote"))))
 ```
 
-- [ ] **Step 5: Run focused tests and verify the acquisition/enrichment cases red**
-
-- [ ] **Step 6: Implement Biblio integration using its public backend protocol**
-
-DOI lookup lazily requires `biblio-doi` and calls `biblio-doi-forward-bibtex`; title/formatted-citation lookup lazily requires `biblio-crossref` and calls `biblio-crossref-lookup` with the original text. Format returned BibTeX with `biblio-format-bibtex` before safe import/merge.
-
-Define:
+- [ ] **Step 4: Implement Biblio's public backend integration and target-aware merge**
 
 ```elisp
 (defvar-local p3/reference--biblio-target-key nil)
+
+(defun p3/reference-biblio-save (metadata)
+  (let ((target p3/reference--biblio-target-key)
+        (backend (alist-get 'backend metadata)))
+    (funcall
+     backend 'forward-bibtex metadata
+     (lambda (raw)
+       (let ((bibtex (biblio-format-bibtex raw nil)))
+         (if target
+             (p3/reference-merge-bibtex target bibtex)
+           (p3/reference-import-bibtex bibtex)))))))
 ```
 
-`p3/reference-biblio-save` reads the current result metadata's `backend` and invokes its documented `'forward-bibtex` command. If `p3/reference--biblio-target-key` is nil, import a new mature record. If non-nil, call `p3/reference-merge-bibtex` on that existing provisional record so enrichment cannot create a second identity.
+DOI lookup lazily requires `biblio-doi` and calls `biblio-doi-forward-bibtex`; text lookup lazily requires `biblio-crossref` and calls `biblio-crossref-lookup` with the original text. `p3/reference-merge-bibtex` ignores the remote `=key=` and `=type=` identity, fills missing fields automatically, leaves equal values unchanged, and prompts before replacing any populated conflicting field. All entry changes use Task 1's transaction.
 
-`p3/reference-merge-bibtex` parses incoming fields but ignores the remote `=key=`/`=type=` identity. For each incoming field: fill a missing/empty target field automatically; leave equal values alone; for a populated conflicting target field, ask `y-or-n-p` before replacing it. All changes occur entry-locally through Task 1's validated transaction.
+`p3/reference-enrich` uses DOI directly when present. Otherwise call `biblio-crossref-lookup` with the target title, or URL only when title is absent, and set `p3/reference--biblio-target-key` buffer-locally in the returned results buffer. Keep this as an `M-x` command; no `C-c b e` in v1.
 
-`p3/reference-enrich` uses DOI directly when present. Otherwise it launches `biblio-crossref-lookup` with the best available title (falling back to URL text only when title is absent), captures the returned result buffer, and sets `p3/reference--biblio-target-key` buffer-locally there. Keep enrichment callable via `M-x`; the approved v1 prefix does not add an `e` binding.
-
-- [ ] **Step 7: Run focused tests and verify Task 3 green**
-
-- [ ] **Step 8: Commit Task 3**
+- [ ] **Step 5: Run green and commit**
 
 ```bash
+emacs -Q --batch -L lisp -l test/p3-reference-test.el -f ert-run-tests-batch-and-exit
 git add lisp/p3-reference.el test/p3-reference-test.el
 git commit -m "Add reference capture and enrichment"
 ```
 
 ---
 
-### Task 4: Citar-backed retrieval and native Org citation insertion
+### Task 4: Citar retrieval and native Org citation insertion
 
 **Files:**
 - Modify: `lisp/p3-reference.el`
 - Modify: `test/p3-reference-test.el`
 
 **Interfaces:**
-- Consumes: Task 2 finalization; Citar only when retrieval/citation commands run.
-- Produces:
-  - `p3/reference--select-key (&optional allowed-keys) -> citekey or nil`
-  - `p3/reference-find (&optional allowed-keys)`
-  - `p3/reference-insert-citation (&optional citekey)`
-  - `p3/reference-open-url (&optional citekey)`
-  - `p3/reference-edit-entry (&optional citekey)`
-  - `p3/reference--action-alist ()`
+- Produces: `p3/reference--select-key`, `p3/reference-find`, `p3/reference-insert-citation`, `p3/reference-open-url`, `p3/reference-edit-entry`, `p3/reference--action-alist`.
 
-- [ ] **Step 1: Add complete Citar-wrapper tests**
+- [ ] **Step 1: Add failing Citar-wrapper/citation tests**
 
 ```elisp
 (ert-deftest p3-reference-project-filter-is-passed-to-citar-selection ()
@@ -578,7 +566,7 @@ git commit -m "Add reference capture and enrichment"
       (should (funcall filter "alpha2020"))
       (should-not (funcall filter "gamma2022")))))
 
-(ert-deftest p3-reference-empty-project-set-never-falls-back-to-global-search ()
+(ert-deftest p3-reference-empty-project-set-never-searches-globally ()
   (cl-letf (((symbol-function 'citar-select-ref)
              (lambda (&rest _) (ert-fail "Citar must not be called"))))
     (should-error (p3/reference--select-key '()))))
@@ -594,19 +582,7 @@ git commit -m "Add reference capture and enrichment"
                (lambda (url &rest _) (setq opened url))))
       (p3/reference-open-url "alpha2020")
       (should (equal "https://doi.org/10.1000/alpha" opened)))))
-```
 
-- [ ] **Step 2: Run focused tests and verify red**
-
-- [ ] **Step 3: Implement one selection model and one P3 action dispatcher**
-
-`p3/reference--select-key` calls `citar-select-ref`; when `allowed-keys` is non-nil it passes a predicate matching only those keys. An explicitly empty list is a no-results condition, not global search.
-
-`p3/reference-find` selects one key and then uses one standard `completing-read` action menu. Start the v1 menu with `Insert citation`, `Open URL`, and `Edit bibliography entry`; Tasks 5–6 extend the same alist with note/project/PDF actions. Do not add citar-embark solely to compose this menu.
-
-- [ ] **Step 4: Add complete provisional-citation tests**
-
-```elisp
 (ert-deftest p3-reference-insert-citation-finalizes-provisional-first ()
   (let (inserted)
     (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
@@ -617,55 +593,54 @@ git commit -m "Add reference capture and enrichment"
       (p3/reference-insert-citation "p3-inbox-1")
       (should (equal '("alpha2020") inserted)))))
 
-(ert-deftest p3-reference-insert-citation-does-not-finalize-mature-status-inbox ()
-  (let (finalized inserted)
+(ert-deftest p3-reference-insert-citation-skips-finalization-for-mature-key ()
+  (let (inserted)
     (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
               ((symbol-function 'p3/reference-finalize)
-               (lambda (key) (setq finalized key) key))
+               (lambda (_key) (ert-fail "Mature key must not be finalized")))
               ((symbol-function 'citar-insert-citation)
                (lambda (keys &optional _arg) (setq inserted keys))))
       (p3/reference-insert-citation "alpha2020")
-      (should-not finalized)
       (should (equal '("alpha2020") inserted)))))
 ```
 
-- [ ] **Step 5: Run focused tests and verify citation cases red**
+- [ ] **Step 2: Implement one selector and one P3 action menu**
 
-- [ ] **Step 6: Implement citation insertion through Citar/Org-cite**
+```elisp
+(defun p3/reference-find (&optional allowed-keys)
+  (interactive)
+  (let ((key (p3/reference--select-key allowed-keys)))
+    (when key
+      (let* ((actions (p3/reference--action-alist))
+             (label (completing-read "Reference action: " actions nil t))
+             (fn (cdr (assoc label actions))))
+        (funcall fn key)))))
+```
 
-For a provisional key, call `p3/reference-finalize` first; for a mature key, do not invoke finalization. Then call `citar-insert-citation` with the final key list. Do not hand-build `[cite:@...]` text inside P3; native Org/Citar processors remain responsible for document citation syntax.
+`p3/reference--select-key` lazily requires Citar. Nil `allowed-keys` means global; an explicitly empty list is a no-results error; a non-empty list passes a `:filter` predicate to `citar-select-ref`. Start the action alist with `Insert citation`, `Open URL`, and `Edit bibliography entry`; later tasks extend the same alist rather than creating another action system.
 
-- [ ] **Step 7: Run focused tests and verify Task 4 green**
+`p3/reference-insert-citation` finalizes only `p3-inbox-*` keys and then calls `citar-insert-citation` with the final key list. Do not construct Org citation strings manually.
 
-- [ ] **Step 8: Commit Task 4**
+- [ ] **Step 3: Run green and commit**
 
 ```bash
+emacs -Q --batch -L lisp -l test/p3-reference-test.el -f ert-run-tests-batch-and-exit
 git add lisp/p3-reference.el test/p3-reference-test.el
 git commit -m "Add reference retrieval and citation actions"
 ```
 
 ---
 
-### Task 5: Org-roam literature notes and project-reference registries
+### Task 5: Literature notes and canonical project-reference registries
 
 **Files:**
 - Modify: `lisp/p3-reference.el`
 - Modify: `test/p3-reference-test.el`
 
 **Interfaces:**
-- Consumes: mature citekeys and Task 4 action selector; Org-roam only when note/project commands run.
-- Produces:
-  - `p3/reference-note (&optional citekey)`
-  - `p3/reference--project-node-p (node) -> boolean`
-  - `p3/reference--current-project-node () -> node or nil`
-  - `p3/reference--select-project-node () -> project node`
-  - `p3/reference-project-citekeys (&optional node) -> list[string]`
-  - `p3/reference-associate-project (citekey &optional node)`
-  - `p3/reference-remove-project-association (citekey &optional node)`
-  - `p3/reference-project-references (&optional node)`
-  - `p3/reference-classify (&optional citekey)`
+- Produces: `p3/reference-note`, `p3/reference--project-node-p`, `p3/reference--current-project-node`, `p3/reference--select-project-node`, `p3/reference-project-citekeys`, `p3/reference-associate-project`, `p3/reference-remove-project-association`, `p3/reference-project-references`, `p3/reference-classify`.
 
-- [ ] **Step 1: Add complete literature-note tests**
+- [ ] **Step 1: Add failing literature-note tests**
 
 ```elisp
 (ert-deftest p3-reference-note-opens-existing-ref-node ()
@@ -678,6 +653,23 @@ git commit -m "Add reference retrieval and citation actions"
       (p3/reference-note "alpha2020")
       (should (eq 'existing-node visited)))))
 
+(ert-deftest p3-reference-note-finalizes-before-choosing-file-name ()
+  (let* ((directory (make-temp-file "p3-roam-" t))
+         (org-roam-directory directory))
+    (unwind-protect
+        (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
+                  ((symbol-function 'p3/reference-finalize)
+                   (lambda (_key) "alpha2020"))
+                  ((symbol-function 'org-roam-node-from-ref) (lambda (_ref) nil))
+                  ((symbol-function 'org-id-new) (lambda () "note-id"))
+                  ((symbol-function 'citar-get-value)
+                   (lambda (field _key)
+                     (if (equal field "title") "Alpha Study" nil))))
+          (p3/reference-note "p3-inbox-1")
+          (should (file-exists-p (expand-file-name "alpha2020.org" directory)))
+          (should-not (file-exists-p (expand-file-name "p3-inbox-1.org" directory))))
+      (delete-directory directory t))))
+
 (ert-deftest p3-reference-note-creates-minimal-durable-org-file ()
   (let* ((directory (make-temp-file "p3-roam-" t))
          (org-roam-directory directory))
@@ -687,34 +679,24 @@ git commit -m "Add reference retrieval and citation actions"
                   ((symbol-function 'org-id-new) (lambda () "note-id"))
                   ((symbol-function 'citar-get-value)
                    (lambda (field _key)
-                     (pcase field
-                       ("title" "Alpha Study")
-                       ("author" "Ada Alpha")
-                       ("year" "2020")))))
+                     (if (equal field "title") "Alpha Study" nil))))
           (p3/reference-note "alpha2020")
-          (let ((path (expand-file-name "alpha2020.org" directory)))
-            (should (file-exists-p path))
-            (with-temp-buffer
-              (insert-file-contents path)
-              (let ((text (buffer-string)))
-                (should (string-match-p ":ROAM_REFS: @alpha2020" text))
-                (should (string-match-p ":ID: note-id" text))
-                (should (string-match-p "#+filetags: :literature:" text))
-                (should-not (string-match-p "doi:" text))))))
+          (with-temp-buffer
+            (insert-file-contents (expand-file-name "alpha2020.org" directory))
+            (let ((text (buffer-string)))
+              (should (string-match-p ":ROAM_REFS: @alpha2020" text))
+              (should (string-match-p ":ID: note-id" text))
+              (should (string-match-p "#+filetags: :literature:" text))
+              (should (string-match-p "#+title: Alpha Study" text))
+              (should-not (string-match-p "doi:" text)))))
       (delete-directory directory t))))
 ```
 
-Add one more test that stubs finalization and proves `p3-inbox-*` becomes a mature key before any filename is chosen.
+- [ ] **Step 2: Implement note lookup/creation without citar-org-roam**
 
-- [ ] **Step 2: Run focused tests and verify note cases red**
+Use `org-roam-node-from-ref (concat "@" mature-key)` and `org-roam-node-visit` for existing notes. New notes use `<mature-key>.org` under `org-roam-directory`, `org-id-new`, `ROAM_REFS`, `:literature:`, and a title from Citar. Do not copy whole bibliography metadata into the note.
 
-- [ ] **Step 3: Implement literature-note lookup/creation without citar-org-roam**
-
-Use `org-roam-node-from-ref (concat "@" citekey)` to find an existing canonical reference node and `org-roam-node-visit` to open it. New notes use `<mature-citekey>.org` under `org-roam-directory`, `org-id-new`, `ROAM_REFS`, `:literature:`, and a human-readable title derived through Citar field getters. Do not recreate citar-org-roam variables or templates.
-
-- [ ] **Step 4: Add complete project-registry tests**
-
-Define a fixture containing a narrative citation and registry citation:
+- [ ] **Step 3: Add failing project-registry tests**
 
 ```elisp
 (defconst p3-reference-test--project-org
@@ -730,34 +712,63 @@ Define a fixture containing a narrative citation and registry citation:
                          (p3/reference-project-citekeys 'project-node))))
       (delete-file file))))
 
-(ert-deftest p3-reference-project-association-is-idempotent ()
+(ert-deftest p3-reference-project-association-creates-registry-and-is-idempotent ()
   (let ((file (make-temp-file "p3-project-" nil ".org"
-                              p3-reference-test--project-org)))
+                              "#+title: Example\n#+filetags: :project:\n")))
     (unwind-protect
         (cl-letf (((symbol-function 'p3/reference--project-file)
-                   (lambda (_node) file)))
+                   (lambda (_node) file))
+                  ((symbol-function 'p3/reference--project-node-p)
+                   (lambda (_node) t)))
           (p3/reference-associate-project "beta2021" 'project-node)
           (p3/reference-associate-project "beta2021" 'project-node)
           (with-temp-buffer
             (insert-file-contents file)
+            (should (= 1 (how-many "^\\* References$" (point-min) (point-max))))
             (should (= 1 (how-many "\\[cite:@beta2021\\]"
                                    (point-min) (point-max))))))
       (delete-file file))))
+
+(ert-deftest p3-reference-project-removal-does-not-touch-narrative-citation ()
+  (let ((file (make-temp-file "p3-project-" nil ".org"
+                              p3-reference-test--project-org)))
+    (unwind-protect
+        (cl-letf (((symbol-function 'p3/reference--project-file)
+                   (lambda (_node) file))
+                  ((symbol-function 'p3/reference--project-node-p)
+                   (lambda (_node) t)))
+          (p3/reference-remove-project-association "alpha2020" 'project-node)
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (search-forward "[cite:@narrative2020]" nil t))
+            (should-not (search-forward "[cite:@alpha2020]" nil t))))
+      (delete-file file))))
+
+(ert-deftest p3-reference-project-target-must-have-project-tag ()
+  (cl-letf (((symbol-function 'org-roam-node-tags)
+             (lambda (_node) '("idea"))))
+    (should-not (p3/reference--project-node-p 'node))))
+
+(ert-deftest p3-reference-project-association-finalizes-provisional-first ()
+  (let (associated-key)
+    (cl-letf (((symbol-function 'p3/reference-finalize)
+               (lambda (_key) "alpha2020"))
+              ((symbol-function 'p3/reference--associate-mature-key)
+               (lambda (key _node) (setq associated-key key))))
+      (p3/reference-associate-project "p3-inbox-1" 'project-node)
+      (should (equal "alpha2020" associated-key)))))
+
+(ert-deftest p3-reference-project-retrieval-reuses-global-find-ui ()
+  (let (allowed)
+    (cl-letf (((symbol-function 'p3/reference-project-citekeys)
+               (lambda (_node) '("alpha2020" "beta2021")))
+              ((symbol-function 'p3/reference-find)
+               (lambda (keys) (setq allowed keys))))
+      (p3/reference-project-references 'project-node)
+      (should (equal '("alpha2020" "beta2021") allowed)))))
 ```
 
-Also add complete tests that:
-
-- create `* References` at level 1 when absent and store `[cite:@key]` on its own line;
-- remove only a registry line while leaving the narrative citation intact;
-- reject a target whose `org-roam-node-tags` lacks `project`;
-- finalize a provisional key before association;
-- call `p3/reference-find` with exactly the registry keys from `p3/reference-project-references`.
-
-- [ ] **Step 5: Run focused tests and verify project cases red**
-
-- [ ] **Step 6: Implement project selection and registry mutation using Org structure**
-
-Use the public Org-roam interfaces:
+- [ ] **Step 4: Implement project selection and registry mutation**
 
 ```elisp
 (defun p3/reference--project-node-p (node)
@@ -775,33 +786,21 @@ Use the public Org-roam interfaces:
   (org-roam-node-read nil #'p3/reference--project-node-p nil t))
 ```
 
-Within the selected project file, use Org parsing to find a level-1 headline whose raw value is exactly `References`. Parse `citation-reference` elements only inside that subtree and read each `:key`. Add/remove only standalone registry lines in that subtree; never infer project membership from the rest of the note.
+Use Org parsing to find only a level-1 `References` headline. Parse `citation-reference` elements only inside that subtree. Add/remove standalone `[cite:@key]` registry lines only there. `p3/reference-associate-project` finalizes provisional keys before delegating to a private mature-key association helper.
 
-- [ ] **Step 7: Implement the classification dispatcher and extend the central action menu**
+`p3/reference-classify` offers exactly four actions: add topic/status keyword, remove topic/status keyword, associate with project, remove project association. Extend `p3/reference--action-alist` with `Open/create literature note` and `Classify / project association`; project retrieval reuses `p3/reference-find` with its allowed-key list.
 
-`p3/reference-classify` offers exactly:
-
-```text
-Add topic/status keyword
-Remove topic/status keyword
-Associate with project
-Remove project association
-```
-
-The first two call Task 2 keyword helpers; the latter two mutate project-note registries. Extend `p3/reference--action-alist` with `Open/create literature note` and `Classify / project association`. `p3/reference-project-references` reuses `p3/reference-find` with the registry key list.
-
-- [ ] **Step 8: Run focused tests and verify Task 5 green**
-
-- [ ] **Step 9: Commit Task 5**
+- [ ] **Step 5: Run green and commit**
 
 ```bash
+emacs -Q --batch -L lisp -l test/p3-reference-test.el -f ert-run-tests-batch-and-exit
 git add lisp/p3-reference.el test/p3-reference-test.el
 git commit -m "Add reference notes and project associations"
 ```
 
 ---
 
-### Task 6: PDF convention and declarative reference configuration
+### Task 6: PDF convention and declarative reference owner
 
 **Files:**
 - Modify: `lisp/p3-reference.el`
@@ -810,17 +809,9 @@ git commit -m "Add reference notes and project associations"
 - Create: `test/p3-config-reference-test.el`
 
 **Interfaces:**
-- Consumes: Tasks 1–5 behavior.
-- Produces:
-  - `p3/reference-pdf-path (citekey) -> absolute path`
-  - `p3/reference-attach-pdf (source-file &optional citekey)`
-  - `p3/reference-open-pdf (&optional citekey)`
-  - `p3/reference-command-map` with `a f i n p t r`
-  - config-owned `p3/reference-bibliography-file` default `~/org/bib/main.bib`
-  - config-owned `p3/reference-pdf-directory` default `~/org/lib/`
-  - feature `p3-config-reference`
+- Produces: `p3/reference-pdf-path`, `p3/reference-attach-pdf`, `p3/reference-open-pdf`, reload-safe `p3/reference-command-map`, config-owned bibliography/PDF roots, `p3-config-reference`.
 
-- [ ] **Step 1: Add complete PDF-path/laziness tests**
+- [ ] **Step 1: Add failing PDF tests**
 
 ```elisp
 (ert-deftest p3-reference-pdf-path-uses-mature-key-directory ()
@@ -829,8 +820,32 @@ git commit -m "Add reference notes and project associations"
                    (p3/reference-pdf-path "alpha2020")))
     (should-error (p3/reference-pdf-path "p3-inbox-1"))))
 
-(ert-deftest p3-reference-load-does-not-require-pdf-tools ()
-  (should-not (featurep 'pdf-tools)))
+(ert-deftest p3-reference-attach-pdf-finalizes-before-destination ()
+  (p3-reference-test--with-library
+      "@article{p3-inbox-1, title={Alpha}}\n"
+    (let* ((source (expand-file-name "source.pdf" directory))
+           destination)
+      (with-temp-file source (insert "pdf"))
+      (cl-letf (((symbol-function 'p3/reference-finalize)
+                 (lambda (_key) "alpha2020"))
+                ((symbol-function 'copy-file)
+                 (lambda (_source target &rest _) (setq destination target))))
+        (p3/reference-attach-pdf source "p3-inbox-1")
+        (should (string-suffix-p "alpha2020/main.pdf" destination))))))
+
+(ert-deftest p3-reference-attach-pdf-never-silently-overwrites ()
+  (p3-reference-test--with-library "@article{alpha2020, title={Alpha}}\n"
+    (let* ((source (expand-file-name "source.pdf" directory))
+           (target (expand-file-name "alpha2020/main.pdf"
+                                     p3/reference-pdf-directory)))
+      (make-directory (file-name-directory target) t)
+      (with-temp-file source (insert "new"))
+      (with-temp-file target (insert "old"))
+      (cl-letf (((symbol-function 'y-or-n-p) (lambda (&rest _) nil)))
+        (should-error (p3/reference-attach-pdf source "alpha2020")))
+      (with-temp-buffer
+        (insert-file-contents target)
+        (should (equal "old" (buffer-string)))))))
 
 (ert-deftest p3-reference-open-pdf-falls-back-when-pdf-tools-unusable ()
   (let (opened message-text)
@@ -849,57 +864,81 @@ git commit -m "Add reference notes and project associations"
       (should (string-match-p "default PDF viewer" message-text)))))
 ```
 
-Add an attachment test proving a provisional key is finalized before destination selection and an existing `main.pdf` is never overwritten without `y-or-n-p` approval.
-
-- [ ] **Step 2: Run focused tests and verify PDF cases red**
-
-- [ ] **Step 3: Implement deterministic manual attachment and lazy reading**
-
-New attachments copy to `<p3/reference-pdf-directory>/<mature-key>/main.pdf`; create that directory only when attaching. Do not write absolute PDF paths into `references.bib`. `p3/reference-open-pdf` opens the file, then attempts `(require 'pdf-tools nil t)` only for that action. If pdf-tools is missing or `pdf-view-mode` signals because its native backend is unavailable, leave the PDF open with Emacs's default viewer and emit a local message. Never call `pdf-tools-install` automatically.
-
-Add `Open PDF` to the central action menu.
-
-- [ ] **Step 4: Add the complete config-owner test skeleton**
-
-Create `test/p3-config-reference-test.el` with static/form-reading helpers matching the existing focused config tests, and complete assertions that:
+- [ ] **Step 2: Implement deterministic manual attachments and lazy reading**
 
 ```elisp
-(ert-deftest p3-config-reference-defaults-preserve-current-user-data-roots ()
+(defun p3/reference-pdf-path (citekey)
+  (when (p3/reference-provisional-key-p citekey)
+    (user-error "Finalize the reference before assigning a PDF path"))
+  (expand-file-name "main.pdf"
+                    (expand-file-name citekey
+                                      (file-name-as-directory
+                                       p3/reference-pdf-directory))))
+```
+
+`p3/reference-attach-pdf` finalizes first, creates only the mature-key directory, prompts before replacing an existing `main.pdf`, and copies the file. It does not write attachment paths to BibLaTeX. `p3/reference-open-pdf` calls `find-file`, then attempts `(require 'pdf-tools nil t)` and `pdf-view-mode`; missing/broken pdf-tools leaves the default Emacs PDF viewer active and only emits a message. Never call `pdf-tools-install` automatically. Add `Open PDF` to the common action alist.
+
+- [ ] **Step 3: Add failing config-owner tests**
+
+```elisp
+;;; p3-config-reference-test.el --- Reference config boundary tests -*- lexical-binding: t; -*-
+(require 'ert)
+(require 'subr-x)
+
+(defconst p3-config-reference-test--root
+  (file-name-directory
+   (directory-file-name
+    (file-name-directory (or load-file-name buffer-file-name)))))
+
+(defun p3-config-reference-test--contents ()
+  (with-temp-buffer
+    (insert-file-contents
+     (expand-file-name "lisp/p3-config-reference.el"
+                       p3-config-reference-test--root))
+    (buffer-string)))
+
+(ert-deftest p3-config-reference-preserves-current-data-roots ()
   (let ((contents (p3-config-reference-test--contents)))
     (should (string-match-p (regexp-quote "~/org/bib/main.bib") contents))
     (should (string-match-p (regexp-quote "~/org/lib/") contents))))
 
-(ert-deftest p3-config-reference-loads-behavior-before-binding-prefix ()
+(ert-deftest p3-config-reference-loads-behavior-before-prefix-binding ()
   (let* ((contents (p3-config-reference-test--contents))
-         (behavior (string-match (regexp-quote
-                                  "(p3/config-load-module 'p3-reference)")
-                                 contents))
-         (binding (string-match (regexp-quote
-                                 "(global-set-key (kbd \"C-c b\") p3/reference-command-map)")
-                                contents)))
+         (behavior (string-match
+                    (regexp-quote "(p3/config-load-module 'p3-reference)")
+                    contents))
+         (binding (string-match
+                   (regexp-quote
+                    "(global-set-key (kbd \"C-c b\") p3/reference-command-map)")
+                   contents)))
     (should behavior)
     (should binding)
     (should (< behavior binding))))
+
+(ert-deftest p3-config-reference-wires-org-cite-citar-and-biblio ()
+  (let ((contents (p3-config-reference-test--contents)))
+    (dolist (needle '("org-cite-global-bibliography"
+                      "org-cite-insert-processor 'citar"
+                      "org-cite-follow-processor 'citar"
+                      "org-cite-activate-processor 'citar"
+                      "citar-bibliography"
+                      "(use-package biblio"
+                      "Save/enrich in P3 library"))
+      (should (string-match-p (regexp-quote needle) contents)))))
 
 (ert-deftest p3-config-reference-pdf-tools-is-lazy-and-never-installs-backend ()
   (let ((contents (p3-config-reference-test--contents)))
     (should (string-match-p "(use-package pdf-tools" contents))
     (should-not (string-match-p "pdf-tools-install" contents))))
+
+(ert-deftest p3-config-reference-has-no-old-citation-stack ()
+  (let ((contents (p3-config-reference-test--contents)))
+    (dolist (needle '("citar-org-roam" "reftex-default-bibliography"
+                      "reftex-cite-format" "bib-files-directory"))
+      (should-not (string-match-p (regexp-quote needle) contents)))))
 ```
 
-Also assert the owner configures Org-cite/Citar to the canonical bibliography, declares Biblio, and contains no citar-org-roam/RefTeX machinery.
-
-- [ ] **Step 5: Run config test and verify red**
-
-```bash
-emacs -Q --batch -L lisp \
-  -l test/p3-config-reference-test.el \
-  -f ert-run-tests-batch-and-exit
-```
-
-- [ ] **Step 6: Implement `p3-config-reference.el` and the reload-safe command map**
-
-Define customization before loading behavior:
+- [ ] **Step 4: Implement `p3-config-reference.el` and reload-safe command map**
 
 ```elisp
 (defcustom p3/reference-bibliography-file
@@ -913,28 +952,24 @@ Define customization before loading behavior:
   :type 'directory)
 
 (p3/config-load-module 'p3-reference)
-```
 
-Keep `bibtex-dialect` set to `biblatex` and `bibtex-align-at-equal-sign` enabled because they serve the new plain-file workflow. Do not carry forward the old RefTeX settings or `bibtex-user-optional-fields` experiment.
-
-Configure:
-
-```elisp
-(setq org-cite-global-bibliography (list p3/reference-bibliography-file)
+(setq bibtex-dialect 'biblatex
+      bibtex-align-at-equal-sign t
+      org-cite-global-bibliography (list p3/reference-bibliography-file)
       org-cite-insert-processor 'citar
       org-cite-follow-processor 'citar
       org-cite-activate-processor 'citar
       citar-bibliography (list p3/reference-bibliography-file))
 ```
 
-Declare Citar deferred, Biblio deferred, and pdf-tools command/deferred only. After Biblio loads, add exactly one documented extended action:
+Declare Citar deferred, Biblio deferred, and pdf-tools command/deferred only. After Biblio loads:
 
 ```elisp
 (add-to-list 'biblio-selection-mode-actions-alist
              '("Save/enrich in P3 library" . p3/reference-biblio-save))
 ```
 
-In `p3-reference.el`, rebuild the prefix map on exact-source reload:
+In `p3-reference.el`:
 
 ```elisp
 (defvar p3/reference-command-map nil)
@@ -950,20 +985,15 @@ In `p3-reference.el`, rebuild the prefix map on exact-source reload:
         map))
 ```
 
-Bind it globally with `C-c b`. Do not add an `e` or attachment key in v1.
+Bind `(global-set-key (kbd "C-c b") p3/reference-command-map)`. Do not add an enrichment or attachment key in v1.
 
-- [ ] **Step 7: Run behavior + config tests and verify Task 6 green**
+- [ ] **Step 5: Run green and commit**
 
 ```bash
 emacs -Q --batch -L lisp \
   -l test/p3-reference-test.el \
   -l test/p3-config-reference-test.el \
   -f ert-run-tests-batch-and-exit
-```
-
-- [ ] **Step 8: Commit Task 6**
-
-```bash
 git add lisp/p3-reference.el lisp/p3-config-reference.el \
   test/p3-reference-test.el test/p3-config-reference-test.el
 git commit -m "Add reference configuration boundary"
@@ -971,7 +1001,7 @@ git commit -m "Add reference configuration boundary"
 
 ---
 
-### Task 7: Replace abandoned citation config and expose the workflow consistently
+### Task 7: Replace abandoned citation configuration and expose the workflow
 
 **Files:**
 - Modify: `config.org`
@@ -982,27 +1012,7 @@ git commit -m "Add reference configuration boundary"
 - Modify: `test/p3-config-test.el`
 - Modify: `test/p3-commands-test.el`
 
-**Interfaces:**
-- Consumes: `p3-config-reference` from Task 6.
-- Produces: one reference owner in literate orchestration; no old citation stack; discoverable Which-Key/atlas bindings.
-
-- [ ] **Step 1: Add architecture tests for the new owner and old-config removal**
-
-Update `test/p3-config-test.el` so `p3-config-org-source-loads-fourteen-config-modules` expects 14 owners including `p3-config-reference`. Add an ordering test that computes positions and asserts:
-
-```elisp
-(should (< editing reference))
-(should (< reference completion))
-(should (< completion ess))
-(should (< ess org))
-(should (< org roam))
-(should (< roam present))
-(should (< present project-config))
-(should (< project-config python))
-(should (< python terminal))
-```
-
-Add one complete cleanup assertion:
+- [ ] **Step 1: Add failing config-orchestration cleanup tests**
 
 ```elisp
 (ert-deftest p3-config-reference-old-inline-citation-machinery-is-gone ()
@@ -1019,9 +1029,9 @@ Add one complete cleanup assertion:
              contents))))
 ```
 
-- [ ] **Step 2: Add the Org-roam capture regression before changing its config**
+Rename/update the existing owner-count test to require exactly 14 config modules including `p3-config-reference`. Extend the ordering test with `reference` and assert `editing < reference < completion`, leaving all later relative subsystem order unchanged.
 
-Change `test/p3-config-org-roam-test.el` to expect only the existing default capture template and unchanged dailies template. Add:
+- [ ] **Step 2: Add failing Org-roam capture cleanup test**
 
 ```elisp
 (ert-deftest p3-config-org-roam-has-no-citar-dependent-literature-template ()
@@ -1035,30 +1045,21 @@ Change `test/p3-config-org-roam-test.el` to expect only the existing default cap
       (should-not (string-match-p (regexp-quote needle) contents)))))
 ```
 
-- [ ] **Step 3: Run focused architecture tests and verify red**
+Adjust the existing capture-template expectation to contain only the default capture template; leave dailies unchanged.
 
-```bash
-emacs -Q --batch -L lisp \
-  -l test/p3-config-test.el \
-  -l test/p3-config-org-roam-test.el \
-  -f ert-run-tests-batch-and-exit
-```
+- [ ] **Step 3: Replace inline citation stack and old literature template**
 
-- [ ] **Step 4: Replace the old citation block and old literature capture template**
-
-In `config.org`, replace the entire current `** Bibtex & citation-related` implementation with concise ownership prose plus:
+In `config.org`, replace the current `** Bibtex & citation-related` implementation with concise ownership prose and:
 
 ```elisp
 (p3/config-load-module 'p3-config-reference)
 ```
 
-Keep it at the former citation subsystem position between Editing/Functions and Completion rather than reordering unrelated modules.
+Keep this at the former citation subsystem position. In `p3-config-org-roam.el`, remove only the citar-org-roam-dependent `"n" "literature note"` capture template.
 
-In `p3-config-org-roam.el`, remove only the `"n" "literature note"` template that depends on citar-org-roam variables. Preserve normal capture, dailies, bindings, display, and autosync.
+- [ ] **Step 4: Add Which-Key and atlas discoverability with exact test**
 
-- [ ] **Step 5: Add Which-Key and keybinding-atlas tests/labels**
-
-In `p3-config-base.el`, add labels:
+Add Which-Key labels:
 
 ```text
 C-c b   references
@@ -1071,21 +1072,24 @@ C-c b t classify / associate
 C-c b r project references
 ```
 
-In `p3-commands.el`, remove `("C-c b" . "insert citation")` from the Org section and add a `References` section with the seven subcommands.
-
-Extend `test/p3-commands-test.el` with a complete assertion that finds the `References` section and compares its cdr to:
+Remove `("C-c b" . "insert citation")` from the Org atlas section. Add a `References` section. In `test/p3-commands-test.el` assert:
 
 ```elisp
-'(("C-c b a" . "add reference")
-  ("C-c b f" . "find reference")
-  ("C-c b i" . "insert citation")
-  ("C-c b n" . "literature note")
-  ("C-c b p" . "open reference PDF")
-  ("C-c b t" . "classify / associate")
-  ("C-c b r" . "project references"))
+(ert-deftest p3-commands-atlas-describes-reference-prefix ()
+  (let ((section (assoc "References" p3/keybinding-sections)))
+    (should
+     (equal
+      (cdr section)
+      '(("C-c b a" . "add reference")
+        ("C-c b f" . "find reference")
+        ("C-c b i" . "insert citation")
+        ("C-c b n" . "literature note")
+        ("C-c b p" . "open reference PDF")
+        ("C-c b t" . "classify / associate")
+        ("C-c b r" . "project references"))))))
 ```
 
-- [ ] **Step 6: Run all focused integration tests**
+- [ ] **Step 5: Run focused integration tests and commit**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -1095,13 +1099,6 @@ emacs -Q --batch -L lisp \
   -l test/p3-config-test.el \
   -l test/p3-commands-test.el \
   -f ert-run-tests-batch-and-exit
-```
-
-Expected: PASS; generated config contains 14 owners, `C-c b` is no longer direct `org-cite-insert`, and no RefTeX/citar-org-roam citation experiment remains.
-
-- [ ] **Step 7: Commit Task 7**
-
-```bash
 git add config.org lisp/p3-config-org-roam.el lisp/p3-config-base.el \
   lisp/p3-commands.el test/p3-config-org-roam-test.el \
   test/p3-config-test.el test/p3-commands-test.el
@@ -1110,18 +1107,14 @@ git commit -m "Route citations through reference workflow"
 
 ---
 
-### Task 8: Reconstruction regression, CI integration, and final review
+### Task 8: Plain-file reconstruction regression, CI integration, and adversarial review
 
 **Files:**
 - Modify: `test/p3-reference-test.el`
 - Modify: `.github/workflows/emacs-tests.yml`
 - Modify: `.github/workflows/windows-platform-tests.yml`
 
-**Interfaces:**
-- Consumes: complete v1 subsystem.
-- Produces: proof of plain-file reconstructability plus bounded Ubuntu/Windows CI evidence.
-
-- [ ] **Step 1: Add a complete package-independent reconstruction regression**
+- [ ] **Step 1: Add package-independent reconstruction test**
 
 ```elisp
 (ert-deftest p3-reference-durable-state-is-reconstructable-from-bib-and-org ()
@@ -1141,7 +1134,6 @@ git commit -m "Route citations through reference workflow"
             (should (p3/reference--entry-alist "alpha2020")))
           (with-temp-buffer
             (insert-file-contents project)
-            (org-mode)
             (should (string-match-p (regexp-quote "[cite:@alpha2020]")
                                     (buffer-string))))
           (with-temp-buffer
@@ -1151,43 +1143,43 @@ git commit -m "Route citations through reference workflow"
       (delete-directory directory t))))
 ```
 
-The test must not require Citar, Biblio, pdf-tools, Org-roam DB access, or any P3 cache. It verifies the three durable plain-file joins directly.
+This test must not require Citar, Biblio, pdf-tools, an Org-roam DB, or P3 private cache state.
 
-- [ ] **Step 2: Run the full local ERT suite before touching CI**
+- [ ] **Step 2: Run the full local ERT suite before CI edits**
 
-Use the current workflow's complete ERT command and add:
+Use the existing full ERT command from `.github/workflows/emacs-tests.yml` and add:
 
 ```text
 test/p3-reference-test.el
 test/p3-config-reference-test.el
 ```
 
-Expected: zero unexpected failures. If the execution environment has no Emacs, record that environment limitation; do not compensate by turning full CI into an iterative diagnostic loop.
+Expected: zero unexpected failures. If the execution environment lacks Emacs, record that limitation and do not replace local diagnosis with repeated full CI runs.
 
-- [ ] **Step 3: Add Ubuntu compile, smoke, and full-suite coverage**
+- [ ] **Step 3: Add Ubuntu compile/smoke/full-suite coverage**
 
-In `.github/workflows/emacs-tests.yml`:
+Add `lisp/p3-reference.el` and `lisp/p3-config-reference.el` to byte compilation. Add a `Smoke-load Reference configuration boundary` step that stubs external package features, never contacts the network, never touches real user files, and asserts:
 
-- byte-compile `lisp/p3-reference.el` and `lisp/p3-config-reference.el`;
-- add `Smoke-load Reference configuration boundary` using package stubs/no network/no real user files;
-- add the two new test files to the full ERT command.
+```elisp
+(and (featurep 'p3-config-reference)
+     (featurep 'p3-reference)
+     (equal p3/reference-bibliography-file
+            (expand-file-name "~/org/bib/main.bib"))
+     (equal p3/reference-pdf-directory
+            (file-name-as-directory (expand-file-name "~/org/lib/")))
+     (eq (lookup-key global-map (kbd "C-c b"))
+         p3/reference-command-map))
+```
 
-The smoke asserts `p3-config-reference` and `p3-reference` features, exact default roots, and that global `C-c b` is `p3/reference-command-map`. It must not invoke DOI/Crossref or pdf-tools native setup.
+Add both new test files to the full Ubuntu ERT command. Do not initialize pdf-tools native support.
 
-- [ ] **Step 4: Add Windows platform-neutral reference coverage**
+- [ ] **Step 4: Add Windows platform-neutral coverage**
 
-In `.github/workflows/windows-platform-tests.yml`:
-
-- add both new Lisp files and both test files to path filters;
-- byte-compile `p3-reference.el` and `p3-config-reference.el` with external package macros stubbed the same way existing config-owner compilation is handled;
-- include `p3-config-reference-test.el` and `p3-reference-test.el` in Windows architecture ERT;
-- do not install/invoke pdf-tools native support.
-
-Tests must use `make-temp-file`, `expand-file-name`, and `file-name-as-directory`; fix any Unix-only assumptions rather than excluding the test on Windows.
+Add the two new Lisp files and two new test files to `pull_request.paths`. Byte-compile `p3-reference.el` and `p3-config-reference.el` using the same external-package macro stubbing pattern as existing config-owner compilation. Add `p3-reference-test.el` and `p3-config-reference-test.el` to the Windows architecture ERT command. Do not install/invoke pdf-tools native support. Fix any path test with `make-temp-file`/`expand-file-name`; do not skip it merely because Windows differs.
 
 - [ ] **Step 5: Run the pre-push static acceptance scan**
 
-Verify the branch contains:
+Confirm exactly:
 
 ```text
 zero use-package citar-org-roam
@@ -1197,48 +1189,47 @@ zero generic webpage scraper
 zero pdf-tools-install call
 exactly one p3-config-reference orchestration call
 14 p3-config-* owners
-C-c b with exactly a/f/i/n/p/t/r
+C-c b with a/f/i/n/p/t/r and no extra v1 subcommands
 bibliography default ~/org/bib/main.bib
 PDF root default ~/org/lib/
 ```
 
 Inspect the diff to confirm workflow behavior is in `p3-reference.el`, package/config ownership is in `p3-config-reference.el`, and unrelated Org/Org-roam behavior did not move.
 
-- [ ] **Step 6: Commit the reconstruction/CI gate**
+- [ ] **Step 6: Commit, push once, and use the normal PR CI gate**
 
 ```bash
 git add test/p3-reference-test.el \
   .github/workflows/emacs-tests.yml \
   .github/workflows/windows-platform-tests.yml
 git commit -m "Verify portable reference workflow"
+git push -u origin HEAD
 ```
-
-- [ ] **Step 7: Push once and use the normal PR CI gate**
 
 Expected final evidence:
 
 ```text
 Ubuntu byte compilation: PASS
 Ubuntu reference config smoke: PASS
-Ubuntu full ERT: PASS, 0 unexpected
+Ubuntu full ERT: PASS with 0 unexpected failures
 Windows platform/project tests: PASS
 Windows reference/config architecture tests: PASS
 ```
 
-If a workflow fails, inspect the exact failed step/log and form a root-cause hypothesis before changing code or rerunning CI. Do not add diagnostic workflows.
+If a workflow fails, inspect the exact failed step/log and establish a root-cause hypothesis before changing code or rerunning CI. Do not add diagnostic workflows.
 
-- [ ] **Step 8: Adversarially review the exact finished head**
+- [ ] **Step 7: Adversarially review the exact finished head**
 
-Review specifically for data-loss risk, accidental citekey migration, enrichment creating duplicate identities, hidden package/cache state, project-registry/narrative-citation confusion, startup coupling to absent user data or pdf-tools, path assumptions, and any dependency outside v1 scope. Fix blockers/high findings test-first, rerun focused tests, and rerun the coherent CI gate only if the reviewed head changes in runtime-relevant ways. Do not merge without explicit user approval.
+Review for data-loss risk, accidental mature-key changes, enrichment creating duplicate identities, hidden package/cache state, project-registry versus narrative-citation confusion, startup coupling to absent user data or pdf-tools, platform-specific path assumptions, and any dependency outside v1 scope. Fix blockers/high findings test-first. Rerun focused tests after each fix and rerun the coherent CI gate only if the reviewed head changes in runtime-relevant ways. Do not merge without explicit user approval.
 
 ---
 
 ## Plan Self-Review
 
-**Spec coverage:** Tasks 1–2 cover data integrity, provisional/mature identity, duplicates, keywords, and atomic mutation. Task 3 covers all approved capture modes and non-destructive enrichment without scraping. Task 4 covers global retrieval and native Org citation insertion. Task 5 covers literature notes, project associations, project-scoped retrieval, and classification. Task 6 covers PDF convention/laziness plus the declarative owner and stable prefix. Task 7 removes abandoned machinery and preserves Org-roam/config architecture. Task 8 covers reconstructability, both CI boundaries, and adversarial final review.
+**Spec coverage:** Task 1 covers atomic storage and reconstructable BibLaTeX identity. Task 2 covers import, duplicates, global classification fields, provisional/mature state, and immutable mature keys. Task 3 covers all approved capture modes and target-aware non-destructive enrichment without scraping. Task 4 covers one global retrieval/action model and native Org citation insertion. Task 5 covers literature notes, canonical project associations, project-scoped retrieval, and classification. Task 6 covers deterministic PDF storage/reading plus declarative ownership and the stable prefix. Task 7 removes abandoned machinery and preserves the rest of Org-roam/config behavior. Task 8 proves plain-file reconstructability and adds bounded Ubuntu/Windows verification.
 
-**Scope check:** No browser integration, PDF sync/acquisition, precise PDF annotation, external reference manager, mature-key migration, standalone bibliography UI, or extra completion/action package is planned.
+**Placeholder scan:** No `TBD`, `TODO`, `implement later`, omitted test body, or `Similar to Task` instruction remains. Test-writing steps include concrete ERT bodies; implementation steps include the exact public interfaces and code shape required by their tests.
 
-**Interface consistency:** `p3-inbox-*` is the only provisional test throughout. Enrichment mutates the existing target record through `p3/reference-merge-bibtex`; it never imports a second record for that target. Mature-key finalization occurs before notes/projects/PDF paths/citations. Both global and project retrieval reuse `p3/reference-find`. `C-c b` exposes only `a/f/i/n/p/t/r`; explicit enrichment and manual PDF attachment remain available through `M-x` rather than expanding the approved prefix.
+**Interface consistency:** `p3-inbox-*` is the only provisional test throughout. Enrichment mutates an explicit target through `p3/reference-merge-bibtex`; it cannot import a second identity for that target. Finalization occurs before citations, literature-note filenames, project associations, and PDF paths. Global and project retrieval reuse `p3/reference-find`. `C-c b` exposes only `a/f/i/n/p/t/r`; enrichment and manual PDF attachment remain available via `M-x` rather than expanding the approved prefix.
 
-**Portability check:** Existing `~/org/bib/main.bib` and `~/org/lib/` roots remain defaults, avoiding an unapproved data migration. All file tests use temporary platform-neutral paths. pdf-tools native support is never required by startup or Windows CI.
+**Portability check:** Existing `~/org/bib/main.bib` and `~/org/lib/` roots remain defaults, avoiding an unapproved data migration. File tests use platform-neutral temporary paths. pdf-tools native support is not needed for startup or Windows CI.
