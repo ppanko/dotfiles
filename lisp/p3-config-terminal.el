@@ -1,5 +1,7 @@
 ;;; p3-config-terminal.el --- Terminal configuration -*- lexical-binding: t; -*-
 
+(require 'seq)
+(require 'subr-x)
 (require 'use-package)
 (require 'p3-config-loader)
 
