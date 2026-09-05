@@ -53,10 +53,10 @@ backups, Dired, and the keybinding atlas live in =lisp/p3-config-base.el=.
 
 * Editing
 
-Generic editing semantics, snippets, diagnostics, spelling, thesaurus, and
-color helpers live in =lisp/p3-config-editing.el=. This loads before completion
-so Consult retains the final =C-s= and =C-r= bindings below; moved package
-activation remains tied to its original subsystem boundaries.
+Generic editing semantics and package setup live in =lisp/p3-config-editing.el=.
+The owner loads before completion so Consult retains the final =C-s= and =C-r=
+bindings; staged setup calls below preserve the original activation positions
+without coupling configuration modules to one another.
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-editing)
@@ -92,6 +92,7 @@ live in =lisp/p3-config-completion.el=.
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-completion)
+  (p3/config-editing-setup-thesaurus-and-snippets)
 #+END_SRC
 
 ** C++
@@ -149,6 +150,7 @@ Task prompts, streaming/rollback behavior, and the task command map remain in
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-gptel)
+  (p3/config-editing-setup-diagnostics)
 #+END_SRC
 
 ** Buffers, Windows, and Frames
@@ -299,6 +301,7 @@ Reusable interpreter, language-server, and REPL behavior remains in
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-python)
+  (p3/config-editing-setup-color-helper)
 #+END_SRC
 
 ** Shell
@@ -309,6 +312,7 @@ Terminal package wiring and platform-specific shell activation live in
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-terminal)
+  (p3/config-editing-setup-spelling)
 #+END_SRC
 
 ** TRAMP
