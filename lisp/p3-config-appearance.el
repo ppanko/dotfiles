@@ -20,6 +20,7 @@
 (declare-function nerd-icons-octicon "nerd-icons" (name &rest args))
 (declare-function nerd-icons-codicon "nerd-icons" (name &rest args))
 (declare-function nerd-icons-dired-mode "nerd-icons-dired" (&optional arg))
+(declare-function all-the-icons-dired-mode "all-the-icons-dired" (&optional arg))
 (declare-function flycheck-count-errors "flycheck" (errors))
 (declare-function doom-modeline-mode "doom-modeline" (&optional arg))
 
@@ -77,7 +78,7 @@
 (set-face-attribute 'line-number-current-line nil :weight 'bold)
 
 ;; Retire the old modeline when this source is reloaded into an existing
-;; session.  This does not load or configure doom-modeline.
+;; session. This does not load or configure doom-modeline.
 (when (and (fboundp 'doom-modeline-mode)
            (bound-and-true-p doom-modeline-mode))
   (doom-modeline-mode -1))
