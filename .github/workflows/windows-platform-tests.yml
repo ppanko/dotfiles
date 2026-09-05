@@ -33,6 +33,7 @@ on:
       - "test/p3-config-org-roam-test.el"
       - "test/p3-config-org-present-test.el"
       - "test/p3-config-terminal-test.el"
+      - "test/p3-config-terminal-windows-test.el"
       - "test/p3-ess-test.el"
       - "test/p3-r-tools-test.el"
       - "test/p3-commands-test.el"
@@ -85,12 +86,8 @@ jobs:
         shell: powershell
         run: >-
           emacs -Q --batch -L lisp
-          --eval '(setq user-emacs-directory (file-name-as-directory default-directory))'
-          -l lisp/p3-platform.el
-          --eval '(setq linuxy-environment-path (file-name-as-directory (expand-file-name "usr/bin" (getenv "P3_TEST_MSYS2_ROOT"))))'
-          -l lisp/p3-config-loader.el
-          -l lisp/p3-config-terminal.el
-          --eval '(unless (and (featurep (quote p3-config-terminal)) (featurep (quote p3-terminal)) (eq (key-binding (kbd "C-x C-u")) (quote shell)) (string-suffix-p "bash.exe" shell-file-name t)) (kill-emacs 1))'
+          -l test/p3-config-terminal-windows-test.el
+          -f ert-run-tests-batch-and-exit
 
       - name: Run Windows platform and project tests
         shell: powershell
