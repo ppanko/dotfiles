@@ -90,6 +90,22 @@
     (user-error "Reference bibliography is not configured"))
   (expand-file-name p3/reference-bibliography-file))
 
+(defun p3/reference--bibliography-content ()
+  "Return the current bibliography snapshot, preferring a visiting buffer."
+  (let* ((path (p3/reference--bibliography-path))
+         (live-buffer (find-buffer-visiting path)))
+    (cond
+     (live-buffer
+      (with-current-buffer live-buffer
+        (save-restriction
+          (widen)
+          (buffer-substring-no-properties (point-min) (point-max)))))
+     ((file-exists-p path)
+      (with-temp-buffer
+        (insert-file-contents path)
+        (buffer-string)))
+     (t ""))))
+
 (defun p3/reference--ordinary-entry-type-p (type)
   "Return non-nil when TYPE names an ordinary bibliographic entry."
   (not (member (downcase type) '("string" "preamble" "comment"))))
@@ -105,29 +121,30 @@
       (goto-char (match-beginning 0))
       t)))
 
+(defun p3/reference--entry-alist-from-content (citekey content)
+  "Return CITEKEY parsed from bibliography CONTENT, or nil."
+  (with-temp-buffer
+    (insert content)
+    (bibtex-mode)
+    (bibtex-set-dialect 'biblatex t)
+    (when (p3/reference--goto-entry citekey)
+      (bibtex-parse-entry t))))
+
 (defun p3/reference--entry-alist (citekey)
   "Return the canonical bibliography entry for CITEKEY as an alist."
-  (let ((path (p3/reference--bibliography-path)))
-    (when (file-exists-p path)
-      (with-temp-buffer
-        (insert-file-contents path)
-        (bibtex-mode)
-        (bibtex-set-dialect 'biblatex t)
-        (when (p3/reference--goto-entry citekey)
-          (bibtex-parse-entry t))))))
+  (p3/reference--entry-alist-from-content
+   citekey (p3/reference--bibliography-content)))
 
 (defun p3/reference--entry-string (citekey)
   "Return the exact bibliography entry text for CITEKEY, or nil."
-  (let ((path (p3/reference--bibliography-path)))
-    (when (file-exists-p path)
-      (with-temp-buffer
-        (insert-file-contents path)
-        (bibtex-mode)
-        (bibtex-set-dialect 'biblatex t)
-        (when (p3/reference--goto-entry citekey)
-          (let ((start (point)))
-            (bibtex-end-of-entry)
-            (buffer-substring-no-properties start (point))))))))
+  (with-temp-buffer
+    (insert (p3/reference--bibliography-content))
+    (bibtex-mode)
+    (bibtex-set-dialect 'biblatex t)
+    (when (p3/reference--goto-entry citekey)
+      (let ((start (point)))
+        (bibtex-end-of-entry)
+        (buffer-substring-no-properties start (point))))))
 
 (defun p3/reference--entry-keys-from-content (content)
   "Return ordinary-entry citekeys parsed from BibLaTeX CONTENT."
@@ -176,28 +193,12 @@
               (error (signal (car err) (cdr err))))))))
     t))
 
-(defun p3/reference--transaction (edit-fn)
-  "Run EDIT-FN against a temporary bibliography buffer and commit if valid."
-  (let* ((target (p3/reference--bibliography-path))
-         (directory (file-name-directory target))
-         (original (if (file-exists-p target)
-                       (with-temp-buffer
-                         (insert-file-contents target)
-                         (buffer-string))
-                     ""))
-         result candidate temp)
-    (make-directory directory t)
-    (with-temp-buffer
-      (insert original)
-      (bibtex-mode)
-      (bibtex-set-dialect 'biblatex t)
-      (setq result (funcall edit-fn)
-            candidate (buffer-string)))
-    (p3/reference--validate-content candidate)
-    (setq temp
-          (make-temp-file
-           (expand-file-name ".p3-references-" directory)
-           nil ".bib" candidate))
+(defun p3/reference--write-candidate (target candidate)
+  "Atomically replace TARGET with validated bibliography CANDIDATE."
+  (let* ((directory (file-name-directory target))
+         (temp (make-temp-file
+                (expand-file-name ".p3-references-" directory)
+                nil ".bib" candidate)))
     (unwind-protect
         (progn
           (when (file-exists-p target)
@@ -205,8 +206,48 @@
           (rename-file temp target t)
           (setq temp nil))
       (when (and temp (file-exists-p temp))
-        (delete-file temp)))
-    result))
+        (delete-file temp)))))
+
+(defun p3/reference--transaction (edit-fn)
+  "Run EDIT-FN against the authoritative bibliography state and validate it."
+  (let* ((target (p3/reference--bibliography-path))
+         (directory (file-name-directory target))
+         (live-buffer (find-buffer-visiting target)))
+    (make-directory directory t)
+    (if live-buffer
+        (with-current-buffer live-buffer
+          (unless (derived-mode-p 'bibtex-mode)
+            (user-error "Bibliography buffer is not in BibTeX mode: %s" target))
+          (unless (verify-visited-file-modtime live-buffer)
+            (user-error
+             "Bibliography changed on disk; resolve the external change first"))
+          (let ((was-modified (buffer-modified-p))
+                result candidate)
+            (save-restriction
+              (widen)
+              (save-excursion
+                (atomic-change-group
+                  (setq result (funcall edit-fn)
+                        candidate (buffer-substring-no-properties
+                                   (point-min) (point-max)))
+                  (p3/reference--validate-content candidate)
+                  (unless was-modified
+                    (p3/reference--write-candidate target candidate)))))
+            (unless was-modified
+              (set-visited-file-modtime)
+              (set-buffer-modified-p nil))
+            result))
+      (let ((original (p3/reference--bibliography-content))
+            result candidate)
+        (with-temp-buffer
+          (insert original)
+          (bibtex-mode)
+          (bibtex-set-dialect 'biblatex t)
+          (setq result (funcall edit-fn)
+                candidate (buffer-string)))
+        (p3/reference--validate-content candidate)
+        (p3/reference--write-candidate target candidate)
+        result))))
 
 (defun p3/reference--parse-single-entry (bibtex)
   "Parse exactly one ordinary BIBTEX entry and return its alist."
@@ -223,15 +264,11 @@
       (bibtex-parse-entry t))))
 
 (defun p3/reference--all-entry-alists ()
-  "Return all ordinary entries from the canonical bibliography."
-  (let ((path (p3/reference--bibliography-path)))
-    (if (not (file-exists-p path))
-        nil
-      (with-temp-buffer
-        (insert-file-contents path)
-        (let ((content (buffer-string)))
-          (mapcar #'p3/reference--entry-alist
-                  (p3/reference--entry-keys-from-content content)))))))
+  "Return all ordinary entries from one canonical bibliography snapshot."
+  (let ((content (p3/reference--bibliography-content)))
+    (mapcar (lambda (key)
+              (p3/reference--entry-alist-from-content key content))
+            (p3/reference--entry-keys-from-content content))))
 
 (defun p3/reference-normalize-doi (doi)
   "Normalize DOI for duplicate comparison, returning nil when empty."
