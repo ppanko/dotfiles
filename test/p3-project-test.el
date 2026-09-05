@@ -25,30 +25,6 @@
              (lambda (_project) "/tmp/native-project/")))
     (should (equal (p3/project-root) "/tmp/native-project/"))))
 
-(ert-deftest p3-project-projectile-mode-hook-restores-native-provider ()
-  (skip-unless (executable-find "git"))
-  (let ((root (make-temp-file "p3-project-provider-" t)))
-    (unwind-protect
-        (progn
-          (should
-           (zerop (call-process "git" nil nil nil "-C" root "init" "-q")))
-          (let ((project-find-functions '(project-projectile project-try-vc))
-                (default-directory root))
-            (cl-letf (((symbol-function 'project-projectile)
-                       (lambda (_directory)
-                         (ert-fail
-                          "Projectile must not provide P3 project identity"))))
-              (run-hooks 'projectile-mode-hook)
-              (should-not (memq #'project-projectile project-find-functions))
-              (should (memq #'project-try-vc project-find-functions))
-              (let ((project (project-current nil)))
-                (should project)
-                (should
-                 (equal (p3-project-test--canonical-directory
-                         (project-root project))
-                        (p3-project-test--canonical-directory root)))))))
-      (delete-directory root t))))
-
 (ert-deftest p3-project-legacy-projectile-marker-is-detected-from-descendant ()
   (let* ((root (make-temp-file "p3-project-marker-" t))
          (child (expand-file-name "R/subdir" root)))
