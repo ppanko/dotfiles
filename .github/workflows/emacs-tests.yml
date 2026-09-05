@@ -183,6 +183,7 @@ jobs:
             -l test/p3-org-export-test.el \
             -l test/p3-reference-test.el \
             -l test/p3-reference-reconstruction-test.el \
+            -l test/p3-reference-adversarial-test.el \
             -l test/p3-config-reference-test.el \
             -l test/p3-commands-test.el \
             -l test/p3-git-test.el \
