@@ -42,14 +42,16 @@
 (use-package citar
   :defer t
   :commands (citar-select-ref
+             citar-key-at-point
              citar-insert-citation
              citar-get-value
              citar-open-entry))
 
 (use-package biblio
   :defer t
-  :commands biblio-lookup
-  :config
+  :commands biblio-lookup)
+
+(with-eval-after-load 'biblio-core
   (add-to-list 'biblio-selection-mode-actions-alist
                '("Save/enrich in P3 library" . p3/reference-biblio-save)))
 

@@ -14,6 +14,7 @@
 (declare-function biblio-format-bibtex "biblio-core" (&rest args))
 (declare-function citar-get-value "citar" (&rest args))
 (declare-function citar-insert-citation "citar" (&rest args))
+(declare-function citar-key-at-point "citar" ())
 (declare-function citar-open-entry "citar" (&rest args))
 (declare-function citar-select-ref "citar" (&rest args))
 (declare-function org-current-level "org" ())
@@ -83,10 +84,14 @@
      citekey))
   citekey)
 
+(defun p3/reference--bibliography-configured-p ()
+  "Return non-nil when a canonical bibliography path is configured."
+  (and (stringp p3/reference-bibliography-file)
+       (not (string-empty-p p3/reference-bibliography-file))))
+
 (defun p3/reference--bibliography-path ()
   "Return the configured bibliography path or signal a user error."
-  (unless (and (stringp p3/reference-bibliography-file)
-               (not (string-empty-p p3/reference-bibliography-file)))
+  (unless (p3/reference--bibliography-configured-p)
     (user-error "Reference bibliography is not configured"))
   (expand-file-name p3/reference-bibliography-file))
 
@@ -169,6 +174,27 @@
                  (signal (car err) (cdr err)))))
             (push key keys))))
       (nreverse keys))))
+
+(defun p3/reference--casefold-colliding-key (citekey)
+  "Return a bibliography key that shares CITEKEY's case-folded path identity."
+  (when (p3/reference--bibliography-configured-p)
+    (let ((folded (downcase citekey)))
+      (cl-find-if
+       (lambda (existing)
+         (and (not (equal existing citekey))
+              (equal (downcase existing) folded)))
+       (p3/reference--entry-keys-from-content
+        (p3/reference--bibliography-content))))))
+
+(defun p3/reference--require-unambiguous-path-citekey (citekey)
+  "Return CITEKEY when it identifies one portable cross-platform path."
+  (p3/reference--require-portable-citekey citekey)
+  (let ((collision (p3/reference--casefold-colliding-key citekey)))
+    (when collision
+      (user-error
+       "Citekey path collides case-insensitively with %s: %s"
+       collision citekey)))
+  citekey)
 
 (defun p3/reference--validate-content (content)
   "Validate BibLaTeX CONTENT sufficiently for safe local mutation."
@@ -338,13 +364,18 @@
   "Safely import one BIBTEX entry and return its canonical citekey."
   (let* ((incoming (p3/reference--parse-single-entry bibtex))
          (key (cdr (assoc "=key=" incoming)))
-         (duplicate (p3/reference--strong-duplicate-key incoming)))
+         (duplicate (p3/reference--strong-duplicate-key incoming))
+         (path-collision (p3/reference--casefold-colliding-key key)))
     (when (p3/reference-provisional-key-p key)
       (user-error "p3-inbox-* keys are reserved for URL-only captures"))
     (cond
      (duplicate duplicate)
      ((not (p3/reference--portable-citekey-p key))
       (user-error "Imported mature citekey is not portable: %s" key))
+     (path-collision
+      (user-error
+       "Imported citekey path collides case-insensitively with %s: %s"
+       path-collision key))
      ((and (p3/reference--possible-title-duplicate-keys incoming)
            (not (y-or-n-p
                  "Possible title duplicate; add as a distinct reference? ")))
@@ -602,6 +633,11 @@
         (citar-select-ref :filter (lambda (key) (member key allowed))))
     (citar-select-ref)))
 
+(defun p3/reference--key-at-point ()
+  "Return the Citar citekey at point when one is available."
+  (when (require 'citar nil t)
+    (ignore-errors (citar-key-at-point))))
+
 (defun p3/reference-open-url (citekey)
   "Open CITEKEY's URL, falling back to its DOI URL."
   (unless (require 'citar nil t)
@@ -663,13 +699,24 @@
         (error nil))
       citekey))
 
+(defun p3/reference--note-file-has-ref-p (path citekey)
+  "Return non-nil when Org file PATH declares ROAM_REFS for CITEKEY."
+  (with-temp-buffer
+    (insert-file-contents path)
+    (goto-char (point-min))
+    (when (re-search-forward "^:ROAM_REFS:[ \t]+\\(.*\\)$" nil t)
+      (member (concat "@" citekey)
+              (split-string (match-string-no-properties 1) "[ \t]+" t)))))
+
 (defun p3/reference-note (&optional citekey)
   "Open or create the one Org-roam literature note for CITEKEY."
   (interactive)
   (unless (require 'org-roam nil t)
     (user-error "Org-roam is unavailable"))
   (require 'org-id)
-  (let* ((selected (or citekey (p3/reference--select-key)))
+  (let* ((selected (or citekey
+                       (p3/reference--key-at-point)
+                       (p3/reference--select-key)))
          (key (if (p3/reference-provisional-key-p selected)
                   (p3/reference-finalize selected)
                 selected))
@@ -679,12 +726,18 @@
      (node
       (org-roam-node-visit node))
      (t
-      (p3/reference--require-portable-citekey key)
+      (p3/reference--require-unambiguous-path-citekey key)
       (let* ((directory (file-name-as-directory
                          (expand-file-name org-roam-directory)))
              (path (expand-file-name (concat key ".org") directory)))
-        (if (file-exists-p path)
-            (find-file path)
+        (cond
+         ((file-exists-p path)
+          (unless (p3/reference--note-file-has-ref-p path key)
+            (user-error
+             "Existing Org file does not belong to reference %s: %s"
+             key path))
+          (find-file path))
+         (t
           (make-directory directory t)
           (with-temp-file path
             (insert ":PROPERTIES:\n")
@@ -693,7 +746,8 @@
             (insert ":END:\n")
             (insert (format "#+title: %s\n" (p3/reference--display-title key)))
             (insert "#+filetags: :literature:\n\n"))
-          (find-file path)))))))
+          (find-file path)
+          (goto-char (point-max)))))))))
 
 (defun p3/reference--project-node-p (node)
   "Return non-nil when NODE carries the Org-roam project tag."
@@ -874,7 +928,7 @@ When WRITE is non-nil, persist changes unless FILE already had unsaved edits."
   "Return deterministic main PDF path for mature CITEKEY."
   (when (p3/reference-provisional-key-p citekey)
     (user-error "Finalize the reference before assigning a PDF path"))
-  (p3/reference--require-portable-citekey citekey)
+  (p3/reference--require-unambiguous-path-citekey citekey)
   (unless (and (stringp p3/reference-pdf-directory)
                (not (string-empty-p p3/reference-pdf-directory)))
     (user-error "Reference PDF directory is not configured"))
