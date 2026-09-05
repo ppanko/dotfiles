@@ -456,7 +456,7 @@
   (interactive)
   (let* ((key (or citekey
                   (if (fboundp 'p3/reference--select-key)
-                      (p3/reference--select-key nil)
+                      (p3/reference--select-key)
                     (user-error "Reference selection is unavailable"))))
          (entry (p3/reference--entry-alist key)))
     (unless entry
@@ -473,6 +473,322 @@
         (p3/reference--lookup-title url key))
        (t
         (user-error "Reference needs a DOI, title, or URL for enrichment"))))))
+
+(cl-defun p3/reference--select-key (&optional (allowed-keys nil allowed-p))
+  "Select one reference key, optionally limited to ALLOWED-KEYS."
+  (unless (require 'citar nil t)
+    (user-error "Citar is unavailable"))
+  (when (and allowed-p (null allowed-keys))
+    (user-error "No references are available in this scope"))
+  (if allowed-p
+      (let ((allowed (copy-sequence allowed-keys)))
+        (citar-select-ref :filter (lambda (key) (member key allowed))))
+    (citar-select-ref)))
+
+(defun p3/reference-open-url (citekey)
+  "Open CITEKEY's URL, falling back to its DOI URL."
+  (unless (require 'citar nil t)
+    (user-error "Citar is unavailable"))
+  (let ((url (citar-get-value "url" citekey))
+        (doi (citar-get-value "doi" citekey)))
+    (cond
+     ((and url (not (string-empty-p (string-trim url))))
+      (browse-url url))
+     ((p3/reference-normalize-doi doi)
+      (browse-url (concat "https://doi.org/" (p3/reference-normalize-doi doi))))
+     (t
+      (user-error "Reference has no URL or DOI: %s" citekey)))))
+
+(defun p3/reference-edit-entry (citekey)
+  "Open CITEKEY in its canonical bibliography."
+  (unless (require 'citar nil t)
+    (user-error "Citar is unavailable"))
+  (citar-open-entry citekey))
+
+(defun p3/reference-insert-citation (&optional citekey)
+  "Insert a native citation for CITEKEY, finalizing provisional keys first."
+  (interactive)
+  (unless (require 'citar nil t)
+    (user-error "Citar is unavailable"))
+  (let* ((key (or citekey (p3/reference--select-key)))
+         (mature (if (p3/reference-provisional-key-p key)
+                     (p3/reference-finalize key)
+                   key)))
+    (citar-insert-citation (list mature))))
+
+(defun p3/reference--action-alist ()
+  "Return the common actions offered for a selected reference."
+  '(("Insert citation" . p3/reference-insert-citation)
+    ("Open URL" . p3/reference-open-url)
+    ("Edit bibliography entry" . p3/reference-edit-entry)
+    ("Open/create literature note" . p3/reference-note)
+    ("Open PDF" . p3/reference-open-pdf)
+    ("Classify / project association" . p3/reference-classify)))
+
+(defun p3/reference-find (&optional allowed-keys)
+  "Find a reference, optionally restricted to ALLOWED-KEYS, then act on it."
+  (interactive)
+  (let ((key (if allowed-keys
+                 (p3/reference--select-key allowed-keys)
+               (p3/reference--select-key))))
+    (when key
+      (let* ((actions (p3/reference--action-alist))
+             (label (completing-read "Reference action: " actions nil t))
+             (fn (cdr (assoc label actions))))
+        (funcall fn key)))))
+
+(defun p3/reference--display-title (citekey)
+  "Return a human-readable title for CITEKEY without making Citar authoritative."
+  (or (when (require 'citar nil t)
+        (citar-get-value "title" citekey))
+      (condition-case nil
+          (cdr (assoc "title" (p3/reference--entry-alist citekey)))
+        (error nil))
+      citekey))
+
+(defun p3/reference-note (&optional citekey)
+  "Open or create the one Org-roam literature note for CITEKEY."
+  (interactive)
+  (unless (require 'org-roam nil t)
+    (user-error "Org-roam is unavailable"))
+  (require 'org-id)
+  (let* ((selected (or citekey (p3/reference--select-key)))
+         (key (if (p3/reference-provisional-key-p selected)
+                  (p3/reference-finalize selected)
+                selected))
+         (ref (concat "@" key))
+         (node (org-roam-node-from-ref ref)))
+    (cond
+     (node
+      (org-roam-node-visit node))
+     (t
+      (let* ((directory (file-name-as-directory
+                         (expand-file-name org-roam-directory)))
+             (path (expand-file-name (concat key ".org") directory)))
+        (if (file-exists-p path)
+            (find-file path)
+          (make-directory directory t)
+          (with-temp-file path
+            (insert ":PROPERTIES:\n")
+            (insert (format ":ID: %s\n" (org-id-new)))
+            (insert (format ":ROAM_REFS: @%s\n" key))
+            (insert ":END:\n")
+            (insert (format "#+title: %s\n" (p3/reference--display-title key)))
+            (insert "#+filetags: :literature:\n\n"))
+          (find-file path)))))))
+
+(defun p3/reference--project-node-p (node)
+  "Return non-nil when NODE carries the Org-roam project tag."
+  (member "project" (org-roam-node-tags node)))
+
+(defun p3/reference--current-project-node ()
+  "Return the current Org-roam project node, or nil."
+  (when (and (derived-mode-p 'org-mode)
+             (require 'org-roam nil t))
+    (let ((node (org-roam-node-at-point)))
+      (and node (p3/reference--project-node-p node) node))))
+
+(defun p3/reference--select-project-node ()
+  "Prompt for one Org-roam project node."
+  (unless (require 'org-roam nil t)
+    (user-error "Org-roam is unavailable"))
+  (org-roam-node-read nil #'p3/reference--project-node-p nil t))
+
+(defun p3/reference--project-file (node)
+  "Return the file backing project NODE."
+  (unless (require 'org-roam nil t)
+    (user-error "Org-roam is unavailable"))
+  (org-roam-node-file node))
+
+(defun p3/reference--project-reference-bounds ()
+  "Return body bounds of the level-one References subtree in current Org buffer."
+  (require 'org)
+  (save-excursion
+    (goto-char (point-min))
+    (let (bounds)
+      (while (and (not bounds)
+                  (re-search-forward "^\\* References[ \t]*$" nil t))
+        (when (= (or (org-current-level) 0) 1)
+          (let ((start (line-beginning-position 2))
+                (end (save-excursion
+                       (org-end-of-subtree t t)
+                       (point))))
+            (setq bounds (cons start end)))))
+      bounds)))
+
+(defun p3/reference-project-citekeys (&optional node)
+  "Return explicit reference-registry citekeys for project NODE."
+  (let* ((project (or node (p3/reference--current-project-node)
+                      (p3/reference--select-project-node))))
+    (unless (p3/reference--project-node-p project)
+      (user-error "Selected Org-roam node is not a project"))
+    (let ((file (p3/reference--project-file project)))
+      (with-temp-buffer
+        (insert-file-contents file)
+        (org-mode)
+        (let ((bounds (p3/reference--project-reference-bounds))
+              keys)
+          (when bounds
+            (goto-char (car bounds))
+            (while (re-search-forward
+                    "^[ \t]*\\[cite:@\\([^] ;,]+\\)\\][ \t]*$"
+                    (cdr bounds) t)
+              (push (match-string-no-properties 1) keys)))
+          (nreverse (delete-dups keys)))))))
+
+(defun p3/reference--associate-mature-key (citekey node)
+  "Associate mature CITEKEY with project NODE."
+  (when (p3/reference-provisional-key-p citekey)
+    (user-error "Project associations require a mature citekey"))
+  (unless (p3/reference--project-node-p node)
+    (user-error "Selected Org-roam node is not a project"))
+  (let ((file (p3/reference--project-file node)))
+    (with-temp-buffer
+      (insert-file-contents file)
+      (org-mode)
+      (let ((bounds (p3/reference--project-reference-bounds)))
+        (if bounds
+            (unless (member citekey
+                            (let (keys)
+                              (save-excursion
+                                (goto-char (car bounds))
+                                (while (re-search-forward
+                                        "^[ \t]*\\[cite:@\\([^] ;,]+\\)\\][ \t]*$"
+                                        (cdr bounds) t)
+                                  (push (match-string-no-properties 1) keys)))
+                              keys))
+              (goto-char (cdr bounds))
+              (unless (bolp) (insert "\n"))
+              (insert (format "[cite:@%s]\n" citekey)))
+          (goto-char (point-max))
+          (unless (bolp) (insert "\n"))
+          (insert (format "\n* References\n\n[cite:@%s]\n" citekey))))
+      (write-region (point-min) (point-max) file nil 'silent)))
+  citekey)
+
+(defun p3/reference-associate-project (citekey &optional node)
+  "Associate CITEKEY with project NODE, finalizing it first if needed."
+  (interactive (list (p3/reference--select-key)))
+  (let* ((project (or node (p3/reference--current-project-node)
+                      (p3/reference--select-project-node)))
+         (mature (if (p3/reference-provisional-key-p citekey)
+                     (p3/reference-finalize citekey)
+                   citekey)))
+    (p3/reference--associate-mature-key mature project)))
+
+(defun p3/reference-remove-project-association (citekey &optional node)
+  "Remove CITEKEY from project NODE's canonical References registry only."
+  (interactive (list (p3/reference--select-key)))
+  (let ((project (or node (p3/reference--current-project-node)
+                     (p3/reference--select-project-node))))
+    (unless (p3/reference--project-node-p project)
+      (user-error "Selected Org-roam node is not a project"))
+    (let ((file (p3/reference--project-file project)))
+      (with-temp-buffer
+        (insert-file-contents file)
+        (org-mode)
+        (let ((bounds (p3/reference--project-reference-bounds))
+              (regexp (format "^[ \t]*\\[cite:@%s\\][ \t]*\\n?"
+                              (regexp-quote citekey))))
+          (when bounds
+            (goto-char (car bounds))
+            (when (re-search-forward regexp (cdr bounds) t)
+              (replace-match ""))))
+        (write-region (point-min) (point-max) file nil 'silent))))
+  citekey)
+
+(defun p3/reference-project-references (&optional node)
+  "Browse the canonical references associated with project NODE."
+  (interactive)
+  (let ((keys (p3/reference-project-citekeys node)))
+    (unless keys
+      (user-error "Project has no associated references"))
+    (p3/reference-find keys)))
+
+(defun p3/reference-classify (&optional citekey)
+  "Classify CITEKEY globally or associate it with a project."
+  (interactive)
+  (let* ((key (or citekey (p3/reference--select-key)))
+         (actions '("Add topic/status keyword"
+                    "Remove topic/status keyword"
+                    "Associate with project"
+                    "Remove project association"))
+         (action (completing-read "Reference classification: " actions nil t)))
+    (pcase action
+      ("Add topic/status keyword"
+       (p3/reference-add-keyword key (read-string "Keyword: ")))
+      ("Remove topic/status keyword"
+       (let* ((entry (p3/reference--entry-alist key))
+              (keywords (p3/reference--keyword-list
+                         (cdr (assoc "keywords" entry))))
+              (keyword (completing-read "Remove keyword: " keywords nil t)))
+         (p3/reference-remove-keyword key keyword)))
+      ("Associate with project"
+       (p3/reference-associate-project key))
+      ("Remove project association"
+       (p3/reference-remove-project-association key)))))
+
+(defun p3/reference-pdf-path (citekey)
+  "Return deterministic main PDF path for mature CITEKEY."
+  (when (p3/reference-provisional-key-p citekey)
+    (user-error "Finalize the reference before assigning a PDF path"))
+  (unless (and (stringp p3/reference-pdf-directory)
+               (not (string-empty-p p3/reference-pdf-directory)))
+    (user-error "Reference PDF directory is not configured"))
+  (expand-file-name
+   "main.pdf"
+   (expand-file-name citekey
+                     (file-name-as-directory
+                      (expand-file-name p3/reference-pdf-directory)))))
+
+(defun p3/reference-attach-pdf (source &optional citekey)
+  "Copy SOURCE to CITEKEY's deterministic main PDF path."
+  (interactive (list (read-file-name "PDF file: ") nil))
+  (let* ((selected (or citekey (p3/reference--select-key)))
+         (key (if (p3/reference-provisional-key-p selected)
+                  (p3/reference-finalize selected)
+                selected))
+         (target (p3/reference-pdf-path key)))
+    (unless (file-readable-p source)
+      (user-error "PDF source is not readable: %s" source))
+    (make-directory (file-name-directory target) t)
+    (when (and (file-exists-p target)
+               (not (y-or-n-p (format "Replace existing %s? " target))))
+      (user-error "PDF attachment cancelled"))
+    (copy-file source target t)
+    target))
+
+(defun p3/reference-open-pdf (&optional citekey)
+  "Open CITEKEY's deterministic main PDF, using pdf-tools when usable."
+  (interactive)
+  (let* ((selected (or citekey (p3/reference--select-key)))
+         (key (if (p3/reference-provisional-key-p selected)
+                  (p3/reference-finalize selected)
+                selected))
+         (path (p3/reference-pdf-path key)))
+    (unless (file-exists-p path)
+      (user-error "No local PDF for %s" key))
+    (find-file path)
+    (if (and (require 'pdf-tools nil t) (fboundp 'pdf-view-mode))
+        (condition-case err
+            (pdf-view-mode)
+          (error
+           (message "pdf-tools unavailable (%s); using default PDF viewer"
+                    (error-message-string err))))
+      (message "pdf-tools unavailable; using default PDF viewer"))
+    path))
+
+(defvar p3/reference-command-map nil)
+(setq p3/reference-command-map
+      (let ((map (make-sparse-keymap)))
+        (define-key map (kbd "a") #'p3/reference-add)
+        (define-key map (kbd "f") #'p3/reference-find)
+        (define-key map (kbd "i") #'p3/reference-insert-citation)
+        (define-key map (kbd "n") #'p3/reference-note)
+        (define-key map (kbd "p") #'p3/reference-open-pdf)
+        (define-key map (kbd "t") #'p3/reference-classify)
+        (define-key map (kbd "r") #'p3/reference-project-references)
+        map))
 
 (provide 'p3-reference)
 

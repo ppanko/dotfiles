@@ -28,6 +28,9 @@
 (defconst p3-reference-test--two-entries
   "@article{alpha2020,\n  title = {Alpha},\n  doi = {10.1000/alpha}\n}\n\n% keep this comment exactly\n@article{beta2021,\n  title = {Beta}\n}\n")
 
+(defconst p3-reference-test--project-org
+  "#+title: Example\n#+filetags: :project:\n\nA narrative [cite:@narrative2020] mention.\n\n* References\n\n[cite:@alpha2020]\n")
+
 (ert-deftest p3-reference-provisional-state-is-key-prefix-only ()
   (should (p3/reference-provisional-key-p "p3-inbox-20260905-140501"))
   (should-not (p3/reference-provisional-key-p "smith2026"))
@@ -237,6 +240,227 @@
                                     "@article{remote, title={Alpha}, year={2024}}"))))))))
     (should (p3/reference--entry-alist "p3-inbox-1"))
     (should-not (p3/reference--entry-alist "remote"))))
+
+(ert-deftest p3-reference-project-filter-is-passed-to-citar-selection ()
+  (let (filter)
+    (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
+              ((symbol-function 'citar-select-ref)
+               (lambda (&rest args)
+                 (setq filter (plist-get args :filter))
+                 "beta2021")))
+      (should (equal "beta2021"
+                     (p3/reference--select-key '("alpha2020" "beta2021"))))
+      (should (funcall filter "alpha2020"))
+      (should-not (funcall filter "gamma2022")))))
+
+(ert-deftest p3-reference-empty-project-set-never-searches-globally ()
+  (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
+            ((symbol-function 'citar-select-ref)
+             (lambda (&rest _) (ert-fail "Citar must not be called"))))
+    (should-error (p3/reference--select-key '()))))
+
+(ert-deftest p3-reference-url-action-falls-back-to-doi ()
+  (let (opened)
+    (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
+              ((symbol-function 'citar-get-value)
+               (lambda (field _key)
+                 (pcase field
+                   ("url" nil)
+                   ("doi" "10.1000/alpha"))))
+              ((symbol-function 'browse-url)
+               (lambda (url &rest _) (setq opened url))))
+      (p3/reference-open-url "alpha2020")
+      (should (equal "https://doi.org/10.1000/alpha" opened)))))
+
+(ert-deftest p3-reference-insert-citation-finalizes-provisional-first ()
+  (let (inserted)
+    (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
+              ((symbol-function 'p3/reference-finalize)
+               (lambda (_key) "alpha2020"))
+              ((symbol-function 'citar-insert-citation)
+               (lambda (keys &optional _arg) (setq inserted keys))))
+      (p3/reference-insert-citation "p3-inbox-1")
+      (should (equal '("alpha2020") inserted)))))
+
+(ert-deftest p3-reference-insert-citation-skips-finalization-for-mature-key ()
+  (let (inserted)
+    (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
+              ((symbol-function 'p3/reference-finalize)
+               (lambda (_key) (ert-fail "Mature key must not be finalized")))
+              ((symbol-function 'citar-insert-citation)
+               (lambda (keys &optional _arg) (setq inserted keys))))
+      (p3/reference-insert-citation "alpha2020")
+      (should (equal '("alpha2020") inserted)))))
+
+(ert-deftest p3-reference-note-opens-existing-ref-node ()
+  (let (visited)
+    (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
+              ((symbol-function 'org-roam-node-from-ref)
+               (lambda (ref) (and (equal ref "@alpha2020") 'existing-node)))
+              ((symbol-function 'org-roam-node-visit)
+               (lambda (node &rest _) (setq visited node))))
+      (p3/reference-note "alpha2020")
+      (should (eq 'existing-node visited)))))
+
+(ert-deftest p3-reference-note-finalizes-before-choosing-file-name ()
+  (let* ((directory (make-temp-file "p3-roam-" t))
+         (org-roam-directory directory))
+    (unwind-protect
+        (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
+                  ((symbol-function 'p3/reference-finalize)
+                   (lambda (_key) "alpha2020"))
+                  ((symbol-function 'org-roam-node-from-ref) (lambda (_ref) nil))
+                  ((symbol-function 'org-id-new) (lambda () "note-id"))
+                  ((symbol-function 'citar-get-value)
+                   (lambda (field _key)
+                     (if (equal field "title") "Alpha Study" nil)))
+                  ((symbol-function 'find-file) #'ignore))
+          (p3/reference-note "p3-inbox-1")
+          (should (file-exists-p (expand-file-name "alpha2020.org" directory)))
+          (should-not (file-exists-p (expand-file-name "p3-inbox-1.org" directory))))
+      (delete-directory directory t))))
+
+(ert-deftest p3-reference-note-creates-minimal-durable-org-file ()
+  (let* ((directory (make-temp-file "p3-roam-" t))
+         (org-roam-directory directory))
+    (unwind-protect
+        (cl-letf (((symbol-function 'require) (lambda (&rest _) t))
+                  ((symbol-function 'org-roam-node-from-ref) (lambda (_ref) nil))
+                  ((symbol-function 'org-id-new) (lambda () "note-id"))
+                  ((symbol-function 'citar-get-value)
+                   (lambda (field _key)
+                     (if (equal field "title") "Alpha Study" nil)))
+                  ((symbol-function 'find-file) #'ignore))
+          (p3/reference-note "alpha2020")
+          (with-temp-buffer
+            (insert-file-contents (expand-file-name "alpha2020.org" directory))
+            (let ((text (buffer-string)))
+              (should (string-match-p ":ROAM_REFS: @alpha2020" text))
+              (should (string-match-p ":ID: note-id" text))
+              (should (string-match-p "#+filetags: :literature:" text))
+              (should (string-match-p "#+title: Alpha Study" text))
+              (should-not (string-match-p "doi:" text)))))
+      (delete-directory directory t))))
+
+(ert-deftest p3-reference-project-citekeys-ignore-narrative-citations ()
+  (let ((file (make-temp-file "p3-project-" nil ".org"
+                              p3-reference-test--project-org)))
+    (unwind-protect
+        (cl-letf (((symbol-function 'p3/reference--project-file)
+                   (lambda (_node) file))
+                  ((symbol-function 'p3/reference--project-node-p)
+                   (lambda (_node) t)))
+          (should (equal '("alpha2020")
+                         (p3/reference-project-citekeys 'project-node))))
+      (delete-file file))))
+
+(ert-deftest p3-reference-project-association-creates-registry-and-is-idempotent ()
+  (let ((file (make-temp-file "p3-project-" nil ".org"
+                              "#+title: Example\n#+filetags: :project:\n")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'p3/reference--project-file)
+                   (lambda (_node) file))
+                  ((symbol-function 'p3/reference--project-node-p)
+                   (lambda (_node) t)))
+          (p3/reference-associate-project "beta2021" 'project-node)
+          (p3/reference-associate-project "beta2021" 'project-node)
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (= 1 (how-many "^\\* References$" (point-min) (point-max))))
+            (should (= 1 (how-many "\\[cite:@beta2021\\]"
+                                   (point-min) (point-max))))))
+      (delete-file file))))
+
+(ert-deftest p3-reference-project-removal-does-not-touch-narrative-citation ()
+  (let ((file (make-temp-file "p3-project-" nil ".org"
+                              p3-reference-test--project-org)))
+    (unwind-protect
+        (cl-letf (((symbol-function 'p3/reference--project-file)
+                   (lambda (_node) file))
+                  ((symbol-function 'p3/reference--project-node-p)
+                   (lambda (_node) t)))
+          (p3/reference-remove-project-association "alpha2020" 'project-node)
+          (with-temp-buffer
+            (insert-file-contents file)
+            (should (search-forward "[cite:@narrative2020]" nil t))
+            (should-not (search-forward "[cite:@alpha2020]" nil t))))
+      (delete-file file))))
+
+(ert-deftest p3-reference-project-target-must-have-project-tag ()
+  (cl-letf (((symbol-function 'org-roam-node-tags)
+             (lambda (_node) '("idea"))))
+    (should-not (p3/reference--project-node-p 'node))))
+
+(ert-deftest p3-reference-project-association-finalizes-provisional-first ()
+  (let (associated-key)
+    (cl-letf (((symbol-function 'p3/reference-finalize)
+               (lambda (_key) "alpha2020"))
+              ((symbol-function 'p3/reference--associate-mature-key)
+               (lambda (key _node) (setq associated-key key))))
+      (p3/reference-associate-project "p3-inbox-1" 'project-node)
+      (should (equal "alpha2020" associated-key)))))
+
+(ert-deftest p3-reference-project-retrieval-reuses-global-find-ui ()
+  (let (allowed)
+    (cl-letf (((symbol-function 'p3/reference-project-citekeys)
+               (lambda (_node) '("alpha2020" "beta2021")))
+              ((symbol-function 'p3/reference-find)
+               (lambda (keys) (setq allowed keys))))
+      (p3/reference-project-references 'project-node)
+      (should (equal '("alpha2020" "beta2021") allowed)))))
+
+(ert-deftest p3-reference-pdf-path-uses-mature-key-directory ()
+  (let* ((directory (make-temp-file "p3-pdf-" t))
+         (p3/reference-pdf-directory directory))
+    (unwind-protect
+        (progn
+          (should (equal (expand-file-name "alpha2020/main.pdf" directory)
+                         (p3/reference-pdf-path "alpha2020")))
+          (should-error (p3/reference-pdf-path "p3-inbox-1")))
+      (delete-directory directory t))))
+
+(ert-deftest p3-reference-attach-pdf-finalizes-before-destination ()
+  (p3-reference-test--with-library
+      "@article{p3-inbox-1, title={Alpha}}\n"
+    (let* ((source (expand-file-name "source.pdf" directory))
+           destination)
+      (with-temp-file source (insert "pdf"))
+      (cl-letf (((symbol-function 'p3/reference-finalize)
+                 (lambda (_key) "alpha2020"))
+                ((symbol-function 'copy-file)
+                 (lambda (_source target &rest _) (setq destination target))))
+        (p3/reference-attach-pdf source "p3-inbox-1")
+        (should (string-suffix-p "alpha2020/main.pdf" destination))))))
+
+(ert-deftest p3-reference-attach-pdf-never-silently-overwrites ()
+  (p3-reference-test--with-library "@article{alpha2020, title={Alpha}}\n"
+    (let* ((source (expand-file-name "source.pdf" directory))
+           (target (expand-file-name "alpha2020/main.pdf"
+                                     p3/reference-pdf-directory)))
+      (make-directory (file-name-directory target) t)
+      (with-temp-file source (insert "new"))
+      (with-temp-file target (insert "old"))
+      (cl-letf (((symbol-function 'y-or-n-p) (lambda (&rest _) nil)))
+        (should-error (p3/reference-attach-pdf source "alpha2020")))
+      (with-temp-buffer
+        (insert-file-contents target)
+        (should (equal "old" (buffer-string)))))))
+
+(ert-deftest p3-reference-open-pdf-falls-back-when-pdf-tools-unusable ()
+  (let (opened message-text)
+    (cl-letf (((symbol-function 'p3/reference-pdf-path)
+               (lambda (_key) "/tmp/alpha.pdf"))
+              ((symbol-function 'file-exists-p) (lambda (_file) t))
+              ((symbol-function 'find-file) (lambda (file) (setq opened file)))
+              ((symbol-function 'require)
+               (lambda (feature &rest _)
+                 (if (eq feature 'pdf-tools) nil t)))
+              ((symbol-function 'message)
+               (lambda (format-string &rest args)
+                 (setq message-text (apply #'format format-string args)))))
+      (p3/reference-open-pdf "alpha2020")
+      (should (equal "/tmp/alpha.pdf" opened))
+      (should (string-match-p "default PDF viewer" message-text)))))
 
 (provide 'p3-reference-test)
 
