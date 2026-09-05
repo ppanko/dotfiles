@@ -34,6 +34,9 @@
 (defconst p3/reference--entry-head-regexp
   "^[ \t]*@\\([[:alpha:]][[:alnum:]_-]*\\)[ \t\n]*[{(][ \t\n]*\\([^, \t\n]+\\)[ \t\n]*,")
 
+(defconst p3/reference--windows-reserved-citekey-regexp
+  "\\`\\(?:con\\|prn\\|aux\\|nul\\|com[1-9]\\|lpt[1-9]\\)\\(?:\\..*\\)?\\'")
+
 (defun p3/reference-provisional-key-p (citekey)
   "Return non-nil when CITEKEY uses the reserved provisional prefix."
   (and (stringp citekey)
@@ -47,6 +50,30 @@
           p3/reference-provisional-prefix
           (format-time-string "%Y%m%d-%H%M%S")
           p3/reference--provisional-sequence))
+
+(defun p3/reference--portable-citekey-p (citekey)
+  "Return non-nil when CITEKEY is safe as a cross-platform path component."
+  (and (stringp citekey)
+       (string-match-p "\\`[A-Za-z0-9][A-Za-z0-9._-]*\\'" citekey)
+       (not (string-suffix-p "." citekey))
+       (let ((case-fold-search t))
+         (not (string-match-p
+               p3/reference--windows-reserved-citekey-regexp citekey)))))
+
+(defun p3/reference--sanitize-citekey (citekey)
+  "Return a conservative cross-platform form of generated CITEKEY."
+  (when (stringp citekey)
+    (let ((value (string-trim citekey)))
+      (setq value
+            (replace-regexp-in-string "[^A-Za-z0-9._-]+" "-" value))
+      (setq value (replace-regexp-in-string "\\`[^A-Za-z0-9]+" "" value))
+      (setq value (replace-regexp-in-string "\\.+\\'" "" value))
+      (when (and (not (string-empty-p value))
+                 (let ((case-fold-search t))
+                   (string-match-p
+                    p3/reference--windows-reserved-citekey-regexp value)))
+        (setq value (concat "ref-" value)))
+      value)))
 
 (defun p3/reference--bibliography-path ()
   "Return the configured bibliography path or signal a user error."
@@ -363,15 +390,19 @@
   "Finalize provisional CITEKEY or return mature CITEKEY unchanged."
   (if (not (p3/reference-provisional-key-p citekey))
       citekey
-    (let ((proposal (p3/reference--propose-citekey citekey)))
+    (let ((proposal
+           (p3/reference--sanitize-citekey
+            (p3/reference--propose-citekey citekey))))
       (unless (and proposal (not (string-empty-p proposal)))
         (user-error "Reference needs more metadata before finalization"))
       (let ((accepted (string-trim
                        (read-string "Permanent citekey: " proposal))))
         (when (or (string-empty-p accepted)
                   (p3/reference-provisional-key-p accepted)
+                  (not (p3/reference--portable-citekey-p accepted))
                   (p3/reference--entry-alist accepted))
-          (user-error "Permanent citekey is invalid or already used"))
+          (user-error
+           "Permanent citekey must be portable, non-provisional, and unused"))
         (p3/reference--rename-provisional-entry-head citekey accepted)
         accepted))))
 
@@ -639,6 +670,30 @@
     (user-error "Org-roam is unavailable"))
   (org-roam-node-file node))
 
+(defun p3/reference--call-with-project-buffer (file function &optional write)
+  "Call FUNCTION in the Org buffer representing FILE.
+When WRITE is non-nil, persist changes unless FILE already had unsaved edits."
+  (let* ((path (expand-file-name file))
+         (live-buffer (find-buffer-visiting path)))
+    (if live-buffer
+        (with-current-buffer live-buffer
+          (unless (derived-mode-p 'org-mode)
+            (user-error "Project file buffer is not in Org mode: %s" path))
+          (let ((was-modified (buffer-modified-p))
+                (result (funcall function)))
+            (when (and write
+                       (not was-modified)
+                       (buffer-modified-p))
+              (save-buffer))
+            result))
+      (with-temp-buffer
+        (insert-file-contents path)
+        (org-mode)
+        (let ((result (funcall function)))
+          (when write
+            (write-region (point-min) (point-max) path nil 'silent))
+          result)))))
+
 (defun p3/reference--project-reference-bounds ()
   "Return body bounds of the level-one References subtree in current Org buffer."
   (require 'org)
@@ -662,18 +717,18 @@
     (unless (p3/reference--project-node-p project)
       (user-error "Selected Org-roam node is not a project"))
     (let ((file (p3/reference--project-file project)))
-      (with-temp-buffer
-        (insert-file-contents file)
-        (org-mode)
-        (let ((bounds (p3/reference--project-reference-bounds))
-              keys)
-          (when bounds
-            (goto-char (car bounds))
-            (while (re-search-forward
-                    "^[ \t]*\\[cite:@\\([^] ;,]+\\)\\][ \t]*$"
-                    (cdr bounds) t)
-              (push (match-string-no-properties 1) keys)))
-          (nreverse (delete-dups keys)))))))
+      (p3/reference--call-with-project-buffer
+       file
+       (lambda ()
+         (let ((bounds (p3/reference--project-reference-bounds))
+               keys)
+           (when bounds
+             (goto-char (car bounds))
+             (while (re-search-forward
+                     "^[ \t]*\\[cite:@\\([^] ;,]+\\)\\][ \t]*$"
+                     (cdr bounds) t)
+               (push (match-string-no-properties 1) keys)))
+           (nreverse (delete-dups keys))))))))
 
 (defun p3/reference--associate-mature-key (citekey node)
   "Associate mature CITEKEY with project NODE."
@@ -682,27 +737,27 @@
   (unless (p3/reference--project-node-p node)
     (user-error "Selected Org-roam node is not a project"))
   (let ((file (p3/reference--project-file node)))
-    (with-temp-buffer
-      (insert-file-contents file)
-      (org-mode)
-      (let ((bounds (p3/reference--project-reference-bounds)))
-        (if bounds
-            (unless (member citekey
-                            (let (keys)
-                              (save-excursion
-                                (goto-char (car bounds))
-                                (while (re-search-forward
-                                        "^[ \t]*\\[cite:@\\([^] ;,]+\\)\\][ \t]*$"
-                                        (cdr bounds) t)
-                                  (push (match-string-no-properties 1) keys)))
-                              keys))
-              (goto-char (cdr bounds))
-              (unless (bolp) (insert "\n"))
-              (insert (format "[cite:@%s]\n" citekey)))
-          (goto-char (point-max))
-          (unless (bolp) (insert "\n"))
-          (insert (format "\n* References\n\n[cite:@%s]\n" citekey))))
-      (write-region (point-min) (point-max) file nil 'silent)))
+    (p3/reference--call-with-project-buffer
+     file
+     (lambda ()
+       (let ((bounds (p3/reference--project-reference-bounds)))
+         (if bounds
+             (unless (member citekey
+                             (let (keys)
+                               (save-excursion
+                                 (goto-char (car bounds))
+                                 (while (re-search-forward
+                                         "^[ \t]*\\[cite:@\\([^] ;,]+\\)\\][ \t]*$"
+                                         (cdr bounds) t)
+                                   (push (match-string-no-properties 1) keys)))
+                               keys))
+               (goto-char (cdr bounds))
+               (unless (bolp) (insert "\n"))
+               (insert (format "[cite:@%s]\n" citekey)))
+           (goto-char (point-max))
+           (unless (bolp) (insert "\n"))
+           (insert (format "\n* References\n\n[cite:@%s]\n" citekey)))))
+     t))
   citekey)
 
 (defun p3/reference-associate-project (citekey &optional node)
@@ -723,17 +778,17 @@
     (unless (p3/reference--project-node-p project)
       (user-error "Selected Org-roam node is not a project"))
     (let ((file (p3/reference--project-file project)))
-      (with-temp-buffer
-        (insert-file-contents file)
-        (org-mode)
-        (let ((bounds (p3/reference--project-reference-bounds))
-              (regexp (format "^[ \t]*\\[cite:@%s\\][ \t]*\\n?"
-                              (regexp-quote citekey))))
-          (when bounds
-            (goto-char (car bounds))
-            (when (re-search-forward regexp (cdr bounds) t)
-              (replace-match ""))))
-        (write-region (point-min) (point-max) file nil 'silent))))
+      (p3/reference--call-with-project-buffer
+       file
+       (lambda ()
+         (let ((bounds (p3/reference--project-reference-bounds))
+               (regexp (format "^[ \t]*\\[cite:@%s\\][ \t]*\\n?"
+                               (regexp-quote citekey))))
+           (when bounds
+             (goto-char (car bounds))
+             (when (re-search-forward regexp (cdr bounds) t)
+               (replace-match "")))))
+       t)))
   citekey)
 
 (defun p3/reference-project-references (&optional node)
