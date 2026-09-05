@@ -33,6 +33,7 @@ jobs:
             -f batch-byte-compile \
             lisp/p3-platform.el \
             lisp/p3-project.el \
+            lisp/p3-config-project.el \
             lisp/p3-config-loader.el \
             lisp/p3-core.el \
             lisp/p3-commands.el \
@@ -57,6 +58,13 @@ jobs:
             lisp/p3-config-org-roam.el \
             lisp/p3-org-present.el \
             lisp/p3-config-org-present.el
+
+      - name: Smoke-load Project configuration boundary
+        run: |
+          emacs -Q --batch \
+            -L lisp \
+            -l lisp/p3-config-project.el \
+            --eval '(unless (and (featurep (quote p3-config-project)) (eq (lookup-key global-map (kbd "C-c p")) project-prefix-map) (eq (lookup-key global-map (kbd "s-p")) project-prefix-map) (eq (lookup-key global-map (kbd "C-x p")) project-prefix-map)) (kill-emacs 1))'
 
       - name: Smoke-load Python configuration boundary
         run: |
@@ -142,6 +150,7 @@ jobs:
             -l test/p3-config-test.el \
             -l test/p3-config-ess-test.el \
             -l test/p3-project-test.el \
+            -l test/p3-config-project-test.el \
             -l test/p3-core-test.el \
             -l test/p3-platform-test.el \
             -l test/p3-config-python-test.el \
