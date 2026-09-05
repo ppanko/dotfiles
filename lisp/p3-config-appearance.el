@@ -13,6 +13,8 @@
 (defvar flycheck-last-status-change)
 (defvar flycheck-current-errors)
 (defvar vc-mode)
+(defvar doom-modeline-mode)
+(defvar mode-line-right-align-edge)
 
 (declare-function nerd-icons-icon-for-file "nerd-icons" (file &rest args))
 (declare-function nerd-icons-icon-for-buffer "nerd-icons" (&rest args))
