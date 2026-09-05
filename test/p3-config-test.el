@@ -77,9 +77,14 @@
       (delete-directory directory t))))
 
 (ert-deftest p3-config-org-owns-org-export-integration ()
-  (let ((contents (p3-config-test--contents "config.org")))
-    (should (string-match-p "(use-package p3-org-export" contents))
-    (should-not (string-match-p "(defun p3/org-export-to-office" contents))))
+  (let ((contents (p3-config-test--contents "config.org"))
+        (org-config (p3-config-test--contents "lisp/p3-config-org.el")))
+    (should
+     (string-match-p
+      (regexp-quote "(p3/config-load-module 'p3-config-org)") contents))
+    (should (string-match-p "(use-package p3-org-export" org-config))
+    (should-not (string-match-p "(defun p3/org-export-to-office" contents))
+    (should-not (string-match-p "(defun p3/org-export-to-office" org-config))))
 
 (ert-deftest p3-config-org-delegates-custom-subsystems-to-modules ()
   (let ((contents (p3-config-test--contents "config.org")))
@@ -89,7 +94,8 @@
     (dolist (package '("vterm" "gptel"))
       (should (string-match-p (regexp-quote (format "(use-package %s" package))
                               contents)))
-    (dolist (module '(p3-config-ess p3-config-python))
+    (dolist (module '(p3-config-ess p3-config-org p3-config-org-roam
+                      p3-config-org-present p3-config-python))
       (should
        (string-match-p
         (regexp-quote (format "(p3/config-load-module '%s)" module))
@@ -150,6 +156,24 @@
     (should (< terminal shell))
     (should (< shell shell-binding))))
 
+(ert-deftest p3-config-org-subsystem-order-is-explicit ()
+  (let* ((contents (p3-config-test--contents "config.org"))
+         (org (p3-config-test--position
+               "(p3/config-load-module 'p3-config-org)" contents))
+         (roam (p3-config-test--position
+                "(p3/config-load-module 'p3-config-org-roam)" contents))
+         (poly-r (p3-config-test--position "(use-package poly-R" contents))
+         (present (p3-config-test--position
+                   "(p3/config-load-module 'p3-config-org-present)" contents))
+         (projectile (p3-config-test--position "(use-package projectile" contents))
+         (python (p3-config-test--position
+                  "(p3/config-load-module 'p3-config-python)" contents)))
+    (should (< org roam))
+    (should (< roam poly-r))
+    (should (< poly-r present))
+    (should (< present projectile))
+    (should (< projectile python))))
+
 (ert-deftest p3-config-python-preserves-subsystem-timing ()
   (let* ((contents (p3-config-test--contents "config.org"))
          (flycheck (p3-config-test--position "(use-package flycheck" contents))
@@ -163,11 +187,15 @@
     (should (< python rainbow))
     (should (< rainbow shell))))
 
-(ert-deftest p3-config-org-source-loads-seven-config-modules ()
+(ert-deftest p3-config-org-source-loads-ten-config-modules ()
   (let ((contents (p3-config-test--contents "config.org")))
+    (should (= 10
+               (p3-config-test--count-occurrences
+                "(p3/config-load-module 'p3-config-" contents)))
     (dolist (module '(p3-config-base p3-config-editing p3-config-completion
-                      p3-config-ess p3-config-python p3-config-workspace
-                      p3-config-git))
+                      p3-config-ess p3-config-org p3-config-org-roam
+                      p3-config-org-present p3-config-python
+                      p3-config-workspace p3-config-git))
       (should
        (string-match-p
         (regexp-quote (format "(p3/config-load-module '%s)" module))
@@ -211,7 +239,27 @@
                "(use-package python"
                "(use-package eglot"
                "(add-hook 'python-ts-mode-hook"
-               "flycheck-python-flake8-executable"))
+               "flycheck-python-flake8-executable"
+               "(defun p3/org-sort-todos"
+               "(defun org-set-line-checkbox"
+               "(use-package p3-org-export"
+               "(use-package org-agenda"
+               "(defun org-roam-generate-tagged-header"
+               "(defun org-roam-node-insert-immediate-with-tag"
+               "(defun org-roam-rg-search"
+               "(defun p3/org-roam-filter-by-tag"
+               "(defun p3/org-roam-list-notes"
+               "(defun p3/org-roam-list-notes-by-tag"
+               "(defun p3/org-roam-get-agenda"
+               "(use-package org-roam"
+               "(defvar-local p3/org-present--state"
+               "(defun p3/org-present-start"
+               "(defun p3/org-present-toggle-fullscreen"
+               "(defun p3/org-present-hook"
+               "(defun p3/org-present-quit-hook"
+               "(defun p3/org-present-prev"
+               "(defun p3/org-present-next"
+               "(use-package org-present"))
       (should-not (string-match-p (regexp-quote implementation) contents)))
     (dolist (package '(dashboard which-key vertico company undo-tree super-save
                        multiple-cursors magit git-gutter-fringe+ transpose-frame
@@ -219,6 +267,14 @@
       (should-not
        (string-match-p (regexp-quote (format "(use-package %s" package))
                        contents)))))
+
+(ert-deftest p3-config-org-leaves-adjacent-specialized-subsystems-in-place ()
+  (let ((contents (p3-config-test--contents "config.org")))
+    (dolist (needle '("(use-package citar"
+                      "(use-package citar-org-roam"
+                      "(setq org-latex-pdf-process"
+                      "(use-package poly-R"))
+      (should (string-match-p (regexp-quote needle) contents)))))
 
 (ert-deftest p3-config-ess-orchestration-has-one-owner ()
   (let* ((contents (p3-config-test--contents "config.org"))
@@ -234,6 +290,7 @@
 
 (ert-deftest p3-config-python-orchestration-has-one-owner ()
   (let* ((contents (p3-config-test--contents "config.org"))
+         (org-config (p3-config-test--contents "lisp/p3-config-org.el"))
          (owner "(p3/config-load-module 'p3-config-python)"))
     (should (= 1 (p3-config-test--count-occurrences owner contents)))
     (dolist (forbidden '("(use-package p3-python"
@@ -242,19 +299,32 @@
                           "(add-hook 'python-ts-mode-hook"
                           "flycheck-python-flake8-executable"))
       (should-not (string-match-p (regexp-quote forbidden) contents)))
-    (should (string-match-p (regexp-quote "(python . t)") contents))))
+    (should (string-match-p (regexp-quote "(python . t)") org-config))))
 
 (ert-deftest p3-config-behavior-library-owner-pattern-is-explicit ()
   (let ((base (p3-config-test--contents "lisp/p3-config-base.el"))
         (git (p3-config-test--contents "lisp/p3-config-git.el"))
+        (org (p3-config-test--contents "lisp/p3-config-org.el"))
+        (roam (p3-config-test--contents "lisp/p3-config-org-roam.el"))
+        (present (p3-config-test--contents "lisp/p3-config-org-present.el"))
         (commands (p3-config-test--contents "lisp/p3-commands.el"))
-        (git-behavior (p3-config-test--contents "lisp/p3-git.el")))
+        (git-behavior (p3-config-test--contents "lisp/p3-git.el"))
+        (org-behavior (p3-config-test--contents "lisp/p3-org.el"))
+        (roam-behavior (p3-config-test--contents "lisp/p3-org-roam.el"))
+        (present-behavior (p3-config-test--contents "lisp/p3-org-present.el")))
     (should (string-match-p
              (regexp-quote "(p3/config-load-module 'p3-commands)") base))
     (should (string-match-p
              (regexp-quote "(p3/config-load-module 'p3-git)") git))
-    (should-not (string-match-p "p3-config-" commands))
-    (should-not (string-match-p "p3-config-" git-behavior))))
+    (should (string-match-p
+             (regexp-quote "(p3/config-load-module 'p3-org)") org))
+    (should (string-match-p
+             (regexp-quote "(p3/config-load-module 'p3-org-roam)") roam))
+    (should (string-match-p
+             (regexp-quote "(p3/config-load-module 'p3-org-present)") present))
+    (dolist (behavior (list commands git-behavior org-behavior
+                            roam-behavior present-behavior))
+      (should-not (string-match-p "p3-config-" behavior)))))
 
 (ert-deftest p3-config-workspace-keeps-only-narrow-ess-display-policy ()
   (let ((contents (p3-config-test--contents "lisp/p3-config-workspace.el")))
