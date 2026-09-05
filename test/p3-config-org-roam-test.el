@@ -72,12 +72,6 @@
           :if-new
           (file+head "%<%Y%m%d%H%M%S>-${slug}.org"
                      "#+title: ${title}\n#+category:${title}\n#+created: %U\n#+last_modified: %U\n")
-          :unnarrowed t)
-         ("n" "literature note" plain "* Heading\n %?"
-          :target
-          (file+head
-           "%(expand-file-name (or citar-org-roam-subdir \"\") org-roam-directory)/${citar-citekey}.org"
-           "#+title: ${citar-citekey} (${citar-date}). ${note-title}.\n#+created: %U\n#+last_modified: %U\n\n")
           :unnarrowed t)))
       (org-roam-dailies-directory "journal/")
       (org-roam-dailies-capture-templates
@@ -85,6 +79,16 @@
           :target
           (file+head "%<%Y-%m-%d>.org"
                      "#+title: %<%Y-%m-%d %a>\n#+created: %U\n#+last_modified: %U\n"))))))))
+
+(ert-deftest p3-config-org-roam-has-no-citar-dependent-literature-template ()
+  (let ((contents
+         (with-temp-buffer
+           (insert-file-contents
+            (p3-config-org-roam-test--path "lisp/p3-config-org-roam.el"))
+           (buffer-string))))
+    (dolist (needle '("citar-org-roam-subdir" "citar-citekey"
+                      "citar-date" "note-title"))
+      (should-not (string-match-p (regexp-quote needle) contents)))))
 
 (ert-deftest p3-config-org-roam-preserves-bindings ()
   (should

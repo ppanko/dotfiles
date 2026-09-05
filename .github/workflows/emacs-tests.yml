@@ -37,6 +37,8 @@ jobs:
             lisp/p3-config-loader.el \
             lisp/p3-core.el \
             lisp/p3-commands.el \
+            lisp/p3-reference.el \
+            lisp/p3-config-reference.el \
             lisp/p3-git.el \
             lisp/p3-config-base.el \
             lisp/p3-config-editing.el \
@@ -142,6 +144,17 @@ jobs:
             -l lisp/p3-config-org-present.el \
             --eval '(unless (and (featurep (quote p3-config-org-present)) (featurep (quote p3-org-present)) (featurep (quote face-remap)) (fboundp (quote p3/org-present-start))) (kill-emacs 1))'
 
+      - name: Smoke-load Reference configuration boundary
+        run: |
+          emacs -Q --batch \
+            -L lisp \
+            --eval '(setq user-emacs-directory (file-name-as-directory default-directory))' \
+            --eval '(require (quote use-package-ensure))' \
+            --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
+            -l lisp/p3-config-loader.el \
+            -l lisp/p3-config-reference.el \
+            --eval '(unless (and (featurep (quote p3-config-reference)) (featurep (quote p3-reference)) (equal p3/reference-bibliography-file (expand-file-name "~/org/bib/main.bib")) (equal p3/reference-pdf-directory (file-name-as-directory (expand-file-name "~/org/lib/"))) (eq (lookup-key global-map (kbd "C-c b")) p3/reference-command-map)) (kill-emacs 1))'
+
       - name: Run ERT test suite
         run: |
           emacs -Q --batch \
@@ -168,6 +181,10 @@ jobs:
             -l test/p3-org-present-test.el \
             -l test/p3-config-org-present-test.el \
             -l test/p3-org-export-test.el \
+            -l test/p3-reference-test.el \
+            -l test/p3-reference-reconstruction-test.el \
+            -l test/p3-reference-adversarial-test.el \
+            -l test/p3-config-reference-test.el \
             -l test/p3-commands-test.el \
             -l test/p3-git-test.el \
             -f ert-run-tests-batch-and-exit

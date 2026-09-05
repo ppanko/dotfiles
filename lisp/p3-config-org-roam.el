@@ -32,12 +32,6 @@
       :if-new
       (file+head "%<%Y%m%d%H%M%S>-${slug}.org"
                  "#+title: ${title}\n#+category:${title}\n#+created: %U\n#+last_modified: %U\n")
-      :unnarrowed t)
-     ("n" "literature note" plain "* Heading\n %?"
-      :target
-      (file+head
-       "%(expand-file-name (or citar-org-roam-subdir \"\") org-roam-directory)/${citar-citekey}.org"
-       "#+title: ${citar-citekey} (${citar-date}). ${note-title}.\n#+created: %U\n#+last_modified: %U\n\n")
       :unnarrowed t)))
   (org-roam-dailies-directory "journal/")
   (org-roam-dailies-capture-templates
