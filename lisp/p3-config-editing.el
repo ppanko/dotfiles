@@ -8,9 +8,23 @@
 (defvar undo-tree-visualizer-diff)
 (defvar undo-tree-history-directory-alist)
 (defvar super-save-auto-save-when-idle)
+(defvar synosaurus-choose-method)
+(defvar yas-snippet-dirs)
+(defvar flycheck-global-modes)
+(defvar flycheck-checker-error-threshold)
+(defvar p3/windows-hunspell-program)
+(defvar p3/windows-hunspell-dictionary-directory)
+(defvar ispell-program-name)
+(defvar ispell-local-dictionary)
+(defvar ispell-dictionary)
+(defvar ispell-local-dictionary-alist)
 
 (declare-function global-undo-tree-mode "undo-tree" (&optional arg))
 (declare-function super-save-mode "super-save" (&optional arg))
+(declare-function synosaurus-mode "synosaurus" (&optional arg))
+(declare-function yas-global-mode "yasnippet" (&optional arg))
+(declare-function global-flycheck-mode "flycheck" (&optional arg))
+(declare-function rainbow-mode "rainbow-mode" (&optional arg))
 
 (delete-selection-mode t)
 (add-hook 'before-save-hook 'whitespace-cleanup)
@@ -68,6 +82,51 @@
          ("C-{" . mc/mark-next-like-this)
          ("C-}" . mc/mark-previous-like-this)
          ("C-|" . mc/mark-all-like-this)))
+
+;; Keep ownership here while preserving the original literate activation order.
+(with-eval-after-load 'p3-config-completion
+  (use-package synosaurus
+    :diminish synosaurus-mode
+    :init    (synosaurus-mode)
+    :config  (setq synosaurus-choose-method 'popup))
+
+  (use-package yasnippet
+    :init
+    (yas-global-mode 1)
+    :config
+    (add-to-list 'yas-snippet-dirs "~/.emacs.d/snippets")))
+
+(with-eval-after-load 'p3-config-gptel
+  (use-package flycheck
+    :hook (after-init . global-flycheck-mode)
+    :config
+    (setq flycheck-global-modes '(not LaTeX-mode latex-mode org-mode))
+    (setq flycheck-checker-error-threshold 1000)))
+
+(with-eval-after-load 'p3-config-python
+  (use-package rainbow-mode
+    :config
+    (add-hook 'prog-mode-hook #'rainbow-mode)))
+
+(with-eval-after-load 'p3-config-terminal
+  (use-package ispell
+    :defer nil
+    :ensure nil
+    :init
+    (cond
+     ((eq system-type 'windows-nt)
+      (when p3/windows-hunspell-program
+        (setq ispell-program-name p3/windows-hunspell-program))
+      (when p3/windows-hunspell-dictionary-directory
+        (setenv "DICTPATH" p3/windows-hunspell-dictionary-directory))
+      (setenv "DICTIONARY" "en_US"))
+     ((eq system-type 'gnu/linux)
+      (setq ispell-program-name "hunspell")))
+    :config
+    (setq ispell-local-dictionary "en_US"
+          ispell-dictionary "english"
+          ispell-local-dictionary-alist
+          '(("en_US" "[[:alpha:]]" "[^[:alpha:]]" "[']" nil ("-d" "en_US") nil utf-8)))))
 
 (provide 'p3-config-editing)
 
