@@ -90,7 +90,7 @@
        :init
        (org-babel-do-load-languages
         'org-babel-load-languages
-        '((emacs-lisp . t)
+        '((emacs-lisp .t)
           (R . t)
           (C . t)
           (python . t)
