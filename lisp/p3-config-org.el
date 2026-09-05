@@ -62,9 +62,8 @@
 (use-package p3-org-export
   :ensure nil
   :demand t
-  :functions p3-org-export-setup
   :config
-  (p3-org-export-setup))
+  (funcall 'p3-org-export-setup))
 
 (when (eq system-type 'gnu/linux)
   (add-to-list 'org-file-apps '("pdf" . "evince %s")))
