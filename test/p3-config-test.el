@@ -300,3 +300,5 @@
     (should-not (string-match-p "(load \"p3-org-export\"" contents))))
 
 (provide 'p3-config-test)
+
+;;; p3-config-test.el ends here
