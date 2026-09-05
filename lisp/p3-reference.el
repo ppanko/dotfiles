@@ -75,6 +75,14 @@
         (setq value (concat "ref-" value)))
       value)))
 
+(defun p3/reference--require-portable-citekey (citekey)
+  "Return CITEKEY or signal when it cannot back portable file paths."
+  (unless (p3/reference--portable-citekey-p citekey)
+    (user-error
+     "Citekey is not portable as a file path; mature-key migration is required: %s"
+     citekey))
+  citekey)
+
 (defun p3/reference--bibliography-path ()
   "Return the configured bibliography path or signal a user error."
   (unless (and (stringp p3/reference-bibliography-file)
@@ -298,6 +306,8 @@
       (user-error "p3-inbox-* keys are reserved for URL-only captures"))
     (cond
      (duplicate duplicate)
+     ((not (p3/reference--portable-citekey-p key))
+      (user-error "Imported mature citekey is not portable: %s" key))
      ((and (p3/reference--possible-title-duplicate-keys incoming)
            (not (y-or-n-p
                  "Possible title duplicate; add as a distinct reference? ")))
@@ -632,6 +642,7 @@
      (node
       (org-roam-node-visit node))
      (t
+      (p3/reference--require-portable-citekey key)
       (let* ((directory (file-name-as-directory
                          (expand-file-name org-roam-directory)))
              (path (expand-file-name (concat key ".org") directory)))
@@ -826,6 +837,7 @@ When WRITE is non-nil, persist changes unless FILE already had unsaved edits."
   "Return deterministic main PDF path for mature CITEKEY."
   (when (p3/reference-provisional-key-p citekey)
     (user-error "Finalize the reference before assigning a PDF path"))
+  (p3/reference--require-portable-citekey citekey)
   (unless (and (stringp p3/reference-pdf-directory)
                (not (string-empty-p p3/reference-pdf-directory)))
     (user-error "Reference PDF directory is not configured"))
