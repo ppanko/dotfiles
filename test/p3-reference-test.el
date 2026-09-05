@@ -78,7 +78,11 @@
       (p3/reference--transaction
        (lambda ()
          (should (p3/reference--goto-entry "alpha2020"))
-         (bibtex-set-field "title" "Alpha revised")))
+         (p3/reference--set-field "title" "Alpha revised")
+         (p3/reference--set-field "keywords" "topic/methods")))
+      (let ((entry (p3/reference--entry-alist "alpha2020")))
+        (should (equal "Alpha revised" (cdr (assoc "title" entry))))
+        (should (equal "topic/methods" (cdr (assoc "keywords" entry)))))
       (with-temp-buffer
         (insert-file-contents p3/reference-bibliography-file)
         (should (string-suffix-p tail (buffer-string)))))))

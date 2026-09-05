@@ -291,6 +291,21 @@
     (lambda (item) (not (string-empty-p item)))
     (mapcar #'string-trim (split-string (or value "") "," t)))))
 
+(defun p3/reference--set-field (name value)
+  "Set NAME to VALUE in the current BibTeX entry without rebuilding it."
+  (save-excursion
+    (bibtex-beginning-of-entry)
+    (let ((bounds (bibtex-search-forward-field (regexp-quote name) t)))
+      (if bounds
+          (progn
+            (goto-char (bibtex-start-of-text-in-field bounds))
+            (delete-region (point) (bibtex-end-of-text-in-field bounds))
+            (insert (bibtex-field-left-delimiter)
+                    value
+                    (bibtex-field-right-delimiter)))
+        (bibtex-make-field (list name nil value) t nil))))
+  value)
+
 (defun p3/reference--set-keywords (citekey transform)
   "Apply TRANSFORM to CITEKEY's keyword list with an entry-local mutation."
   (p3/reference--transaction
@@ -301,7 +316,7 @@
             (current (p3/reference--keyword-list
                       (cdr (assoc "keywords" entry))))
             (updated (delete-dups (funcall transform current))))
-       (bibtex-set-field "keywords" (string-join updated ", "))
+       (p3/reference--set-field "keywords" (string-join updated ", "))
        t))))
 
 (defun p3/reference-add-keyword (citekey keyword)
@@ -450,11 +465,11 @@
                (let ((existing (cdr (assoc name current))))
                  (cond
                   ((or (null existing) (string-empty-p (string-trim existing)))
-                   (bibtex-set-field name value))
+                   (p3/reference--set-field name value))
                   ((equal existing value) nil)
                   ((y-or-n-p
                     (format "Replace %s for %s? " name target-key))
-                   (bibtex-set-field name value))))))))
+                   (p3/reference--set-field name value))))))))
        target-key))))
 
 (defun p3/reference-biblio-save (metadata)

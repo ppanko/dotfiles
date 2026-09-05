@@ -13,15 +13,21 @@
 (defvar org-cite-insert-processor)
 (defvar p3/reference-command-map)
 
+(defgroup p3-reference nil
+  "Portable personal reference management."
+  :group 'applications)
+
 (defcustom p3/reference-bibliography-file
   (expand-file-name "~/org/bib/main.bib")
   "Canonical personal BibLaTeX bibliography."
-  :type 'file)
+  :type 'file
+  :group 'p3-reference)
 
 (defcustom p3/reference-pdf-directory
   (file-name-as-directory (expand-file-name "~/org/lib/"))
   "Root directory for citekey-organized reference PDFs."
-  :type 'directory)
+  :type 'directory
+  :group 'p3-reference)
 
 (p3/config-load-module 'p3-reference)
 
