@@ -117,6 +117,8 @@
          (rtools (p3-config-test--position "(p3/windows-configure-rtools)" contents))
          (base (p3-config-test--position
                 "(p3/config-load-module 'p3-config-base)" contents))
+         (appearance (p3-config-test--position
+                      "(p3/config-load-module 'p3-config-appearance)" contents))
          (editing (p3-config-test--position
                    "(p3/config-load-module 'p3-config-editing)" contents))
          (reference (p3-config-test--position
@@ -133,7 +135,8 @@
     (should (< auto secrets))
     (should (< secrets rtools))
     (should (< rtools base))
-    (should (< base editing))
+    (should (< base appearance))
+    (should (< appearance editing))
     (should (< editing reference))
     (should (< reference completion))
     (should (< completion ess))
@@ -200,16 +203,16 @@
     (should (< project-config python))
     (should (< python terminal))))
 
-(ert-deftest p3-config-org-source-loads-fourteen-config-modules ()
+(ert-deftest p3-config-org-source-loads-fifteen-config-modules ()
   (let ((contents (p3-config-test--contents "config.org")))
-    (should (= 14
+    (should (= 15
                (p3-config-test--count-occurrences
                 "(p3/config-load-module 'p3-config-" contents)))
-    (dolist (module '(p3-config-base p3-config-editing p3-config-completion
-                      p3-config-ess p3-config-gptel p3-config-org
-                      p3-config-org-roam p3-config-org-present p3-config-project
-                      p3-config-python p3-config-reference p3-config-terminal
-                      p3-config-workspace p3-config-git))
+    (dolist (module '(p3-config-base p3-config-appearance p3-config-editing
+                      p3-config-completion p3-config-ess p3-config-gptel
+                      p3-config-org p3-config-org-roam p3-config-org-present
+                      p3-config-project p3-config-python p3-config-reference
+                      p3-config-terminal p3-config-workspace p3-config-git))
       (should
        (string-match-p
         (regexp-quote (format "(p3/config-load-module '%s)" module))

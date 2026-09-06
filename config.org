@@ -51,6 +51,15 @@ backups, Dired, and the keybinding atlas live in =lisp/p3-config-base.el=.
   (p3/config-load-module 'p3-config-base)
 #+END_SRC
 
+* Appearance
+
+Theme, fonts, frame chrome, mode-line presentation, and icon presentation live
+in =lisp/p3-config-appearance.el=.
+
+#+BEGIN_SRC emacs-lisp
+  (p3/config-load-module 'p3-config-appearance)
+#+END_SRC
+
 * Editing
 
 Generic editing semantics and package setup live in =lisp/p3-config-editing.el=.
@@ -337,98 +346,7 @@ TRAMP default settings
     (workgroups-mode 1))
 #+END_SRC
 
-* Themes
-
-Remove toolbar, scrollbar margins & menu bar.
-Remove Emacs "splash screen" and scratch file.
-Don't ring the bell when running up against buffer end
-
-#+BEGIN_SRC emacs-lisp
-  (menu-bar-mode 0)
-  (scroll-bar-mode 0)
-  (tool-bar-mode 0)
-  (tooltip-mode 0)
-  (fringe-mode 1)
-  (blink-cursor-mode 0)
-
-  (setq inhibit-startup-message t)
-  (setq ring-bell-function 'ignore)
-#+END_SRC
-
-Empty the initial scratch message and set the major mode to elisp
-
-#+BEGIN_SRC emacs-lisp
-  (setq initial-scratch-message nil)
-  (setq initial-major-mode 'lisp-interaction-mode)
-#+END_SRC
-
-Set ashes theme
-
-#+BEGIN_SRC emacs-lisp
-      ;; (load-theme 'base16-ashes t)
-    (use-package doom-themes
-      :config
-      (load-theme 'doom-palenight t))
-#+END_SRC
-
-Telephone line mode-line
-
-#+BEGIN_SRC emacs-lisp
-  ;; (use-package telephone-line
-  ;;   :after all-the-icons
-  ;;   :config (telephone-line-mode))
-#+END_SRC
-
-Doom modeline
-
-#+BEGIN_SRC emacs-lisp
-  (use-package doom-modeline
-    :hook (after-init . doom-modeline-mode)
-    :custom
-    (doom-modeline-height 25)
-    (doom-modeline-bar-width 5)
-    (doom-modeline-icon t)
-    (doom-modeline-major-mode-icon t)
-    (doom-modeline-major-mode-color-icon t)
-    (doom-modeline-buffer-file-name-style 'truncate-upto-project)
-    (doom-modeline-buffer-state-icon t)
-    (doom-modeline-buffer-modification-icon t)
-    (doom-modeline-minor-modes nil)
-    (doom-modeline-lsp nil)
-    (doom-modeline-enable-word-count nil)
-    (doom-modeline-buffer-encoding t)
-    (doom-modeline-indent-info nil)
-    (doom-modeline-checker-simple-format t)
-    (doom-modeline-vcs-max-length 12)
-    (doom-modeline-env-version t)
-    (doom-modeline-github-timer nil)
-    (doom-modeline-gnus-timer nil))
-  (set-face-attribute 'mode-line nil :height 135 :background "#383E54")
-
-  ;; Do not update this package automatically (I don't want to download a new icon set...)
-  (put 'doom-modeline 'package-pin t)
-#+END_SRC
-
-Set border color
-
-#+BEGIN_SRC emacs-lisp
-  (set-face-background 'vertical-border "#323638")
-#+END_SRC
-
-Show file name in title bar as shown [[http://www.thetechrepo.com/main-articles/549][here]].
-
-#+BEGIN_SRC emacs-lisp
-  (setq frame-title-format "%b")
-#+END_SRC
-
-Light-up matching parens.
-
-#+BEGIN_SRC emacs-lisp
-  (show-paren-mode t)
-  (setq show-paren-when-point-inside-paren t)
-#+END_SRC
-
-* Encoding & fonts
+* Encoding
 
 Use utf-8 everywhere all the time
 
@@ -443,15 +361,6 @@ Use utf-8 everywhere all the time
   (set-buffer-file-coding-system 'utf-8)
   (set-file-name-coding-system 'utf-8)
   (set-selection-coding-system 'utf-8)
-#+END_SRC
-
-Install unicode fonts
-
-#+BEGIN_SRC emacs-lisp
-  (use-package unicode-fonts
-    :after doom-themes
-    :init
-    (unicode-fonts-setup))
 #+END_SRC
 
 Set Rmd to CRLF
