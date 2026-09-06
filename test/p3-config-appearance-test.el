@@ -106,6 +106,17 @@
     (should (string-match-p "default-process-coding-system" config))
     (should (string-match-p "\\\\.Rmd" config))))
 
+(ert-deftest p3-config-appearance-preserves-platform-visual-invariants ()
+  (let ((appearance
+         (p3-config-appearance-test--contents "lisp/p3-config-appearance.el")))
+    (dolist (needle '("Consolas"
+                       ":height 125"
+                       "Inconsolata"
+                       ":height 140"
+                       "(fullscreen . maximized)"
+                       "(setq-default cursor-type 'bar)"))
+      (should (string-match-p (regexp-quote needle) appearance)))))
+
 (ert-deftest p3-config-appearance-does-not-couple-config-modules ()
   (let ((appearance
          (p3-config-appearance-test--contents "lisp/p3-config-appearance.el")))
@@ -123,6 +134,28 @@
     (cl-letf (((symbol-function 'window-total-width) (lambda (&optional _) 140)))
       (should (string-match-p "src/example\\.R"
                               (p3/appearance--file-segment))))))
+
+(ert-deftest p3-appearance-file-and-mode-segments-use-icons-when-enabled ()
+  (p3-config-appearance-test--load-appearance)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (setq buffer-file-name "/tmp/example.el"
+          p3/appearance--icons-available t)
+    (let ((file-segment (p3/appearance--file-segment))
+          (mode-segment (p3/appearance--mode-segment)))
+      (should (string-match-p "F" file-segment))
+      (should (string-match-p "example\\.el" file-segment))
+      (should (string-match-p "M" mode-segment))
+      (should (string-match-p "Emacs-Lisp" mode-segment)))))
+
+(ert-deftest p3-appearance-buffer-state-preserves-modified-and-read-only-status ()
+  (p3-config-appearance-test--load-appearance)
+  (with-temp-buffer
+    (insert "changed")
+    (should (string-match-p "●" (p3/appearance--buffer-state)))
+    (set-buffer-modified-p nil)
+    (setq buffer-read-only t)
+    (should (string-match-p "RO" (p3/appearance--buffer-state)))))
 
 (ert-deftest p3-appearance-remote-host-is-textual ()
   (p3-config-appearance-test--load-appearance)
