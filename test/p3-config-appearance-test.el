@@ -9,6 +9,8 @@
 (defvar flycheck-last-status-change)
 (defvar flycheck-current-errors)
 (defvar vc-mode)
+(defvar all-the-icons-dired-mode)
+(defvar nerd-icons-dired-mode)
 
 (defconst p3-config-appearance-test--root
   (file-name-directory
@@ -32,6 +34,13 @@
             start (match-end 0)))
     count))
 
+(defun p3-config-appearance-test--set-minor-mode (symbol arg)
+  "Set test minor-mode SYMBOL according to conventional ARG semantics."
+  (set symbol
+       (if (null arg)
+           (not (symbol-value symbol))
+         (> (prefix-numeric-value arg) 0))))
+
 (defun p3-config-appearance-test--load-appearance ()
   "Load the real appearance module with external packages stubbed."
   (require 'use-package-ensure)
@@ -47,6 +56,16 @@
     (defalias 'nerd-icons-octicon (lambda (&rest _) "G")))
   (unless (fboundp 'nerd-icons-codicon)
     (defalias 'nerd-icons-codicon (lambda (&rest _) "R")))
+  (unless (fboundp 'all-the-icons-dired-mode)
+    (defalias 'all-the-icons-dired-mode
+      (lambda (&optional arg)
+        (p3-config-appearance-test--set-minor-mode
+         'all-the-icons-dired-mode arg))))
+  (unless (fboundp 'nerd-icons-dired-mode)
+    (defalias 'nerd-icons-dired-mode
+      (lambda (&optional arg)
+        (p3-config-appearance-test--set-minor-mode
+         'nerd-icons-dired-mode arg))))
   (provide 'nerd-icons)
   (provide 'doom-themes)
   (cl-letf (((symbol-function 'load-theme) (lambda (&rest _) t))
@@ -208,6 +227,26 @@
     (p3/appearance-sync-dired-icons)
     (should (= 1 (cl-count #'nerd-icons-dired-mode
                            dired-mode-hook :test #'eq)))))
+
+(ert-deftest p3-appearance-sync-dired-icons-reconciles-existing-buffers ()
+  (p3-config-appearance-test--load-appearance)
+  (let ((buffer (generate-new-buffer " *p3-dired-appearance-test*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
+            (setq major-mode 'dired-mode
+                  all-the-icons-dired-mode t
+                  nerd-icons-dired-mode nil))
+          (let ((p3/appearance--icons-available t))
+            (p3/appearance-sync-dired-icons))
+          (with-current-buffer buffer
+            (should-not all-the-icons-dired-mode)
+            (should nerd-icons-dired-mode))
+          (let ((p3/appearance--icons-available nil))
+            (p3/appearance-sync-dired-icons))
+          (with-current-buffer buffer
+            (should-not nerd-icons-dired-mode)))
+      (kill-buffer buffer))))
 
 (provide 'p3-config-appearance-test)
 
