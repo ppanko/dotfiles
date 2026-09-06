@@ -15,6 +15,8 @@
 (defvar vc-mode)
 (defvar doom-modeline-mode)
 (defvar mode-line-right-align-edge)
+(defvar all-the-icons-dired-mode)
+(defvar nerd-icons-dired-mode)
 
 (declare-function nerd-icons-icon-for-file "nerd-icons" (file &rest args))
 (declare-function nerd-icons-icon-for-buffer "nerd-icons" (&rest args))
@@ -114,12 +116,28 @@
 (use-package nerd-icons-dired
   :commands nerd-icons-dired-mode)
 
+(defun p3/appearance--sync-current-dired-buffer ()
+  "Reconcile icon modes in the current Dired buffer."
+  (when (derived-mode-p 'dired-mode)
+    (when (and (bound-and-true-p all-the-icons-dired-mode)
+               (fboundp 'all-the-icons-dired-mode))
+      (all-the-icons-dired-mode -1))
+    (if p3/appearance--icons-available
+        (when (fboundp 'nerd-icons-dired-mode)
+          (nerd-icons-dired-mode 1))
+      (when (and (bound-and-true-p nerd-icons-dired-mode)
+                 (fboundp 'nerd-icons-dired-mode))
+        (nerd-icons-dired-mode -1)))))
+
 (defun p3/appearance-sync-dired-icons ()
-  "Reconcile the Dired icon hook with current font availability."
+  "Reconcile Dired icon hooks and existing buffers with font availability."
   (remove-hook 'dired-mode-hook #'all-the-icons-dired-mode)
   (remove-hook 'dired-mode-hook #'nerd-icons-dired-mode)
   (when p3/appearance--icons-available
-    (add-hook 'dired-mode-hook #'nerd-icons-dired-mode)))
+    (add-hook 'dired-mode-hook #'nerd-icons-dired-mode))
+  (dolist (buffer (buffer-list))
+    (with-current-buffer buffer
+      (p3/appearance--sync-current-dired-buffer))))
 
 (p3/appearance-sync-dired-icons)
 
@@ -333,6 +351,7 @@ When COMPACT is non-nil, show only the most important finished count."
 (setq-default mode-line-format (p3/appearance--build-mode-line-format))
 (when (boundp 'mode-line-right-align-edge)
   (setq-default mode-line-right-align-edge 'window))
+(force-mode-line-update t)
 
 (provide 'p3-config-appearance)
 
