@@ -135,6 +135,15 @@
       (should (string-match-p "src/example\\.R"
                               (p3/appearance--file-segment))))))
 
+(ert-deftest p3-appearance-file-label-includes-project-name-when-wide ()
+  (p3-config-appearance-test--load-appearance)
+  (with-temp-buffer
+    (setq buffer-file-name "/tmp/ji2/R/example.R"
+          p3/appearance--project-root "/tmp/ji2/"
+          p3/appearance--project-relative-file "R/example.R")
+    (cl-letf (((symbol-function 'window-total-width) (lambda (&optional _) 140)))
+      (should (equal "ji2/R/example.R" (p3/appearance--file-label))))))
+
 (ert-deftest p3-appearance-file-and-mode-segments-use-icons-when-enabled ()
   (p3-config-appearance-test--load-appearance)
   (with-temp-buffer
@@ -171,6 +180,15 @@
       (should (string-match-p "Emacs-Lisp"
                               (p3/appearance--mode-segment))))))
 
+(ert-deftest p3-appearance-mode-segment-omits-redundant-special-buffer-name ()
+  (p3-config-appearance-test--load-appearance)
+  (with-temp-buffer
+    (rename-buffer "*Messages*" t)
+    (setq mode-name "Messages"
+          buffer-file-name nil
+          p3/appearance--icons-available nil)
+    (should-not (p3/appearance--mode-segment))))
+
 (ert-deftest p3-appearance-selects-native-and-fallback-alignment ()
   (p3-config-appearance-test--load-appearance)
   (cl-letf (((symbol-function 'p3/appearance--native-right-align-p)
@@ -188,6 +206,13 @@
     (let ((vc-mode " Git:feature/an-excessively-long-branch-name")
           (p3/appearance--icons-available nil))
       (should (<= (string-width (p3/appearance--vc-segment)) 16)))))
+
+(ert-deftest p3-appearance-vc-segment-does-not-repeat-git-backend-name ()
+  (p3-config-appearance-test--load-appearance)
+  (with-temp-buffer
+    (let ((vc-mode " Git-main")
+          (p3/appearance--icons-available nil))
+      (should (equal "Git main" (p3/appearance--vc-segment))))))
 
 (ert-deftest p3-appearance-flycheck-state-mapping-is-explicit ()
   (p3-config-appearance-test--load-appearance)
