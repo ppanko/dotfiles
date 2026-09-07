@@ -28,6 +28,10 @@
 (declare-function flycheck-count-errors "flycheck" (errors))
 (declare-function doom-modeline-mode "doom-modeline" (&optional arg))
 
+(defface p3/appearance-project-face
+  '((t (:inherit font-lock-keyword-face :weight semi-bold)))
+  "Theme-derived accent face for project identity in the mode line.")
+
 (defvar p3/appearance--icons-available nil
   "Non-nil when Nerd Font icons are safe to render.")
 
@@ -187,6 +191,15 @@
                  parts)
    "  "))
 
+(defun p3/appearance--join-left (&rest parts)
+  "Join nonempty left-side PARTS with clear visual separation."
+  (string-join
+   (cl-remove-if (lambda (part)
+                   (or (null part)
+                       (and (stringp part) (string-empty-p part))))
+                 parts)
+   "    "))
+
 (defun p3/appearance--safe-icon (function &rest args)
   "Call icon FUNCTION with ARGS when icons are available, or return nil."
   (when p3/appearance--icons-available
@@ -227,7 +240,10 @@
    ((and (>= (window-total-width) 120)
          p3/appearance--project-relative-file)
     (if-let ((project-name (p3/appearance--project-name)))
-        (format "%s/%s" project-name p3/appearance--project-relative-file)
+        (concat
+         (propertize project-name 'face 'p3/appearance-project-face)
+         (propertize " / " 'face 'shadow)
+         p3/appearance--project-relative-file)
       p3/appearance--project-relative-file))
    (t (file-name-nondirectory buffer-file-name))))
 
@@ -239,7 +255,7 @@
                     #'nerd-icons-icon-for-file buffer-file-name :height 0.95)
                  (p3/appearance--safe-icon
                   #'nerd-icons-icon-for-buffer :height 0.95))))
-    (if icon (format "%s %s" icon label) label)))
+    (if icon (format "%s  %s" icon label) label)))
 
 (defun p3/appearance--remote-segment ()
   "Return textual remote host identity with an optional icon."
@@ -263,7 +279,7 @@
     (unless (p3/appearance--redundant-mode-name-p text)
       (let ((icon (p3/appearance--safe-icon
                    #'nerd-icons-icon-for-mode major-mode :height 0.95)))
-        (if icon (format "%s %s" icon text) text)))))
+        (if icon (format "%s  %s" icon text) text)))))
 
 (defun p3/appearance--process-segment ()
   "Return existing mode-provided process state on sufficiently wide windows."
@@ -274,7 +290,7 @@
 
 (defun p3/appearance--left-segment ()
   "Return the left identity area of the mode line."
-  (p3/appearance--join
+  (p3/appearance--join-left
    (p3/appearance--buffer-state)
    (p3/appearance--remote-segment)
    (p3/appearance--file-segment)
