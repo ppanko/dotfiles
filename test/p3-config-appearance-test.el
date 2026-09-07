@@ -11,6 +11,14 @@
 (defvar vc-mode)
 (defvar all-the-icons-dired-mode)
 (defvar nerd-icons-dired-mode)
+(defvar dashboard-icon-type)
+(defvar dashboard-set-heading-icons)
+(defvar dashboard-set-file-icons)
+(defvar dashboard-heading-icons)
+(defvar dashboard-agenda-item-icon)
+(defvar dashboard-remote-path-icon)
+(defvar dashboard-footer-icon)
+(defvar dashboard-buffer-name)
 
 (defconst p3-config-appearance-test--root
   (file-name-directory
@@ -174,10 +182,21 @@
     (emacs-lisp-mode)
     (setq buffer-file-name "/tmp/example.el"
           p3/appearance--icons-available t)
-    (let ((file-segment (p3/appearance--file-segment))
-          (mode-segment (p3/appearance--mode-segment)))
-      (should (string-match-p "F  example\\.el" file-segment))
-      (should (string-match-p "M  Emacs-Lisp" mode-segment)))))
+    (cl-letf (((symbol-function 'display-graphic-p) (lambda (&optional _) t)))
+      (let ((file-segment (p3/appearance--file-segment))
+            (mode-segment (p3/appearance--mode-segment)))
+        (should (string-match-p "F  example\\.el" file-segment))
+        (should (string-match-p "M  Emacs-Lisp" mode-segment))))))
+
+(ert-deftest p3-appearance-mode-line-icons-require-graphical-frame ()
+  (p3-config-appearance-test--load-appearance)
+  (with-temp-buffer
+    (setq buffer-file-name "/tmp/example.el"
+          p3/appearance--icons-available t)
+    (cl-letf (((symbol-function 'display-graphic-p) (lambda (&optional _) nil))
+              ((symbol-function 'nerd-icons-icon-for-file)
+               (lambda (&rest _) (ert-fail "icon rendered on text frame"))))
+      (should (equal "example.el" (p3/appearance--file-segment))))))
 
 (ert-deftest p3-appearance-left-segment-separates-identity-groups ()
   (p3-config-appearance-test--load-appearance)
@@ -192,6 +211,52 @@
   (p3-config-appearance-test--load-appearance)
   (should (memq #'p3/appearance-refresh-frame-state
                 after-make-frame-functions)))
+
+(ert-deftest p3-appearance-frame-refresh-reconciles-dashboard ()
+  (p3-config-appearance-test--load-appearance)
+  (let ((features (cons 'dashboard features))
+        (dashboard-icon-type nil)
+        (dashboard-set-heading-icons nil)
+        (dashboard-set-file-icons nil)
+        (dashboard-heading-icons nil)
+        (dashboard-agenda-item-icon nil)
+        (dashboard-remote-path-icon nil)
+        (dashboard-footer-icon nil)
+        (dashboard-buffer-name " *p3-dashboard-appearance-test*")
+        (p3/appearance--icons-available nil)
+        (refreshes 0))
+    (unwind-protect
+        (progn
+          (get-buffer-create dashboard-buffer-name)
+          (cl-letf (((symbol-function 'display-graphic-p)
+                     (lambda (&optional _) t))
+                    ((symbol-function 'find-font) (lambda (&rest _) 'font))
+                    ((symbol-function 'nerd-icons-octicon)
+                     (lambda (&rest _) "DOT"))
+                    ((symbol-function 'nerd-icons-codicon)
+                     (lambda (&rest _) "REMOTE"))
+                    ((symbol-function 'nerd-icons-sucicon)
+                     (lambda (&rest _) "EMACS"))
+                    ((symbol-function 'dashboard-insert-startupify-lists)
+                     (lambda (&optional _force) (setq refreshes (1+ refreshes))))
+                    ((symbol-function 'p3/appearance-sync-dired-icons)
+                     (lambda () nil)))
+            (p3/appearance-refresh-frame-state (selected-frame)))
+          (should p3/appearance--icons-available)
+          (should (eq dashboard-icon-type 'nerd-icons))
+          (should dashboard-set-heading-icons)
+          (should dashboard-set-file-icons)
+          (should (equal dashboard-heading-icons
+                         '((recents . "nf-oct-history")
+                           (bookmarks . "nf-oct-bookmark")
+                           (agenda . "nf-oct-calendar")
+                           (projects . "nf-oct-rocket")
+                           (registers . "nf-oct-database"))))
+          (should (equal dashboard-agenda-item-icon "DOT"))
+          (should (equal dashboard-remote-path-icon "REMOTE"))
+          (should (equal dashboard-footer-icon "EMACS"))
+          (should (= refreshes 1)))
+      (kill-buffer dashboard-buffer-name))))
 
 (ert-deftest p3-appearance-buffer-state-preserves-modified-and-read-only-status ()
   (p3-config-appearance-test--load-appearance)
@@ -321,7 +386,7 @@
   (let ((p3/appearance--icons-available t))
     (p3/appearance-sync-dired-icons)
     (p3/appearance-sync-dired-icons)
-    (should (= 1 (cl-count #'nerd-icons-dired-mode
+    (should (= 1 (cl-count #'p3/appearance--sync-current-dired-buffer
                            dired-mode-hook :test #'eq)))))
 
 (ert-deftest p3-appearance-sync-dired-icons-reconciles-existing-buffers ()
@@ -334,7 +399,9 @@
                   all-the-icons-dired-mode t
                   nerd-icons-dired-mode nil))
           (let ((p3/appearance--icons-available t))
-            (p3/appearance-sync-dired-icons))
+            (cl-letf (((symbol-function 'display-graphic-p)
+                       (lambda (&optional _) t)))
+              (p3/appearance-sync-dired-icons)))
           (with-current-buffer buffer
             (should-not all-the-icons-dired-mode)
             (should nerd-icons-dired-mode))
@@ -343,6 +410,16 @@
           (with-current-buffer buffer
             (should-not nerd-icons-dired-mode)))
       (kill-buffer buffer))))
+
+(ert-deftest p3-appearance-dired-icons-stay-off-on-text-frame ()
+  (p3-config-appearance-test--load-appearance)
+  (with-temp-buffer
+    (setq major-mode 'dired-mode
+          p3/appearance--icons-available t
+          nerd-icons-dired-mode nil)
+    (cl-letf (((symbol-function 'display-graphic-p) (lambda (&optional _) nil)))
+      (p3/appearance--sync-current-dired-buffer))
+    (should-not nerd-icons-dired-mode)))
 
 (provide 'p3-config-appearance-test)
 
