@@ -147,6 +147,27 @@
         (should (eq 'p3/appearance-project-face
                     (get-text-property 0 'face label)))))))
 
+(ert-deftest p3-appearance-file-label-degrades-project-context-by-width ()
+  (p3-config-appearance-test--load-appearance)
+  (with-temp-buffer
+    (setq buffer-file-name "/tmp/ji2/R/example.R"
+          p3/appearance--project-root "/tmp/ji2/"
+          p3/appearance--project-relative-file "R/example.R")
+    (let ((width 140))
+      (cl-letf (((symbol-function 'window-total-width)
+                 (lambda (&optional _) width)))
+        (should (equal "ji2 / R/example.R"
+                       (substring-no-properties (p3/appearance--file-label))))
+        (setq width 90)
+        (let ((label (p3/appearance--file-label)))
+          (should (equal "ji2 / example.R" (substring-no-properties label)))
+          (should (eq 'p3/appearance-project-face
+                      (get-text-property 0 'face label))))
+        (setq width 60)
+        (should (equal "example.R"
+                       (substring-no-properties
+                        (p3/appearance--file-label))))))))
+
 (ert-deftest p3-appearance-file-and-mode-segments-use-icons-when-enabled ()
   (p3-config-appearance-test--load-appearance)
   (with-temp-buffer
