@@ -135,14 +135,17 @@
       (should (string-match-p "src/example\\.R"
                               (p3/appearance--file-segment))))))
 
-(ert-deftest p3-appearance-file-label-includes-project-name-when-wide ()
+(ert-deftest p3-appearance-file-label-includes-accented-project-name-when-wide ()
   (p3-config-appearance-test--load-appearance)
   (with-temp-buffer
     (setq buffer-file-name "/tmp/ji2/R/example.R"
           p3/appearance--project-root "/tmp/ji2/"
           p3/appearance--project-relative-file "R/example.R")
     (cl-letf (((symbol-function 'window-total-width) (lambda (&optional _) 140)))
-      (should (equal "ji2/R/example.R" (p3/appearance--file-label))))))
+      (let ((label (p3/appearance--file-label)))
+        (should (equal "ji2 / R/example.R" (substring-no-properties label)))
+        (should (eq 'p3/appearance-project-face
+                    (get-text-property 0 'face label)))))))
 
 (ert-deftest p3-appearance-file-and-mode-segments-use-icons-when-enabled ()
   (p3-config-appearance-test--load-appearance)
@@ -152,10 +155,17 @@
           p3/appearance--icons-available t)
     (let ((file-segment (p3/appearance--file-segment))
           (mode-segment (p3/appearance--mode-segment)))
-      (should (string-match-p "F" file-segment))
-      (should (string-match-p "example\\.el" file-segment))
-      (should (string-match-p "M" mode-segment))
-      (should (string-match-p "Emacs-Lisp" mode-segment)))))
+      (should (string-match-p "F  example\\.el" file-segment))
+      (should (string-match-p "M  Emacs-Lisp" mode-segment)))))
+
+(ert-deftest p3-appearance-left-segment-separates-identity-groups ()
+  (p3-config-appearance-test--load-appearance)
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (setq buffer-file-name "/tmp/example.el"
+          p3/appearance--icons-available nil)
+    (should (string-match-p "example\\.el    Emacs-Lisp"
+                            (p3/appearance--left-segment)))))
 
 (ert-deftest p3-appearance-daemon-rechecks-icons-after-graphical-frame ()
   (p3-config-appearance-test--load-appearance)
