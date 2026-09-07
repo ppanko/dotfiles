@@ -188,8 +188,8 @@
 (ert-deftest p3-appearance-mode-segment-omits-redundant-special-buffer-name ()
   (p3-config-appearance-test--load-appearance)
   (with-temp-buffer
-    (rename-buffer "*Messages*" t)
-    (setq mode-name "Messages"
+    (rename-buffer "*P3 Messages Test*" nil)
+    (setq mode-name "P3 Messages Test"
           buffer-file-name nil
           p3/appearance--icons-available nil)
     (should-not (p3/appearance--mode-segment))))
@@ -279,6 +279,8 @@
   (should (= 1 (cl-count #'p3/appearance-refresh-buffer-context
                          after-change-major-mode-hook :test #'eq)))
   (should (= 1 (cl-count #'p3/appearance-apply-frame-font
+                         after-make-frame-functions :test #'eq)))
+  (should (= 1 (cl-count #'p3/appearance-refresh-frame-state
                          after-make-frame-functions :test #'eq)))
   (should (= 1 (cl-count #'p3/appearance--configure-dashboard-after-load
                          after-load-functions :test #'eq)))
