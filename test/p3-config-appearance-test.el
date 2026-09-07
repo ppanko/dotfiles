@@ -64,6 +64,8 @@
     (defalias 'nerd-icons-octicon (lambda (&rest _) "G")))
   (unless (fboundp 'nerd-icons-codicon)
     (defalias 'nerd-icons-codicon (lambda (&rest _) "R")))
+  (unless (fboundp 'nerd-icons-sucicon)
+    (defalias 'nerd-icons-sucicon (lambda (&rest _) "E")))
   (unless (fboundp 'all-the-icons-dired-mode)
     (defalias 'all-the-icons-dired-mode
       (lambda (&optional arg)
@@ -384,8 +386,10 @@
   (should (equal (default-value 'mode-line-format)
                  (p3/appearance--build-mode-line-format)))
   (let ((p3/appearance--icons-available t))
-    (p3/appearance-sync-dired-icons)
-    (p3/appearance-sync-dired-icons)
+    (cl-letf (((symbol-function 'display-graphic-p)
+               (lambda (&optional _) t)))
+      (p3/appearance-sync-dired-icons)
+      (p3/appearance-sync-dired-icons))
     (should (= 1 (cl-count #'p3/appearance--sync-current-dired-buffer
                            dired-mode-hook :test #'eq)))))
 
