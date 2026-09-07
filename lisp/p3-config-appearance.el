@@ -8,6 +8,11 @@
 (defvar dashboard-icon-type)
 (defvar dashboard-set-heading-icons)
 (defvar dashboard-set-file-icons)
+(defvar dashboard-heading-icons)
+(defvar dashboard-agenda-item-icon)
+(defvar dashboard-remote-path-icon)
+(defvar dashboard-footer-icon)
+(defvar dashboard-buffer-name)
 (defvar nerd-icons-font-family)
 (defvar flycheck-mode)
 (defvar flycheck-last-status-change)
@@ -23,8 +28,10 @@
 (declare-function nerd-icons-icon-for-mode "nerd-icons" (mode &rest args))
 (declare-function nerd-icons-octicon "nerd-icons" (name &rest args))
 (declare-function nerd-icons-codicon "nerd-icons" (name &rest args))
+(declare-function nerd-icons-sucicon "nerd-icons" (name &rest args))
 (declare-function nerd-icons-dired-mode "nerd-icons-dired" (&optional arg))
 (declare-function all-the-icons-dired-mode "all-the-icons-dired" (&optional arg))
+(declare-function dashboard-insert-startupify-lists "dashboard" (&optional force-refresh))
 (declare-function flycheck-count-errors "flycheck" (errors))
 (declare-function doom-modeline-mode "doom-modeline" (&optional arg))
 
@@ -99,11 +106,38 @@
   (p3/appearance-refresh-icon-availability))
 
 (defun p3/appearance-configure-dashboard-icons ()
-  "Configure Dashboard icon presentation for current font availability."
-  (setq dashboard-icon-type
-        (and p3/appearance--icons-available 'nerd-icons)
-        dashboard-set-heading-icons p3/appearance--icons-available
-        dashboard-set-file-icons p3/appearance--icons-available))
+  "Reconcile Dashboard icon presentation with current font availability."
+  (let ((icons (and p3/appearance--icons-available t)))
+    (setq dashboard-icon-type (and icons 'nerd-icons)
+          dashboard-set-heading-icons icons
+          dashboard-set-file-icons icons
+          dashboard-heading-icons
+          (and icons
+               '((recents . "nf-oct-history")
+                 (bookmarks . "nf-oct-bookmark")
+                 (agenda . "nf-oct-calendar")
+                 (projects . "nf-oct-rocket")
+                 (registers . "nf-oct-database")))
+          dashboard-agenda-item-icon
+          (and icons
+               (nerd-icons-octicon
+                "nf-oct-dot_fill" :height 1.0 :v-adjust 0.01))
+          dashboard-remote-path-icon
+          (and icons
+               (nerd-icons-codicon
+                "nf-cod-radio_tower" :height 1.0 :v-adjust 0.01))
+          dashboard-footer-icon
+          (if icons
+              (nerd-icons-sucicon
+               "nf-custom-emacs"
+               :height 1.1 :v-adjust -0.05
+               :face 'dashboard-footer-icon-face)
+            ">"))
+    (when (and (featurep 'dashboard)
+               (boundp 'dashboard-buffer-name)
+               (get-buffer dashboard-buffer-name)
+               (fboundp 'dashboard-insert-startupify-lists))
+      (dashboard-insert-startupify-lists t))))
 
 (defun p3/appearance--configure-dashboard-after-load (&rest _)
   "Apply Dashboard appearance once Dashboard becomes available."
@@ -126,7 +160,8 @@
     (when (and (bound-and-true-p all-the-icons-dired-mode)
                (fboundp 'all-the-icons-dired-mode))
       (all-the-icons-dired-mode -1))
-    (if p3/appearance--icons-available
+    (if (and p3/appearance--icons-available
+             (display-graphic-p))
         (when (fboundp 'nerd-icons-dired-mode)
           (nerd-icons-dired-mode 1))
       (when (and (bound-and-true-p nerd-icons-dired-mode)
@@ -137,8 +172,9 @@
   "Reconcile Dired icon hooks and existing buffers with font availability."
   (remove-hook 'dired-mode-hook #'all-the-icons-dired-mode)
   (remove-hook 'dired-mode-hook #'nerd-icons-dired-mode)
+  (remove-hook 'dired-mode-hook #'p3/appearance--sync-current-dired-buffer)
   (when p3/appearance--icons-available
-    (add-hook 'dired-mode-hook #'nerd-icons-dired-mode))
+    (add-hook 'dired-mode-hook #'p3/appearance--sync-current-dired-buffer))
   (dolist (buffer (buffer-list))
     (with-current-buffer buffer
       (p3/appearance--sync-current-dired-buffer))))
@@ -201,8 +237,9 @@
    "    "))
 
 (defun p3/appearance--safe-icon (function &rest args)
-  "Call icon FUNCTION with ARGS when icons are available, or return nil."
-  (when p3/appearance--icons-available
+  "Call icon FUNCTION with ARGS when icons are safe for the current frame."
+  (when (and p3/appearance--icons-available
+             (display-graphic-p))
     (condition-case nil
         (apply function args)
       (error nil))))
