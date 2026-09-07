@@ -199,6 +199,12 @@
    ((buffer-modified-p) (propertize "●" 'face 'warning))
    (t nil)))
 
+(defun p3/appearance--project-name ()
+  "Return the cached local project name, or nil."
+  (when p3/appearance--project-root
+    (file-name-nondirectory
+     (directory-file-name p3/appearance--project-root))))
+
 (defun p3/appearance--file-label ()
   "Return a concise file or buffer identity label."
   (cond
@@ -207,7 +213,9 @@
     (file-name-nondirectory buffer-file-name))
    ((and (>= (window-total-width) 120)
          p3/appearance--project-relative-file)
-    p3/appearance--project-relative-file)
+    (if-let ((project-name (p3/appearance--project-name)))
+        (format "%s/%s" project-name p3/appearance--project-relative-file)
+      p3/appearance--project-relative-file))
    (t (file-name-nondirectory buffer-file-name))))
 
 (defun p3/appearance--file-segment ()
@@ -227,14 +235,22 @@
                  #'nerd-icons-codicon "nf-cod-remote" :height 0.95)))
       (if icon (format "%s %s" icon host) host))))
 
+(defun p3/appearance--redundant-mode-name-p (text)
+  "Return non-nil when TEXT duplicates a non-file buffer's identity."
+  (and (not buffer-file-name)
+       (string=
+        (downcase text)
+        (downcase (string-trim (buffer-name) "\\*+" "\\*+")))))
+
 (defun p3/appearance--mode-segment ()
   "Return major-mode identity with an optional icon and mandatory text."
   (let* ((text (or (p3/appearance--format-construct mode-name)
                    (symbol-name major-mode)))
-         (text (if (string-empty-p text) (symbol-name major-mode) text))
-         (icon (p3/appearance--safe-icon
-                #'nerd-icons-icon-for-mode major-mode :height 0.95)))
-    (if icon (format "%s %s" icon text) text)))
+         (text (if (string-empty-p text) (symbol-name major-mode) text)))
+    (unless (p3/appearance--redundant-mode-name-p text)
+      (let ((icon (p3/appearance--safe-icon
+                   #'nerd-icons-icon-for-mode major-mode :height 0.95)))
+        (if icon (format "%s %s" icon text) text)))))
 
 (defun p3/appearance--process-segment ()
   "Return existing mode-provided process state on sufficiently wide windows."
@@ -262,8 +278,14 @@
   "Return bounded presentation of existing VC state."
   (when vc-mode
     (let* ((raw (string-trim (p3/appearance--format-construct vc-mode)))
-           (text (truncate-string-to-width raw 12 nil nil "…")))
-      (format "%s %s" (p3/appearance--git-icon) text))))
+           (git-p (string-match-p "\\`Git\\(?:[-:]\\|\\'\\)" raw))
+           (payload (if git-p
+                        (replace-regexp-in-string "\\`Git[-:]?" "" raw)
+                      raw))
+           (text (truncate-string-to-width payload 12 nil nil "…")))
+      (if git-p
+          (format "%s %s" (p3/appearance--git-icon) text)
+        text))))
 
 (defun p3/appearance--flycheck-finished-segment (&optional compact)
   "Return finished Flycheck state, reducing detail when COMPACT is non-nil."
