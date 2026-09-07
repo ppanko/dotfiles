@@ -13,6 +13,7 @@ on:
       - "lisp/p3-config-reference.el"
       - "lisp/p3-git.el"
       - "lisp/p3-config-base.el"
+      - "lisp/p3-config-appearance.el"
       - "lisp/p3-config-editing.el"
       - "lisp/p3-config-completion.el"
       - "lisp/p3-config-ess.el"
@@ -31,6 +32,7 @@ on:
       - "test/p3-config-project-test.el"
       - "test/p3-config-loader-test.el"
       - "test/p3-config-test.el"
+      - "test/p3-config-appearance-test.el"
       - "test/p3-config-editing-ownership-test.el"
       - "test/p3-config-editing-windows-test.el"
       - "test/p3-config-ess-test.el"
@@ -93,6 +95,7 @@ jobs:
           lisp/p3-reference.el
           lisp/p3-config-reference.el
           lisp/p3-git.el
+          lisp/p3-config-appearance.el
           lisp/p3-config-editing.el
           lisp/p3-config-terminal.el
 
@@ -124,6 +127,7 @@ jobs:
           emacs -Q --batch -L lisp
           -l test/p3-config-loader-test.el
           -l test/p3-config-test.el
+          -l test/p3-config-appearance-test.el
           -l test/p3-config-editing-ownership-test.el
           -l test/p3-config-project-test.el
           -l test/p3-config-ess-test.el

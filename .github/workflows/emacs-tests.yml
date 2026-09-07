@@ -41,6 +41,7 @@ jobs:
             lisp/p3-config-reference.el \
             lisp/p3-git.el \
             lisp/p3-config-base.el \
+            lisp/p3-config-appearance.el \
             lisp/p3-config-editing.el \
             lisp/p3-config-completion.el \
             lisp/p3-config-ess.el \
@@ -60,6 +61,24 @@ jobs:
             lisp/p3-config-org-roam.el \
             lisp/p3-org-present.el \
             lisp/p3-config-org-present.el
+
+      - name: Smoke-load Appearance configuration boundary
+        run: |
+          emacs -Q --batch \
+            -L lisp \
+            --eval '(require (quote use-package-ensure))' \
+            --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
+            --eval '(provide (quote doom-themes))' \
+            --eval '(defvar nerd-icons-font-family "Symbols Nerd Font Mono")' \
+            --eval '(provide (quote nerd-icons))' \
+            --eval '(defun nerd-icons-icon-for-file (&rest _) "F")' \
+            --eval '(defun nerd-icons-icon-for-buffer (&rest _) "B")' \
+            --eval '(defun nerd-icons-icon-for-mode (&rest _) "M")' \
+            --eval '(defun nerd-icons-octicon (&rest _) "G")' \
+            --eval '(defun nerd-icons-codicon (&rest _) "R")' \
+            --eval '(fset (quote load-theme) (lambda (&rest _) t))' \
+            -l lisp/p3-config-appearance.el \
+            --eval '(unless (and (featurep (quote p3-config-appearance)) (listp (default-value (quote mode-line-format)))) (kill-emacs 1))'
 
       - name: Smoke-load Project configuration boundary
         run: |
@@ -161,6 +180,7 @@ jobs:
             -L lisp \
             -l test/p3-config-loader-test.el \
             -l test/p3-config-test.el \
+            -l test/p3-config-appearance-test.el \
             -l test/p3-config-editing-ownership-test.el \
             -l test/p3-config-ess-test.el \
             -l test/p3-project-test.el \
