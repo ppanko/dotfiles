@@ -141,6 +141,19 @@
 
 (p3/appearance-sync-dired-icons)
 
+(defun p3/appearance-refresh-frame-state (frame)
+  "Refresh icon presentation after a graphical client FRAME is created."
+  (when (display-graphic-p frame)
+    (with-selected-frame frame
+      (p3/appearance-refresh-icon-availability))
+    (when (featurep 'dashboard)
+      (p3/appearance-configure-dashboard-icons))
+    (p3/appearance-sync-dired-icons)
+    (force-mode-line-update t)))
+
+(remove-hook 'after-make-frame-functions #'p3/appearance-refresh-frame-state)
+(add-hook 'after-make-frame-functions #'p3/appearance-refresh-frame-state t)
+
 (defun p3/appearance-refresh-buffer-context ()
   "Refresh cheap presentation context for the current buffer."
   (setq p3/appearance--project-root nil
