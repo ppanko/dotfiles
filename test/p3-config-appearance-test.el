@@ -157,6 +157,11 @@
       (should (string-match-p "M" mode-segment))
       (should (string-match-p "Emacs-Lisp" mode-segment)))))
 
+(ert-deftest p3-appearance-daemon-rechecks-icons-after-graphical-frame ()
+  (p3-config-appearance-test--load-appearance)
+  (should (memq #'p3/appearance-refresh-frame-state
+                after-make-frame-functions)))
+
 (ert-deftest p3-appearance-buffer-state-preserves-modified-and-read-only-status ()
   (p3-config-appearance-test--load-appearance)
   (with-temp-buffer
