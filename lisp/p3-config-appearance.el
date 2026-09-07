@@ -231,6 +231,15 @@
     (file-name-nondirectory
      (directory-file-name p3/appearance--project-root))))
 
+(defun p3/appearance--project-file-label (file)
+  "Return FILE prefixed with the accented cached project name."
+  (if-let ((project-name (p3/appearance--project-name)))
+      (concat
+       (propertize project-name 'face 'p3/appearance-project-face)
+       (propertize " / " 'face 'shadow)
+       file)
+    file))
+
 (defun p3/appearance--file-label ()
   "Return a concise file or buffer identity label."
   (cond
@@ -239,12 +248,11 @@
     (file-name-nondirectory buffer-file-name))
    ((and (>= (window-total-width) 120)
          p3/appearance--project-relative-file)
-    (if-let ((project-name (p3/appearance--project-name)))
-        (concat
-         (propertize project-name 'face 'p3/appearance-project-face)
-         (propertize " / " 'face 'shadow)
+    (p3/appearance--project-file-label p3/appearance--project-relative-file))
+   ((and (>= (window-total-width) 70)
          p3/appearance--project-relative-file)
-      p3/appearance--project-relative-file))
+    (p3/appearance--project-file-label
+     (file-name-nondirectory p3/appearance--project-relative-file)))
    (t (file-name-nondirectory buffer-file-name))))
 
 (defun p3/appearance--file-segment ()
