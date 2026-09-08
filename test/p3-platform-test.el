@@ -232,13 +232,23 @@
                  "/d/work/gnupg")))
 
 (ert-deftest p3-platform-windows-configure-gnupg-preserves-old-path-semantics ()
-  (let ((package-gnupghome-dir nil))
-    (cl-letf (((symbol-function 'p3/windows-p) (lambda () t))
-              ((symbol-function 'expand-file-name)
-               (lambda (&rest _) "C:/Users/Pavel/.emacs.d/elpa/gnupg")))
-      (p3/windows-configure-gnupg))
-    (should (equal package-gnupghome-dir
-                   "/c/users/pavel/.emacs.d/elpa/gnupg"))))
+  (let ((was-bound (boundp 'package-gnupghome-dir))
+        (old-value (and (boundp 'package-gnupghome-dir)
+                        (symbol-value 'package-gnupghome-dir))))
+    (unwind-protect
+        (progn
+          (set 'package-gnupghome-dir nil)
+          (cl-letf (((symbol-function 'p3/windows-p) (lambda () t))
+                    ((symbol-function 'expand-file-name)
+                     (lambda (&rest _)
+                       "C:/Users/Pavel/.emacs.d/elpa/gnupg")))
+            (p3/windows-configure-gnupg))
+          (should
+           (equal (symbol-value 'package-gnupghome-dir)
+                  "/c/users/pavel/.emacs.d/elpa/gnupg")))
+      (if was-bound
+          (set 'package-gnupghome-dir old-value)
+        (makunbound 'package-gnupghome-dir)))))
 
 (ert-deftest p3-platform-gnupg-is-owned-by-platform-module ()
   (let ((config (p3-platform-test--contents "config.org"))
