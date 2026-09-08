@@ -16,6 +16,7 @@
 (defvar explicit-bash.exe-args)
 (defvar explicit-shell-file-name)
 (defvar inferior-R-program-name)
+(defvar package-gnupghome-dir)
 
 (defgroup p3/platform nil
   "Platform-specific behavior for the personal Emacs configuration."
@@ -50,6 +51,20 @@ Set this in secrets.el when a machine should not use auto-detection.")
 (defun p3/windows-p ()
   "Return non-nil when Emacs is running natively on Windows."
   (eq system-type 'windows-nt))
+
+(defun p3/windows-to-msys-path (windows-path)
+  "Convert WINDOWS-PATH from drive syntax to an MSYS-style path."
+  (let* ((path (replace-regexp-in-string "\\\\" "/" windows-path))
+         (path (replace-regexp-in-string
+                "^\\([a-zA-Z]\\):" "/\\1" path)))
+    (downcase path)))
+
+(defun p3/windows-configure-gnupg ()
+  "Configure the package GnuPG home path for native Windows Emacs."
+  (when (p3/windows-p)
+    (setq package-gnupghome-dir
+          (p3/windows-to-msys-path
+           (expand-file-name "elpa/gnupg" user-emacs-directory)))))
 
 (defun p3/windows-rtools-version (directory)
   "Return the numeric version suffix from an rtoolsNN DIRECTORY."
