@@ -84,8 +84,7 @@
        :bind (:map org-mode-map
                    ("C-c s" lambda nil (interactive)
                     (insert "#+BEGIN_SRC emacs-lisp\n#+END_SRC")))
-       :hook ((org-mode . flyspell-mode)
-              (org-mode . visual-line-mode)
+       :hook ((org-mode . visual-line-mode)
               (org-mode . org-indent-mode))
        :init
        (org-babel-do-load-languages

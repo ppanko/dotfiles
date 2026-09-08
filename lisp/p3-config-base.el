@@ -3,6 +3,7 @@
 (require 'use-package)
 (require 'p3-config-loader)
 (p3/config-load-module 'p3-commands)
+(p3/config-load-module 'p3-core)
 
 (defvar dashboard-startup-banner)
 (defvar dashboard-center-content)
@@ -29,6 +30,11 @@
 (declare-function package-refresh-contents "package" (&optional async))
 (declare-function package-list-packages "package" (&optional no-fetch))
 (declare-function p3/windows-shell "p3-commands" ())
+(declare-function p3/config-visit "p3-core" ())
+(declare-function p3/config-reload "p3-core" ())
+
+(global-set-key (kbd "C-c e") #'p3/config-visit)
+(global-set-key (kbd "C-c r") #'p3/config-reload)
 
 (use-package dashboard
   :config
@@ -155,6 +161,17 @@
 (setq mouse-wheel-progressive-speed nil)
 
 (setq delete-by-moving-to-trash t)
+
+(setenv "LANG" "en_US.UTF-8")
+(setenv "LC_ALL" "en_US.UTF-8")
+(set-language-environment "UTF-8")
+(prefer-coding-system 'utf-8)
+(setq locale-coding-system 'utf-8)
+(set-default-coding-systems 'utf-8-unix)
+(setq default-process-coding-system '(utf-8-unix . utf-8-unix))
+(set-buffer-file-coding-system 'utf-8)
+(set-file-name-coding-system 'utf-8)
+(set-selection-coding-system 'utf-8)
 
 (use-package async
   :init

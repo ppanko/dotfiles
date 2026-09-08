@@ -17,6 +17,7 @@
 (defvar explicit-shell-file-name)
 (defvar inferior-R-program-name)
 (defvar package-gnupghome-dir)
+(defvar tramp-default-method)
 
 (defgroup p3/platform nil
   "Platform-specific behavior for the personal Emacs configuration."
@@ -51,6 +52,12 @@ Set this in secrets.el when a machine should not use auto-detection.")
 (defun p3/windows-p ()
   "Return non-nil when Emacs is running natively on Windows."
   (eq system-type 'windows-nt))
+
+(defun p3/platform-configure-tramp ()
+  "Configure the default TRAMP method for the current supported platform."
+  (pcase system-type
+    ('windows-nt (setq tramp-default-method "plink"))
+    ('gnu/linux (setq tramp-default-method "ssh"))))
 
 (defun p3/windows-normalize-gnupg-path (windows-path)
   "Normalize WINDOWS-PATH for the package GnuPG home workaround."

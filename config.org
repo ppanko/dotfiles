@@ -26,10 +26,11 @@ overrides are available when their respective setup stages run.
     (load-file p3/secrets-file))
 #+END_SRC
 
-Platform-specific discovery lives in =lisp/p3-platform.el=. On Windows, select
-the Rtools/MSYS2 environment here so Git and other subprocess-using packages
-see its Unix tools early in startup. R and shell configuration remain in their
-original subsystem sections below.
+Platform-specific discovery and defaults live in =lisp/p3-platform.el=. On
+Windows, select the Rtools/MSYS2 environment here so Git and other
+subprocess-using packages see its Unix tools early in startup. Configure the
+platform-appropriate TRAMP default at the same boundary. R and shell
+configuration remain at their subsystem boundaries below.
 
 #+BEGIN_SRC emacs-lisp
   (eval-and-compile
@@ -39,13 +40,15 @@ original subsystem sections below.
     :ensure nil
     :demand t
     :config
-    (p3/windows-configure-rtools))
+    (p3/windows-configure-rtools)
+    (p3/platform-configure-tramp))
 #+END_SRC
 
 * Base
 
-Broad global configuration, startup UI, package-update wiring, process defaults,
-backups, Dired, and the keybinding atlas live in =lisp/p3-config-base.el=.
+Broad global configuration lives in =lisp/p3-config-base.el=: startup UI,
+configuration commands, package-update wiring, process and coding defaults,
+backups, Dired, and the keybinding atlas.
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-base)
@@ -62,26 +65,12 @@ in =lisp/p3-config-appearance.el=.
 
 * Editing
 
-Generic editing semantics and package setup live in =lisp/p3-config-editing.el=.
-The owner loads before completion so Consult retains the final =C-s= and =C-r=
-bindings; staged setup calls below preserve the original activation positions
-without coupling configuration modules to one another.
+Generic editing semantics and package setup live in =lisp/p3-config-editing.el=,
+including completion-adjacent editing tools, diagnostics, spelling, color
+previews, the simple C++ compile hook, and LaTeX editing hooks.
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-editing)
-#+END_SRC
-
-* Functions
-
-Shared project and configuration commands live in =lisp/p3-core.el=. Keep the
-literate file responsible for loading the module and exposing its bindings.
-
-#+BEGIN_SRC emacs-lisp
-  (use-package p3-core
-    :ensure nil
-    :demand t
-    :bind (("C-c e" . p3/config-visit)
-           ("C-c r" . p3/config-reload)))
 #+END_SRC
 
 * Modes
@@ -101,28 +90,15 @@ live in =lisp/p3-config-completion.el=.
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-completion)
-  (p3/config-editing-setup-thesaurus-and-snippets)
-#+END_SRC
-
-** C++
-
-Special compile command for C++
-
-#+BEGIN_SRC emacs-lisp
-  (use-package compile
-    :ensure nil
-    :defer t
-    :hook (c++-mode lambda ()
-        (set (make-local-variable 'compile-command)
-          (format "g++ %s" (file-name-nondirectory buffer-file-name)))))
 #+END_SRC
 
 ** ESS
 
-ESS package wiring, R-mode hooks, keybindings, buffer defaults, and ESS-specific
-Company configuration live in =lisp/p3-config-ess.el=. Project-aware ESS
-process/session behavior remains in =lisp/p3-ess.el=, while project templates
-and user-facing R workflow commands remain in =lisp/p3-r-tools.el=.
+ESS package wiring, R-mode hooks, keybindings, buffer defaults, RMarkdown
+coding/compile defaults, and ESS-specific Company configuration live in
+=lisp/p3-config-ess.el=. Project-aware ESS process/session behavior remains in
+=lisp/p3-ess.el=, while project templates and user-facing R workflow commands
+remain in =lisp/p3-r-tools.el=.
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-ess)
@@ -152,7 +128,6 @@ Task prompts, streaming/rollback behavior, and the task command map remain in
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-gptel)
-  (p3/config-editing-setup-diagnostics)
 #+END_SRC
 
 ** Buffers, Windows, and Frames
@@ -162,30 +137,6 @@ side-window rule live in =lisp/p3-config-workspace.el=.
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-workspace)
-#+END_SRC
-
-** LaTeX
-
-Flyspell for LaTeX
-
-#+BEGIN_SRC emacs-lisp
-  (add-hook 'LaTeX-mode-hook 'flyspell-mode)
-#+END_SRC
-
-Auto-fill
-
-#+BEGIN_SRC emacs-lisp
-  (add-hook 'LaTeX-mode-hook 'turn-on-auto-fill)
-#+END_SRC
-
-Process latex pdf with bibtex [[https://tex.stackexchange.com/questions/197707/using-bibtex-from-org-mode-bbl-and-aux-files-are-incorrectly-generated][as shown here]]
-
-#+BEGIN_SRC emacs-lisp
-(setq org-latex-pdf-process
-      '("pdflatex -interaction nonstopmode -output-directory %o %f"
-"bibtex %b"
-"pdflatex -interaction nonstopmode -output-directory %o %f"
-"pdflatex -interaction nonstopmode -output-directory %o %f"))
 #+END_SRC
 
 ** Git
@@ -200,7 +151,7 @@ git-gutter, and bindings live in =lisp/p3-config-git.el=.
 ** org
 
 Org core behavior lives in =lisp/p3-org.el=. Declarative Org, Babel, TODO,
-Agenda, PDF-opening, and export-activation configuration lives in
+Agenda, LaTeX export, PDF-opening, and export-activation configuration lives in
 =lisp/p3-config-org.el=.
 
 #+BEGIN_SRC emacs-lisp
@@ -246,7 +197,6 @@ Reusable interpreter, language-server, and REPL behavior remains in
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-python)
-  (p3/config-editing-setup-color-helper)
 #+END_SRC
 
 ** Shell
@@ -257,40 +207,4 @@ Terminal package wiring and platform-specific shell activation live in
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-terminal)
-  (p3/config-editing-setup-spelling)
-#+END_SRC
-
-** TRAMP
-
-TRAMP default settings
-
-#+BEGIN_SRC emacs-lisp
-  (require 'tramp)
-    (when (eq system-type 'windows-nt)
-      (setq tramp-default-method "plink"))
-    (when (eq system-type 'gnu/linux)
-      (setq tramp-default-method "ssh"))
-#+END_SRC
-
-* Encoding
-
-Use utf-8 everywhere all the time
-
-#+BEGIN_SRC emacs-lisp
-  (setenv "LANG" "en_US.UTF-8")
-  (setenv "LC_ALL" "en_US.UTF-8")
-  (set-language-environment "UTF-8")
-  (prefer-coding-system 'utf-8)
-  (setq locale-coding-system 'utf-8)
-  (set-default-coding-systems 'utf-8-unix)
-  (setq default-process-coding-system '(utf-8-unix . utf-8-unix))
-  (set-buffer-file-coding-system 'utf-8)
-  (set-file-name-coding-system 'utf-8)
-  (set-selection-coding-system 'utf-8)
-#+END_SRC
-
-Set Rmd to CRLF
-
-#+BEGIN_SRC emacs-lisp
-    (add-to-list 'file-coding-system-alist '("\\.Rmd\\'" . utf-8-dos))
 #+END_SRC

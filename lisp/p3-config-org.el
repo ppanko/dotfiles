@@ -8,6 +8,7 @@
 (defvar org-ellipsis)
 (defvar org-file-apps)
 (defvar org-hide-emphasis-markers)
+(defvar org-latex-pdf-process)
 (defvar org-mode-map)
 (defvar org-src-fontify-natively)
 (defvar org-src-tab-acts-natively)
@@ -40,8 +41,7 @@
   :bind (:map org-mode-map
               ("C-c s" lambda () (interactive)
                (insert "#+BEGIN_SRC emacs-lisp\n#+END_SRC")))
-  :hook ((org-mode . flyspell-mode)
-         (org-mode . visual-line-mode)
+  :hook ((org-mode . visual-line-mode)
          (org-mode . org-indent-mode))
   :init
   (org-babel-do-load-languages
@@ -60,6 +60,12 @@
         org-ellipsis " ↴"))
 
 (define-key org-mode-map (kbd "C-c C-x C-o") #'p3/org-sort-todos)
+
+(setq org-latex-pdf-process
+      '("pdflatex -interaction nonstopmode -output-directory %o %f"
+        "bibtex %b"
+        "pdflatex -interaction nonstopmode -output-directory %o %f"
+        "pdflatex -interaction nonstopmode -output-directory %o %f"))
 
 (use-package p3-org-export
   :ensure nil
