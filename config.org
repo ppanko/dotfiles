@@ -74,13 +74,13 @@ previews, the simple C++ compile hook, and LaTeX editing hooks.
 #+END_SRC
 
 * Modes
-** References
+** Buffers, Windows, and Frames
 
-Reference capture, retrieval, citation, literature-note, project-association,
-and PDF behavior lives in =lisp/p3-config-reference.el=.
+Window selection, navigation, resizing, and the existing narrow ESS process
+side-window rule live in =lisp/p3-config-workspace.el=.
 
 #+BEGIN_SRC emacs-lisp
-  (p3/config-load-module 'p3-config-reference)
+  (p3/config-load-module 'p3-config-workspace)
 #+END_SRC
 
 ** Completion-related
@@ -111,6 +111,15 @@ startup boundary.
   (p3/windows-configure-r-program)
 #+END_SRC
 
+** Git
+
+Git subprocess/synchronization behavior lives in =lisp/p3-git.el=; Magit,
+git-gutter, and bindings live in =lisp/p3-config-git.el=.
+
+#+BEGIN_SRC emacs-lisp
+  (p3/config-load-module 'p3-config-git)
+#+END_SRC
+
 ** GnuPG
 
 Windows GnuPG home-path normalization lives in =lisp/p3-platform.el=. Keep the
@@ -128,24 +137,6 @@ Task prompts, streaming/rollback behavior, and the task command map remain in
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-gptel)
-#+END_SRC
-
-** Buffers, Windows, and Frames
-
-Window selection, navigation, resizing, and the existing narrow ESS process
-side-window rule live in =lisp/p3-config-workspace.el=.
-
-#+BEGIN_SRC emacs-lisp
-  (p3/config-load-module 'p3-config-workspace)
-#+END_SRC
-
-** Git
-
-Git subprocess/synchronization behavior lives in =lisp/p3-git.el=; Magit,
-git-gutter, and bindings live in =lisp/p3-config-git.el=.
-
-#+BEGIN_SRC emacs-lisp
-  (p3/config-load-module 'p3-config-git)
 #+END_SRC
 
 ** org
@@ -197,6 +188,15 @@ Reusable interpreter, language-server, and REPL behavior remains in
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-python)
+#+END_SRC
+
+** References
+
+Reference capture, retrieval, citation, literature-note, project-association,
+and PDF behavior lives in =lisp/p3-config-reference.el=.
+
+#+BEGIN_SRC emacs-lisp
+  (p3/config-load-module 'p3-config-reference)
 #+END_SRC
 
 ** Shell

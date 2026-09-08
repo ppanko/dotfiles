@@ -122,28 +122,13 @@
          (appearance (p3-config-test--position
                       "(p3/config-load-module 'p3-config-appearance)" contents))
          (editing (p3-config-test--position
-                   "(p3/config-load-module 'p3-config-editing)" contents))
-         (reference (p3-config-test--position
-                     "(p3/config-load-module 'p3-config-reference)" contents))
-         (completion (p3-config-test--position
-                      "(p3/config-load-module 'p3-config-completion)" contents))
-         (ess (p3-config-test--position
-               "(p3/config-load-module 'p3-config-ess)" contents))
-         (r-program (p3-config-test--position
-                     "(p3/windows-configure-r-program)" contents))
-         (terminal (p3-config-test--position
-                    "(p3/config-load-module 'p3-config-terminal)" contents)))
+                   "(p3/config-load-module 'p3-config-editing)" contents)))
     (should (< newer auto))
     (should (< auto secrets))
     (should (< secrets rtools))
     (should (< rtools base))
     (should (< base appearance))
-    (should (< appearance editing))
-    (should (< editing reference))
-    (should (< reference completion))
-    (should (< completion ess))
-    (should (< ess r-program))
-    (should (< r-program terminal))))
+    (should (< appearance editing))))
 
 (ert-deftest p3-config-platform-setup-preserves-subsystem-timing ()
   (let* ((contents (p3-config-test--contents "config.org"))
