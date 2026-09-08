@@ -199,14 +199,17 @@
 (ert-deftest p3-platform-configurators-are-noops-off-windows ()
   (let ((rtools-path "unchanged")
         (shell-file-name "unchanged-shell")
-        (inferior-R-program-name "unchanged-R"))
+        (inferior-R-program-name "unchanged-R")
+        (package-gnupghome-dir "unchanged-gpg"))
     (cl-letf (((symbol-function 'p3/windows-p) (lambda () nil)))
       (p3/windows-configure-rtools)
       (p3/windows-configure-r-program)
-      (p3/windows-configure-shell))
+      (p3/windows-configure-shell)
+      (p3/windows-configure-gnupg))
     (should (equal rtools-path "unchanged"))
     (should (equal shell-file-name "unchanged-shell"))
-    (should (equal inferior-R-program-name "unchanged-R"))))
+    (should (equal inferior-R-program-name "unchanged-R"))
+    (should (equal package-gnupghome-dir "unchanged-gpg"))))
 
 (ert-deftest p3-platform-native-windows-path-semantics ()
   (unless (p3/windows-p)
@@ -224,12 +227,13 @@
                    "c:/rtools45/usr/bin;" (downcase (getenv "PATH")))))
       (setenv "PATH" old-path))))
 
-(ert-deftest p3-platform-windows-to-msys-path-converts-drive-paths ()
-  (should (equal (p3/windows-to-msys-path
+(ert-deftest p3-platform-windows-normalize-gnupg-path-preserves-old-semantics ()
+  (should (equal (p3/windows-normalize-gnupg-path
                   "C:\\Users\\Pavel\\.emacs.d\\elpa\\gnupg")
                  "/c/users/pavel/.emacs.d/elpa/gnupg"))
-  (should (equal (p3/windows-to-msys-path "D:/Work/GnuPG")
-                 "/d/work/gnupg")))
+  (should (equal (p3/windows-normalize-gnupg-path "D:/Work/GnuPG")
+                 "/d/work/gnupg"))
+  (should-not (fboundp 'p3/windows-to-msys-path)))
 
 (ert-deftest p3-platform-windows-configure-gnupg-preserves-old-path-semantics ()
   (let ((was-bound (boundp 'package-gnupghome-dir))
@@ -257,8 +261,9 @@
              (regexp-quote "(p3/windows-configure-gnupg)") config))
     (should-not (string-match-p "convert-windows-to-linux-path" config))
     (should-not (string-match-p "package-gnupghome-dir" config))
+    (should-not (string-match-p "p3/windows-to-msys-path" platform))
     (should (string-match-p
-             (regexp-quote "(defun p3/windows-to-msys-path") platform))
+             (regexp-quote "(defun p3/windows-normalize-gnupg-path") platform))
     (should (string-match-p
              (regexp-quote "(defun p3/windows-configure-gnupg") platform))))
 
