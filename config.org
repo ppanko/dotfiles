@@ -336,16 +336,6 @@ TRAMP default settings
       (setq tramp-default-method "ssh"))
 #+END_SRC
 
-** workgroups
-
-#+BEGIN_SRC emacs-lisp
-  (use-package workgroups2
-    :init
-    (setq wg-prefix-key "C-c z"
-          wg-session-load-on-start nil)
-    (workgroups-mode 1))
-#+END_SRC
-
 * Encoding
 
 Use utf-8 everywhere all the time

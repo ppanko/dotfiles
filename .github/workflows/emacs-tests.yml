@@ -180,6 +180,7 @@ jobs:
             -L lisp \
             -l test/p3-config-loader-test.el \
             -l test/p3-config-test.el \
+            -l test/p3-config-retirement-test.el \
             -l test/p3-config-appearance-test.el \
             -l test/p3-config-editing-ownership-test.el \
             -l test/p3-config-ess-test.el \

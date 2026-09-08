@@ -32,6 +32,7 @@ on:
       - "test/p3-config-project-test.el"
       - "test/p3-config-loader-test.el"
       - "test/p3-config-test.el"
+      - "test/p3-config-retirement-test.el"
       - "test/p3-config-appearance-test.el"
       - "test/p3-config-editing-ownership-test.el"
       - "test/p3-config-editing-windows-test.el"
@@ -127,6 +128,7 @@ jobs:
           emacs -Q --batch -L lisp
           -l test/p3-config-loader-test.el
           -l test/p3-config-test.el
+          -l test/p3-config-retirement-test.el
           -l test/p3-config-appearance-test.el
           -l test/p3-config-editing-ownership-test.el
           -l test/p3-config-project-test.el
