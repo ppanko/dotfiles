@@ -33,23 +33,21 @@ The configuration should remain a personal Emacs configuration, not become a fra
 | Area | Intended state | Status | Tracking |
 | --- | --- | --- | --- |
 | Bootstrap and startup | `init.el` bootstrap; resilient package setup; one validated `config.el` cache; exact-source local reloads | Complete | PRs #3, #4, #11, #12 |
-| Configuration ownership | `config.org` as orchestration map; declarative `p3-config-*`; reusable `p3-*` behavior | Complete | PRs #6, #8, #12 |
+| Configuration ownership | `config.org` as orchestration map; declarative `p3-config-*`; reusable `p3-*` behavior | Complete | PRs #6, #8, #12, #38 |
 | Project identity | built-in `project.el` canonical; no parallel Projectile runtime | Complete | PRs #10, #19 |
-| Platform boundary | Windows/Rtools/MSYS2, shell/process coding, Hunspell, R discovery, and Windows GnuPG workarounds isolated behind `p3-platform` where appropriate | Complete for current known boundaries | PRs #2, #8, #26 |
-| ESS, Python, Org, terminal, GPTel | focused declarative owners separated from reusable behavior | Structurally complete | PRs #13, #15, #16, #17, #18 |
-| Editing and appearance | generic editing ownership consolidated; native mode line; Nerd Icons fallback path; no unused `workgroups2` framework | Complete for now | PRs #22, #23, #24 |
+| Platform boundary | Windows/Rtools/MSYS2, shell/process coding, Hunspell, R discovery, and Windows GnuPG workarounds isolated behind `p3-platform` where appropriate | Complete for current known boundaries | PRs #2, #8, #26, #38 |
+| ESS, Python, Org, terminal, GPTel | focused declarative owners separated from reusable behavior | Structurally complete | PRs #13, #15, #16, #17, #18, #38 |
+| Editing and appearance | generic editing ownership consolidated; native mode line; Nerd Icons fallback path; no unused `workgroups2` framework | Complete for now | PRs #22, #23, #24, #38 |
 | Reference management and export | Pandoc-based document export; Citar/Org/BibLaTeX reference workflow with Org-roam literature notes | Complete for current scope | PRs #5, #21 |
 | Completion | existing minibuffer and Company stack retained unless a concrete workflow deficiency justifies change | No standing redesign | — |
 | Legacy/dead configuration | unused MySQL and Poly-R integrations and the commented `Not in use` graveyard removed from the live config | Complete | PR #35 |
-| Package dependency lifecycle | determine whether the additional dependency-repair/preflight work is still wanted | Decision needed | draft PR #9 |
+| Package dependency lifecycle | keep bootstrap narrow; fix concrete reproducible dependency failures at the bootstrap boundary rather than preflighting all installed packages | Complete for current scope | PR #9 closed unmerged |
 
-## Remaining structural modernization
+## Structural modernization status
 
-### Package dependency lifecycle — draft PR #9
+The standing modernization cycle is complete. PR #9 was closed unmerged after review against current `master`; the current package bootstrap remains authoritative. PR #38 then finished the residual `config.org` ownership cleanup without adding another module layer, leaving `config.org` as the intended orchestration map while preserving the deliberately staged startup and platform boundaries.
 
-PR #9 should not remain indefinitely ambiguous. Its proposed scope goes beyond the already-completed bootstrap work: dependency-version repair, built-in dependency handling, fresh-process recompilation after package mutation, and preflight/fail-closed behavior.
-
-Decide explicitly whether to finish a narrowed version because the current package lifecycle still has a demonstrated failure mode, or close it as superseded if the existing bootstrap is sufficient. Do not keep it open merely because the implementation exists.
+Future structural changes should respond to concrete reproducible problems and use the narrowest fix that addresses them rather than extending the modernization cycle or introducing a general framework.
 
 ## Feature and UX backlog
 
@@ -81,8 +79,6 @@ Do not revive these directions without a new concrete problem that requires them
 
 If old plans disagree with the repository, the repository describes current behavior. If old plans disagree with this roadmap about future architectural direction, this roadmap is the current intent.
 
-## When the modernization is done
+## Modernization status
 
-Treat the standing modernization effort as complete when the package-lifecycle decision is resolved and no concrete structural cleanup remains open solely because of the modernization cycle.
-
-At that point, the remaining GitHub issues are ordinary feature or maintenance work rather than continuation of a configuration rewrite.
+The standing modernization effort is complete. Remaining GitHub issues are ordinary feature or maintenance work rather than continuation of a configuration rewrite. New structural work should be added only when a concrete problem requires it, not as an extension of this modernization cycle.
