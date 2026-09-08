@@ -4,7 +4,7 @@
 
 This document records the intended direction and structural status of the Emacs configuration modernization work that grew out of the configuration review and comparison against stronger example configurations.
 
-Use the repository sources to answer what Emacs does today. Use this roadmap to answer what architectural direction is intended and what structural modernization work remains. Use GitHub Issues as the authoritative feature/UX backlog and pull requests to track active implementation. The files under `docs/superpowers/specs/` and `docs/superpowers/plans/` are detailed design and implementation history, not the current roadmap.
+Use the repository sources to answer what Emacs does today. Use this roadmap to answer what architectural direction is intended and what structural modernization work remains. Use GitHub Issues as the authoritative feature/UX backlog and pull requests to track active implementation. Active design documents under `docs/superpowers/specs/` may guide implementation while work is pending; completed design and implementation records belong in Git and pull-request history rather than the live tree.
 
 The roadmap intentionally does not enumerate ordinary feature issues. That backlog changes too frequently and belongs in GitHub Issues.
 
@@ -75,9 +75,9 @@ Do not revive these directions without a new concrete problem that requires them
 
 ## Historical design records
 
-`docs/superpowers/specs/` and `docs/superpowers/plans/` preserve constraints, alternatives, migration details, and test rationale for individual changes. Some describe work that has already shipped and some contain implementation-specific instructions that should not be carried forward automatically.
+Completed design and implementation records are not retained in the live tree solely as an archive. Their constraints, alternatives, migration details, and test rationale remain available in Git history and the associated pull requests. Active design documents may remain under `docs/superpowers/specs/` while work is pending.
 
-If old plans disagree with the repository, the repository describes current behavior. If old plans disagree with this roadmap about future architectural direction, this roadmap is the current intent.
+If an active design document disagrees with the repository, the repository describes current behavior. If it disagrees with this roadmap about future architectural direction, this roadmap is the current intent.
 
 ## Modernization status
 
