@@ -137,18 +137,11 @@ startup boundary.
 
 ** GnuPG
 
-Prevent emacs from mangling the path to gpg on Windows, as shown [[https://emacs.stackexchange.com/questions/60278/gpg-no-public-key][here]]
+Windows GnuPG home-path normalization lives in =lisp/p3-platform.el=. Keep the
+call here so it runs at the same subsystem boundary as before.
 
 #+BEGIN_SRC emacs-lisp
-  (when (eq system-type 'windows-nt)
-    (defun convert-windows-to-linux-path (windows-path)
-      "Convert a Windows-style PATH (e.g., c:/foo) to Linux-style (/c/foo)."
-      (let* ((path (replace-regexp-in-string "\\\\" "/" windows-path)) ;; Replace backslashes
-             (path (replace-regexp-in-string "^\\([a-zA-Z]\\):" "/\\1" path))) ;; Add leading '/'
-        (downcase path)))
-
-    (setq package-gnupghome-dir
-          (convert-windows-to-linux-path (expand-file-name "elpa/gnupg" user-emacs-directory))))
+  (p3/windows-configure-gnupg)
 #+END_SRC
 
 ** GPT
