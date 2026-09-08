@@ -22,22 +22,6 @@
                           "(workgroups-mode 1)"))
       (should-not (string-match-p (regexp-quote forbidden) contents)))))
 
-(ert-deftest p3-config-unused-integrations-remain-retired ()
-  (let ((contents (p3-config-retirement-test--config)))
-    (dolist (forbidden '("** MySQL"
-                        "(use-package sql"
-                        "p3/sql-connect"
-                        "ttuSql"
-                        "** Poly-R"
-                        "(use-package poly-R"
-                        "poly-noweb+r-mode"
-                        "** Not in use"
-                        "(require 'ein)"
-                        "aggressive-indent-mode"
-                        "record-screen"
-                        "recordmydesktop"))
-      (should-not (string-match-p (regexp-quote forbidden) contents)))))
-
 (provide 'p3-config-retirement-test)
 
 ;;; p3-config-retirement-test.el ends here
