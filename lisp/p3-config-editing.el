@@ -12,8 +12,8 @@
 (defvar yas-snippet-dirs)
 (defvar flycheck-global-modes)
 (defvar flycheck-checker-error-threshold)
-(defvar p3/windows-hunspell-program)
-(defvar p3/windows-hunspell-dictionary-directory)
+(defvar p3/windows-hunspell-program nil)
+(defvar p3/windows-hunspell-dictionary-directory nil)
 (defvar ispell-program-name)
 (defvar ispell-local-dictionary)
 (defvar ispell-dictionary)
@@ -83,32 +83,26 @@
          ("C-}" . mc/mark-previous-like-this)
          ("C-|" . mc/mark-all-like-this)))
 
-(defun p3/config-editing-setup-thesaurus-and-snippets ()
-  "Configure generic thesaurus and snippet support."
-  (use-package synosaurus
-    :diminish synosaurus-mode
-    :init    (synosaurus-mode)
-    :config  (setq synosaurus-choose-method 'popup))
+(use-package synosaurus
+  :diminish synosaurus-mode
+  :init (synosaurus-mode)
+  :config (setq synosaurus-choose-method 'popup))
 
-  (use-package yasnippet
-    :init
-    (yas-global-mode 1)
-    :config
-    (add-to-list 'yas-snippet-dirs "~/.emacs.d/snippets")))
+(use-package yasnippet
+  :init
+  (yas-global-mode 1)
+  :config
+  (add-to-list 'yas-snippet-dirs "~/.emacs.d/snippets"))
 
-(defun p3/config-editing-setup-diagnostics ()
-  "Configure global Flycheck behavior."
-  (use-package flycheck
-    :hook (after-init . global-flycheck-mode)
-    :config
-    (setq flycheck-global-modes '(not LaTeX-mode latex-mode org-mode))
-    (setq flycheck-checker-error-threshold 1000)))
+(use-package flycheck
+  :hook (after-init . global-flycheck-mode)
+  :config
+  (setq flycheck-global-modes '(not LaTeX-mode latex-mode org-mode))
+  (setq flycheck-checker-error-threshold 1000))
 
-(defun p3/config-editing-setup-color-helper ()
-  "Configure color previews for programming buffers."
-  (use-package rainbow-mode
-    :config
-    (add-hook 'prog-mode-hook #'rainbow-mode)))
+(use-package rainbow-mode
+  :config
+  (add-hook 'prog-mode-hook #'rainbow-mode))
 
 (defun p3/config-editing-setup-spelling ()
   "Configure platform-specific Hunspell and Ispell behavior."
@@ -130,6 +124,17 @@
           ispell-dictionary "english"
           ispell-local-dictionary-alist
           '(("en_US" "[[:alpha:]]" "[^[:alpha:]]" "[']" nil ("-d" "en_US") nil utf-8)))))
+
+(p3/config-editing-setup-spelling)
+
+(add-hook 'c++-mode-hook
+          (lambda ()
+            (set (make-local-variable 'compile-command)
+                 (format "g++ %s"
+                         (file-name-nondirectory buffer-file-name)))))
+
+(add-hook 'LaTeX-mode-hook #'flyspell-mode)
+(add-hook 'LaTeX-mode-hook #'turn-on-auto-fill)
 
 (provide 'p3-config-editing)
 

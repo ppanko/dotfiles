@@ -95,6 +95,8 @@
         ess-gen-proc-buffer-name-function
         'ess-gen-proc-buffer-name:project-or-directory))
 
+(add-to-list 'file-coding-system-alist '("\\.Rmd\\'" . utf-8-dos))
+
 (defun compile-rmd ()
   (set (make-local-variable 'compile-command)
        (concat "R -e \"rmarkdown::render('" buffer-file-name "')\"")))

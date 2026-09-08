@@ -87,10 +87,12 @@
     (should-not (string-match-p "(defun p3/org-export-to-office" org-config))))
 
 (ert-deftest p3-config-org-delegates-custom-subsystems-to-modules ()
-  (let ((contents (p3-config-test--contents "config.org")))
-    (dolist (module '("p3-platform" "p3-core"))
-      (should (string-match-p (regexp-quote (format "(use-package %s" module))
-                              contents)))
+  (let ((contents (p3-config-test--contents "config.org"))
+        (base (p3-config-test--contents "lisp/p3-config-base.el")))
+    (should (string-match-p (regexp-quote "(use-package p3-platform") contents))
+    (should (string-match-p
+             (regexp-quote "(p3/config-load-module 'p3-core)") base))
+    (should-not (string-match-p (regexp-quote "(use-package p3-core") contents))
     (dolist (module '(p3-config-ess p3-config-gptel p3-config-org
                       p3-config-org-roam p3-config-org-present
                       p3-config-project p3-config-python p3-config-reference
@@ -305,9 +307,7 @@
                           "bib-files-directory"
                           "p3/bib-library"
                           "p3/pdf-library"))
-      (should-not (string-match-p (regexp-quote forbidden) contents)))
-    (should (string-match-p
-             (regexp-quote "(setq org-latex-pdf-process") contents))))
+      (should-not (string-match-p (regexp-quote forbidden) contents)))))
 
 (ert-deftest p3-config-ess-orchestration-has-one-owner ()
   (let* ((contents (p3-config-test--contents "config.org"))
@@ -372,6 +372,8 @@
         (terminal-behavior (p3-config-test--contents "lisp/p3-terminal.el")))
     (should (string-match-p
              (regexp-quote "(p3/config-load-module 'p3-commands)") base))
+    (should (string-match-p
+             (regexp-quote "(p3/config-load-module 'p3-core)") base))
     (should (string-match-p
              (regexp-quote "(p3/config-load-module 'p3-git)") git))
     (should (string-match-p

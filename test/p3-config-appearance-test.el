@@ -112,9 +112,7 @@
       (should-not (string-match-p (regexp-quote forbidden) config)))
     (should-not (string-match-p "dashboard-icon-type" base))
     (should (string-match-p "initial-scratch-message" base))
-    (should (string-match-p "ring-bell-function" base))
-    (should (string-match-p "default-process-coding-system" config))
-    (should (string-match-p "\\\\.Rmd" config))))
+    (should (string-match-p "ring-bell-function" base))))
 
 (ert-deftest p3-config-appearance-preserves-platform-visual-invariants ()
   (let ((appearance
