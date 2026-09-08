@@ -78,7 +78,7 @@ jobs:
             --eval '(defun nerd-icons-codicon (&rest _) "R")' \
             --eval '(fset (quote load-theme) (lambda (&rest _) t))' \
             -l lisp/p3-config-appearance.el \
-            --eval '(unless (and (featurep (quote p3-config-appearance)) (listp (default-value (quote mode-line-format)))) (kill-emacs 1))'
+            --eval '(unless (and (featurep (quote p3-config-appearance)) (listp (default-value (quote mode-line-format))) global-hl-line-mode (equal (face-foreground (quote line-number-current-line) nil t) "#FFD700")) (kill-emacs 1))'
 
       - name: Smoke-load Project configuration boundary
         run: |

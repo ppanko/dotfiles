@@ -1,6 +1,7 @@
 ;;; p3-config-appearance.el --- Visual presentation configuration -*- lexical-binding: t; -*-
 
 (require 'cl-lib)
+(require 'hl-line)
 (require 'project)
 (require 'subr-x)
 (require 'use-package)
@@ -87,10 +88,13 @@
 (setq frame-title-format "%b"
       show-paren-when-point-inside-paren t)
 (show-paren-mode t)
+(global-hl-line-mode 1)
 
 (set-face-attribute 'mode-line nil :box nil :weight 'semi-bold :height 1.05)
 (set-face-attribute 'mode-line-inactive nil :box nil :weight 'normal)
-(set-face-attribute 'line-number-current-line nil :weight 'bold)
+(set-face-attribute 'line-number-current-line nil
+                    :weight 'bold
+                    :foreground "#FFD700")
 
 ;; Retire the old modeline when this source is reloaded into an existing
 ;; session. This does not load or configure doom-modeline.
