@@ -13,6 +13,12 @@
 
 (require 'p3-platform)
 
+(defun p3-platform-test--contents (relative)
+  "Return contents of RELATIVE under the repository root."
+  (with-temp-buffer
+    (insert-file-contents (expand-file-name relative p3-platform-test--root))
+    (buffer-string)))
+
 (ert-deftest p3-platform-overrides-remain-machine-local-variables ()
   (should-not (get 'p3/windows-rtools-override 'custom-type))
   (should-not (get 'p3/windows-r-program-override 'custom-type)))
@@ -217,6 +223,34 @@
           (should (string-prefix-p
                    "c:/rtools45/usr/bin;" (downcase (getenv "PATH")))))
       (setenv "PATH" old-path))))
+
+(ert-deftest p3-platform-windows-to-msys-path-converts-drive-paths ()
+  (should (equal (p3/windows-to-msys-path
+                  "C:\\Users\\Pavel\\.emacs.d\\elpa\\gnupg")
+                 "/c/users/pavel/.emacs.d/elpa/gnupg"))
+  (should (equal (p3/windows-to-msys-path "D:/Work/GnuPG")
+                 "/d/work/gnupg")))
+
+(ert-deftest p3-platform-windows-configure-gnupg-preserves-old-path-semantics ()
+  (let ((package-gnupghome-dir nil))
+    (cl-letf (((symbol-function 'p3/windows-p) (lambda () t))
+              ((symbol-function 'expand-file-name)
+               (lambda (&rest _) "C:/Users/Pavel/.emacs.d/elpa/gnupg")))
+      (p3/windows-configure-gnupg))
+    (should (equal package-gnupghome-dir
+                   "/c/users/pavel/.emacs.d/elpa/gnupg"))))
+
+(ert-deftest p3-platform-gnupg-is-owned-by-platform-module ()
+  (let ((config (p3-platform-test--contents "config.org"))
+        (platform (p3-platform-test--contents "lisp/p3-platform.el")))
+    (should (string-match-p
+             (regexp-quote "(p3/windows-configure-gnupg)") config))
+    (should-not (string-match-p "convert-windows-to-linux-path" config))
+    (should-not (string-match-p "package-gnupghome-dir" config))
+    (should (string-match-p
+             (regexp-quote "(defun p3/windows-to-msys-path") platform))
+    (should (string-match-p
+             (regexp-quote "(defun p3/windows-configure-gnupg") platform))))
 
 (provide 'p3-platform-test)
 
