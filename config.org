@@ -197,39 +197,6 @@ git-gutter, and bindings live in =lisp/p3-config-git.el=.
   (p3/config-load-module 'p3-config-git)
 #+END_SRC
 
-** MySQL
-
-Setup default connections, as seen [[https://truongtx.me/2014/08/23/setup-emacs-as-an-sql-database-client][here]].
-
-#+BEGIN_SRC emacs-lisp
-  (use-package sql
-    :ensure nil
-    :config
-    ;; Make sure MySQL know where the plugins directory is
-    (setq sql-mysql-options
-          '("--plugin-dir=/usr/lib/mysql/plugin" "--binary-mode"))
-    ;; Try to catch the stupid MySQL prompt using a better regex
-    (sql-set-product-feature 'mysql :prompt-regexp "^\\(?:mysql\\|mariadb\\).*> "))
-#+END_SRC
-
-Interactive commands to connect to default connection.
-
-#+BEGIN_SRC emacs-lisp
-  (defun p3/sql-connect (product connection)
-    "Connect to saved CONNECTION using SQL PRODUCT."
-    (let ((sql-product product))
-      (sql-connect connection)))
-
-  (defun p3/sql-ttu-sql ()
-    "Connect to the saved ttuSql MySQL connection."
-    (interactive)
-    (p3/sql-connect 'mysql 'ttuSql))
-
-  ;; Preserve the old command names for existing keybindings or muscle memory.
-  (defalias 'my-sql-connect #'p3/sql-connect)
-  (defalias 'my-sql-ttuSql #'p3/sql-ttu-sql)
-#+END_SRC
-
 ** org
 
 Org core behavior lives in =lisp/p3-org.el=. Declarative Org, Babel, TODO,
@@ -248,30 +215,6 @@ reusable Roam search, capture, filtering, and agenda helpers live in
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-org-roam)
-#+END_SRC
-
-** Poly-R
-
-Require poly-R
-
-#+BEGIN_SRC emacs-lisp
-  (use-package poly-R
-    :defer t
-    ;; Add Rnw extension as polymode's r-noweb mode
-    :init
-    (add-to-list 'auto-mode-alist '("\\.Rnw" . poly-noweb+r-mode))
-    ;; Set default weaver/exporter options
-    (defun my-poly-noweb+r-options ()
-      (oset pm/polymode :exporter 'pm-exporter/pdflatex)
-      (oset pm/polymode :weaver 'pm-weaver/knitR))
-    :hook (poly-noweb+r-mode . my-poly-noweb+r-options)
-    :config
-      ;; Get rid of annoying appended text after weaving/exporting
-      (setq polymode-exporter-output-file-format "%s"
-            polymode-weaver-output-file-format "%s"
-            ;; Do not display output file or process buffer
-            polymode-display-output-file nil
-            polymode-display-process-buffers nil))
 #+END_SRC
 
 ** Presentation
@@ -350,65 +293,4 @@ Set Rmd to CRLF
 
 #+BEGIN_SRC emacs-lisp
     (add-to-list 'file-coding-system-alist '("\\.Rmd\\'" . utf-8-dos))
-#+END_SRC
-
-* Not in use
-
-Enable ein + a shortcut for deleting cells.
-
-#+BEGIN_SRC emacs-lisp
-  ;; (require 'ein)
-  ;; (require 'ein-notebook)
-  ;;
-  ;; (define-key ein:notebook-mode-map "\C-c\C-d"
-  ;;   'ein:worksheet-delete-cell)
-#+END_SRC
-
-Better (more aggressive) indent?
-
-#+BEGIN_SRC emacs-lisp
-  ;; (add-hook 'ess-mode-hook #'aggressive-indent-mode)
-#+END_SRC
-
-Record screen?
-
-#+BEGIN_SRC emacs-lisp
-  ;; (defun record-screen ()
-  ;;   "Records screencast. It is recommended to bind the function to
-  ;; a key. Press key to start screen recording. Program
-  ;; `recordmydesktop` is used but other screen recording command
-  ;; could be used as well. You could modify the keybinding to stop
-  ;; the recording. It is set to be Hyper-u. See below. Once you stop
-  ;; recording the video is being prepared. Wait that process
-  ;; finishes, then press `q` two times to remove the buffer and get
-  ;; to the recorded file."
-  ;;   (interactive)
-  ;;   (let* ((filepath (concat video-recordings-dir (format-time-string "%Y/%m/%Y-%m-%d/")))
-  ;;	 (filename (concat filepath (format-time-string "%Y-%m-%d-%H:%M:%S") video-recording-extension))
-  ;;	 (command-1 (screen-record-command filename))
-  ;;	 (current-buffer (current-buffer))
-  ;;	 (keybinding-stop (kbd "s-u"))
-  ;;	 (buffer "*Screen Recording*"))
-  ;;     (make-directory filepath t)
-  ;;     (switch-to-buffer buffer)
-  ;;     (erase-buffer)
-  ;;     (setq-local header-line-format "➜ Screen recording, use 'q' when process finishes to get the recorded file, use globally s-u to stop recording.")
-  ;;     (let* ((process (start-process-shell-command buffer buffer command-1)))
-  ;;       (message (prin1-to-string process))
-  ;;       (local-set-key "q" `(lambda () (interactive) (signal-process ,process 'TERM)
-  ;;			    (local-set-key "q" (lambda () (interactive)
-  ;;						 (kill-current-buffer)
-  ;;						 (find-file ,filepath)
-  ;;						 (revert-buffer)))))
-  ;;       (switch-to-buffer current-buffer)
-  ;;       (global-set-key keybinding-stop `(lambda () (interactive) (signal-process ,process 'TERM)
-  ;;				     (switch-to-buffer ,buffer))))))
-
-  ;; (defun screen-record-command (filename &optional device)
-  ;;   "Record screen with the default device"
-  ;;   (let* ((device (if device device "pulse"))
-  ;;	 (command (format "recordmydesktop --no-sound --pause-shortcut Alt-p --stop-shortcut Alt-n --workdir '%s' --no-frame --device %s -o \"%s\"" temporary-file-directory device filename)))
-  ;;     command))
-
-  ;; (global-set-key (kbd "s-z") 'record-screen)
 #+END_SRC

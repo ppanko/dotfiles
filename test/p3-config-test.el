@@ -174,7 +174,6 @@
                "(p3/config-load-module 'p3-config-org)" contents))
          (roam (p3-config-test--position
                 "(p3/config-load-module 'p3-config-org-roam)" contents))
-         (poly-r (p3-config-test--position "(use-package poly-R" contents))
          (present (p3-config-test--position
                    "(p3/config-load-module 'p3-config-org-present)" contents))
          (project-config
@@ -183,8 +182,7 @@
          (python (p3-config-test--position
                   "(p3/config-load-module 'p3-config-python)" contents)))
     (should (< org roam))
-    (should (< roam poly-r))
-    (should (< poly-r present))
+    (should (< roam present))
     (should (< present project-config))
     (should (< project-config python))))
 
@@ -308,9 +306,8 @@
                           "p3/bib-library"
                           "p3/pdf-library"))
       (should-not (string-match-p (regexp-quote forbidden) contents)))
-    (dolist (retained '("(setq org-latex-pdf-process"
-                          "(use-package poly-R"))
-      (should (string-match-p (regexp-quote retained) contents)))))
+    (should (string-match-p
+             (regexp-quote "(setq org-latex-pdf-process") contents))))
 
 (ert-deftest p3-config-ess-orchestration-has-one-owner ()
   (let* ((contents (p3-config-test--contents "config.org"))
