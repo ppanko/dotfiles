@@ -52,8 +52,8 @@ Set this in secrets.el when a machine should not use auto-detection.")
   "Return non-nil when Emacs is running natively on Windows."
   (eq system-type 'windows-nt))
 
-(defun p3/windows-to-msys-path (windows-path)
-  "Convert WINDOWS-PATH from drive syntax to an MSYS-style path."
+(defun p3/windows-normalize-gnupg-path (windows-path)
+  "Normalize WINDOWS-PATH for the package GnuPG home workaround."
   (let* ((path (replace-regexp-in-string "\\\\" "/" windows-path))
          (path (replace-regexp-in-string
                 "^\\([a-zA-Z]\\):" "/\\1" path)))
@@ -63,7 +63,7 @@ Set this in secrets.el when a machine should not use auto-detection.")
   "Configure the package GnuPG home path for native Windows Emacs."
   (when (p3/windows-p)
     (setq package-gnupghome-dir
-          (p3/windows-to-msys-path
+          (p3/windows-normalize-gnupg-path
            (expand-file-name "elpa/gnupg" user-emacs-directory)))))
 
 (defun p3/windows-rtools-version (directory)
