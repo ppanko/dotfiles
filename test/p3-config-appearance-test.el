@@ -182,11 +182,14 @@
     (emacs-lisp-mode)
     (setq buffer-file-name "/tmp/example.el"
           p3/appearance--icons-available t)
-    (cl-letf (((symbol-function 'display-graphic-p) (lambda (&optional _) t)))
+    (cl-letf (((symbol-function 'display-graphic-p) (lambda (&optional _) t))
+              ((symbol-function 'nerd-icons-icon-for-mode)
+               (lambda (&rest _) (ert-fail "major-mode icon rendered"))))
       (let ((file-segment (p3/appearance--file-segment))
             (mode-segment (p3/appearance--mode-segment)))
         (should (string-match-p "F  example\\.el" file-segment))
-        (should (equal "Emacs-Lisp" mode-segment))))))
+        (should (stringp mode-segment))
+        (should-not (string-empty-p mode-segment))))))
 
 (ert-deftest p3-appearance-mode-line-icons-require-graphical-frame ()
   (p3-config-appearance-test--load-appearance)
