@@ -7,7 +7,6 @@
 
 ;; Route only file visits that are about to be displayed.  Background
 ;; `find-file-noselect' reads and reverts must not change workspaces.
-(remove-hook 'find-file-hook #'p3/project-route-current-file)
 (dolist (command '(find-file find-file-other-window find-file-read-only))
   (advice-remove command #'p3/project-route-file)
   (advice-add command :before #'p3/project-route-file))
