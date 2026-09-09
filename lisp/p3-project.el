@@ -121,7 +121,8 @@ configuration untouched."
             (p3/project--find-tab
              (lambda (tab)
                (and (not (p3/project--tab-root tab))
-                    (not (p3/project--general-tab-p tab)))))))
+                    (not (p3/project--general-tab-p tab))
+                    (not (alist-get 'explicit-name (cdr tab))))))))
     (if match
         (unless (eq (car (cdr match)) 'current-tab)
           (tab-bar-select-tab (car match)))
