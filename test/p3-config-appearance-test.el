@@ -176,7 +176,7 @@
                        (substring-no-properties
                         (p3/appearance--file-label))))))))
 
-(ert-deftest p3-appearance-file-and-mode-segments-use-icons-when-enabled ()
+(ert-deftest p3-appearance-file-segment-owns-icon-when-enabled ()
   (p3-config-appearance-test--load-appearance)
   (with-temp-buffer
     (emacs-lisp-mode)
@@ -186,7 +186,7 @@
       (let ((file-segment (p3/appearance--file-segment))
             (mode-segment (p3/appearance--mode-segment)))
         (should (string-match-p "F  example\\.el" file-segment))
-        (should (string-match-p "M  Emacs-Lisp" mode-segment))))))
+        (should (equal "Emacs-Lisp" mode-segment))))))
 
 (ert-deftest p3-appearance-mode-line-icons-require-graphical-frame ()
   (p3-config-appearance-test--load-appearance)
