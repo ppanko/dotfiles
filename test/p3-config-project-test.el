@@ -1,8 +1,12 @@
 ;;; p3-config-project-test.el --- Native project config boundary tests -*- lexical-binding: t; -*-
 
 (require 'ert)
+(require 'cl-lib)
 (require 'project)
+(require 'seq)
+(require 'tab-bar)
 (require 'p3-config-loader)
+(require 'p3-project)
 
 (defconst p3-config-project-test--root
   (file-name-directory
@@ -16,6 +20,29 @@
     (insert-file-contents
      (expand-file-name relative p3-config-project-test--root))
     (buffer-string)))
+
+(defun p3-config-project-test--current-tab ()
+  "Return the current Tab Bar tab alist."
+  (seq-find (lambda (tab) (eq (car tab) 'current-tab))
+            (tab-bar-tabs)))
+
+(defun p3-config-project-test--general-tab-p (tab)
+  "Return non-nil when TAB is the General workspace."
+  (alist-get 'p3-general-workspace (cdr tab)))
+
+(defmacro p3-config-project-test--with-clean-tabs (&rest body)
+  "Run BODY with one unclaimed tab, restoring frame state afterward."
+  (declare (indent 0) (debug t))
+  `(let ((saved-tabs (frame-parameter nil 'tabs))
+         (saved-window-configuration (current-window-configuration)))
+     (unwind-protect
+         (progn
+           (set-frame-parameter nil 'tabs nil)
+           (tab-bar-tabs)
+           (delete-other-windows)
+           ,@body)
+       (set-frame-parameter nil 'tabs saved-tabs)
+       (set-window-configuration saved-window-configuration))))
 
 (ert-deftest p3-config-project-binds-native-project-prefixes ()
   (let ((p3/config-lisp-directory
@@ -47,6 +74,80 @@
                           "projectile-register-project-type"
                           "(projectile-mode +1)"))
       (should-not (string-match-p (regexp-quote forbidden) contents)))))
+
+(ert-deftest p3-config-project-general-workspace-claims-current-tab ()
+  (p3-config-project-test--with-clean-tabs
+    (let ((tab-count (length (tab-bar-tabs))))
+      (p3/project-switch-to-general-tab)
+      (should (= (length (tab-bar-tabs)) tab-count))
+      (should (p3-config-project-test--general-tab-p
+               (p3-config-project-test--current-tab)))
+      (should (equal (alist-get 'name
+                                (cdr (p3-config-project-test--current-tab)))
+                     "General")))))
+
+(ert-deftest p3-config-project-general-workspace-is-reused ()
+  (let ((root (make-temp-file "p3-general-workspace-project-" t)))
+    (unwind-protect
+        (p3-config-project-test--with-clean-tabs
+          (p3/project-switch-to-general-tab)
+          (p3/project-switch-to-tab root)
+          (let ((tab-count (length (tab-bar-tabs))))
+            (p3/project-switch-to-general-tab)
+            (should (= (length (tab-bar-tabs)) tab-count))
+            (should (p3-config-project-test--general-tab-p
+                     (p3-config-project-test--current-tab)))))
+      (delete-directory root t))))
+
+(ert-deftest p3-config-project-routes-local-file-by-project-membership ()
+  (let* ((root (make-temp-file "p3-file-routing-project-" t))
+         (project-file (expand-file-name "inside.txt" root))
+         (loose-file (make-temp-file "p3-file-routing-loose-")))
+    (unwind-protect
+        (progn
+          (with-temp-file project-file (insert "inside\n"))
+          (p3-config-project-test--with-clean-tabs
+            (with-temp-buffer
+              (setq buffer-file-name loose-file)
+              (cl-letf (((symbol-function 'project-current)
+                         (lambda (&optional _maybe-prompt _directory) nil)))
+                (p3/project-route-current-file)
+                (should (p3-config-project-test--general-tab-p
+                         (p3-config-project-test--current-tab)))))
+            (with-temp-buffer
+              (setq buffer-file-name project-file)
+              (cl-letf (((symbol-function 'project-current)
+                         (lambda (&optional _maybe-prompt _directory)
+                           'fake-project))
+                        ((symbol-function 'project-root)
+                         (lambda (_project) root)))
+                (p3/project-route-current-file)
+                (should
+                 (equal (alist-get 'p3-project-root
+                                   (cdr (p3-config-project-test--current-tab)))
+                        (p3/project-normalize-root root)))))))
+      (when (file-exists-p loose-file) (delete-file loose-file))
+      (delete-directory root t))))
+
+(ert-deftest p3-config-project-routing-ignores-nonfile-and-remote-buffers ()
+  (p3-config-project-test--with-clean-tabs
+    (let ((tab-count (length (tab-bar-tabs))))
+      (with-temp-buffer
+        (setq buffer-file-name nil)
+        (p3/project-route-current-file))
+      (with-temp-buffer
+        (setq buffer-file-name "/ssh:example:/tmp/file.txt")
+        (p3/project-route-current-file))
+      (should (= (length (tab-bar-tabs)) tab-count))
+      (should-not (p3-config-project-test--general-tab-p
+                   (p3-config-project-test--current-tab))))))
+
+(ert-deftest p3-config-project-wires-file-routing-through-find-file-hook ()
+  (let ((p3/config-lisp-directory
+         (expand-file-name "lisp" p3-config-project-test--root))
+        (find-file-hook find-file-hook))
+    (p3/config-load-module 'p3-config-project)
+    (should (memq #'p3/project-route-current-file find-file-hook))))
 
 (provide 'p3-config-project-test)
 
