@@ -26,7 +26,6 @@
 
 (declare-function nerd-icons-icon-for-file "nerd-icons" (file &rest args))
 (declare-function nerd-icons-icon-for-buffer "nerd-icons" (&rest args))
-(declare-function nerd-icons-icon-for-mode "nerd-icons" (mode &rest args))
 (declare-function nerd-icons-octicon "nerd-icons" (name &rest args))
 (declare-function nerd-icons-codicon "nerd-icons" (name &rest args))
 (declare-function nerd-icons-sucicon "nerd-icons" (name &rest args))
