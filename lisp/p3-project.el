@@ -140,12 +140,13 @@ configuration untouched."
   "Route local FILENAME to its project tab or the shared General tab.
 Remote files are left in the current workspace.  Extra arguments are ignored
 so this function can advise the standard file-opening commands directly."
-  (when (and filename (not (file-remote-p filename)))
+  (when filename
     (let ((file (expand-file-name filename)))
-      (if-let ((project
-                (project-current nil (file-name-directory file))))
-          (p3/project-switch-to-tab (project-root project))
-        (p3/project-switch-to-general-tab)))))
+      (unless (file-remote-p file)
+        (if-let ((project
+                  (project-current nil (file-name-directory file))))
+            (p3/project-switch-to-tab (project-root project))
+          (p3/project-switch-to-general-tab))))))
 
 (defun p3/project-resume ()
   "Resume the selected native project workspace and choose a project buffer."
