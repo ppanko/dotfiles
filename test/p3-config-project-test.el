@@ -86,6 +86,22 @@
                                 (cdr (p3-config-project-test--current-tab)))
                      "General")))))
 
+(ert-deftest p3-config-project-general-workspace-preserves-explicit-user-tab ()
+  (p3-config-project-test--with-clean-tabs
+    (tab-rename "Writing")
+    (let ((tab-count (length (tab-bar-tabs))))
+      (p3/project-switch-to-general-tab)
+      (should (= (length (tab-bar-tabs)) (1+ tab-count)))
+      (should (p3-config-project-test--general-tab-p
+               (p3-config-project-test--current-tab)))
+      (should
+       (seq-some
+        (lambda (tab)
+          (and (equal (alist-get 'name (cdr tab)) "Writing")
+               (alist-get 'explicit-name (cdr tab))
+               (not (p3-config-project-test--general-tab-p tab))))
+        (tab-bar-tabs))))))
+
 (ert-deftest p3-config-project-general-workspace-is-reused ()
   (let ((root (make-temp-file "p3-general-workspace-project-" t)))
     (unwind-protect
@@ -167,6 +183,27 @@
       (delete-directory loose-root t)
       (delete-directory project-root t))))
 
+(ert-deftest p3-config-project-failed-read-only-visit-keeps-current-workspace ()
+  (let* ((p3/config-lisp-directory
+          (expand-file-name "lisp" p3-config-project-test--root))
+         (project-root (make-temp-file "p3-read-only-project-" t))
+         (loose-root (make-temp-file "p3-read-only-loose-" t))
+         (missing-file (expand-file-name "missing.txt" loose-root)))
+    (unwind-protect
+        (p3-config-project-test--with-clean-tabs
+          (p3/config-load-module 'p3-config-project)
+          (p3/project-switch-to-tab project-root)
+          (let ((tab-count (length (tab-bar-tabs)))
+                (expected-root (p3/project-normalize-root project-root)))
+            (should-error (find-file-read-only missing-file))
+            (should (= (length (tab-bar-tabs)) tab-count))
+            (should
+             (equal (alist-get 'p3-project-root
+                               (cdr (p3-config-project-test--current-tab)))
+                    expected-root))))
+      (delete-directory loose-root t)
+      (delete-directory project-root t))))
+
 (ert-deftest p3-config-project-wires-routing-to-file-opening-commands ()
   (let ((p3/config-lisp-directory
          (expand-file-name "lisp" p3-config-project-test--root))
@@ -175,7 +212,7 @@
     (should-not find-file-hook)
     (should (advice-member-p #'p3/project-route-file 'find-file))
     (should (advice-member-p #'p3/project-route-file 'find-file-other-window))
-    (should (advice-member-p #'p3/project-route-file 'find-file-read-only))))
+    (should-not (advice-member-p #'p3/project-route-file 'find-file-read-only))))
 
 (provide 'p3-config-project-test)
 
