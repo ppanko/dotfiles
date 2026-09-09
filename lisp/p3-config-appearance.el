@@ -119,7 +119,8 @@
       tab-bar-separator "  "
       tab-bar-format '(tab-bar-format-history
                        tab-bar-format-tabs
-                       tab-bar-separator))
+                       tab-bar-separator
+                       tab-bar-format-add-tab))
 
 ;; Retire the old modeline when this source is reloaded into an existing
 ;; session. This does not load or configure doom-modeline.
