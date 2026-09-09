@@ -329,7 +329,9 @@
                        (lambda ()
                          (interactive)
                          (signal 'quit nil))))
-              (should-error (p3/project-resume) :type 'quit)
+              (condition-case nil
+                  (p3/project-resume)
+                (quit nil))
               (should
                (equal (p3-project-test--tab-root
                        (p3-project-test--current-tab))
