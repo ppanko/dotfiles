@@ -41,7 +41,7 @@ Return nil when ROOT does not name an existing directory."
   tab)
 
 (defun p3/project--matching-tab (root)
-  "Return the canonical (INDEX . TAB) entry for ROOT.
+  "Return the canonical (INDEX . TAB) entry for ROOT in the selected frame.
 If duplicate tabs claim ROOT, keep a current matching tab when possible,
 otherwise keep the first match.  Other matching tabs remain intact but lose
 only their P3 project metadata."
@@ -66,7 +66,7 @@ only their P3 project metadata."
         canonical))))
 
 (defun p3/project-switch-to-tab (root)
-  "Select or create the native project tab for ROOT.
+  "Select or create the native project tab for ROOT in the selected frame.
 Return ROOT's normalized identity.  Reusing a tab leaves its saved window
 configuration untouched."
   (let ((normalized (p3/project-normalize-root root)))
@@ -75,7 +75,8 @@ configuration untouched."
     (if-let ((match (p3/project--matching-tab normalized)))
         (unless (eq (car (cdr match)) 'current-tab)
           (tab-bar-select-tab (car match)))
-      (tab-new)
+      (let ((tab-bar-new-tab-choice normalized))
+        (tab-new))
       (let* ((tabs (tab-bar-tabs))
              (current (cl-find-if (lambda (tab)
                                     (eq (car tab) 'current-tab))
