@@ -130,7 +130,10 @@
       (p3/project-route-file nil)
       (p3/project-route-file "/ssh:example:/tmp/file.txt")
       (let ((default-directory "/ssh:example:/tmp/"))
-        (p3/project-route-file "relative.txt"))
+        (cl-letf (((symbol-function 'project-current)
+                   (lambda (&rest _)
+                     (ert-fail "project detection attempted for remote file"))))
+          (p3/project-route-file "relative.txt")))
       (should (= (length (tab-bar-tabs)) tab-count))
       (should-not (p3-config-project-test--general-tab-p
                    (p3-config-project-test--current-tab))))))
