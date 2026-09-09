@@ -156,7 +156,7 @@
               (find-file loose-file)
               (should (p3-config-project-test--general-tab-p
                        (p3-config-project-test--current-tab)))
-              (should (equal buffer-file-name loose-file)))))
+              (should (file-equal-p buffer-file-name loose-file)))))
       (when-let ((buffer (get-file-buffer loose-file)))
         (kill-buffer buffer))
       (delete-directory loose-root t)
