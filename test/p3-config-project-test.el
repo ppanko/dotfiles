@@ -172,7 +172,7 @@
          (expand-file-name "lisp" p3-config-project-test--root))
         (find-file-hook nil))
     (p3/config-load-module 'p3-config-project)
-    (should-not (memq #'p3/project-route-current-file find-file-hook))
+    (should-not find-file-hook)
     (should (advice-member-p #'p3/project-route-file 'find-file))
     (should (advice-member-p #'p3/project-route-file 'find-file-other-window))
     (should (advice-member-p #'p3/project-route-file 'find-file-read-only))))
