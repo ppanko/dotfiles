@@ -315,6 +315,28 @@
             (should (equal consulted-root normalized))))
       (delete-directory root t))))
 
+(ert-deftest p3-project-continuity-cancelled-resume-keeps-selected-project-context ()
+  (let ((root (make-temp-file "p3-project-continuity-cancel-" t)))
+    (unwind-protect
+        (p3-project-test--with-clean-tabs
+          (let ((normalized (p3-project-test--canonical-directory root)))
+            (cl-letf (((symbol-function 'project-current)
+                       (lambda (&optional _maybe-prompt _directory)
+                         'fake-project))
+                      ((symbol-function 'project-root)
+                       (lambda (_project) root))
+                      ((symbol-function 'consult-project-buffer)
+                       (lambda ()
+                         (interactive)
+                         (signal 'quit nil))))
+              (should-error (p3/project-resume) :type 'quit)
+              (should
+               (equal (p3-project-test--tab-root
+                       (p3-project-test--current-tab))
+                      normalized))
+              (should (equal default-directory normalized)))))
+      (delete-directory root t))))
+
 (ert-deftest p3-project-continuity-resume-rejects-missing-root-before-tab-change ()
   (let ((missing (expand-file-name
                   "p3-project-continuity-missing"
