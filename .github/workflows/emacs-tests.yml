@@ -182,6 +182,7 @@ jobs:
             -l test/p3-config-test.el \
             -l test/p3-config-retirement-test.el \
             -l test/p3-config-appearance-test.el \
+            -l test/p3-tab-bar-appearance-test.el \
             -l test/p3-config-editing-ownership-test.el \
             -l test/p3-config-ess-test.el \
             -l test/p3-project-test.el \
