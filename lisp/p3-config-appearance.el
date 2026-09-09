@@ -116,8 +116,10 @@
                     :weight 'normal
                     :box nil)
 (setq tab-bar-close-button-show 'selected
-      tab-bar-new-button-show nil
-      tab-bar-separator "  ")
+      tab-bar-separator "  "
+      tab-bar-format '(tab-bar-format-history
+                       tab-bar-format-tabs
+                       tab-bar-separator))
 
 ;; Retire the old modeline when this source is reloaded into an existing
 ;; session. This does not load or configure doom-modeline.
