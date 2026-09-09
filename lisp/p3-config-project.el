@@ -5,6 +5,8 @@
 
 (setq project-switch-commands 'p3/project-resume)
 
+(add-hook 'find-file-hook #'p3/project-route-current-file)
+
 (global-set-key (kbd "C-c p") project-prefix-map)
 (global-set-key (kbd "s-p") project-prefix-map)
 
