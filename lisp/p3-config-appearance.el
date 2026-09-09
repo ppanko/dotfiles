@@ -321,14 +321,12 @@
         (downcase (string-trim (buffer-name) "\\*+" "\\*+")))))
 
 (defun p3/appearance--mode-segment ()
-  "Return major-mode identity with an optional icon and mandatory text."
+  "Return textual major-mode identity."
   (let* ((text (or (p3/appearance--format-construct mode-name)
                    (symbol-name major-mode)))
          (text (if (string-empty-p text) (symbol-name major-mode) text)))
     (unless (p3/appearance--redundant-mode-name-p text)
-      (let ((icon (p3/appearance--safe-icon
-                   #'nerd-icons-icon-for-mode major-mode :height 0.95)))
-        (if icon (format "%s  %s" icon text) text)))))
+      text)))
 
 (defun p3/appearance--process-segment ()
   "Return existing mode-provided process state on sufficiently wide windows."
