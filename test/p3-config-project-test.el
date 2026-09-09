@@ -145,9 +145,11 @@
 (ert-deftest p3-config-project-wires-file-routing-through-find-file-hook ()
   (let ((p3/config-lisp-directory
          (expand-file-name "lisp" p3-config-project-test--root))
-        (find-file-hook find-file-hook))
+        (find-file-hook '(p3-config-project-test--existing-find-file-hook)))
     (p3/config-load-module 'p3-config-project)
-    (should (memq #'p3/project-route-current-file find-file-hook))))
+    (should (memq #'p3/project-route-current-file find-file-hook))
+    (should (eq (car (last find-file-hook))
+                #'p3/project-route-current-file))))
 
 (provide 'p3-config-project-test)
 
