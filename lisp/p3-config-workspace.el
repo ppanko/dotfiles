@@ -2,8 +2,7 @@
 
 (require 'use-package)
 (require 'p3-commands)
-
-(declare-function winner-mode "winner" (&optional arg))
+(require 'tab-bar)
 
 (use-package transpose-frame
   :defer t
@@ -22,10 +21,8 @@
 (use-package ace-window
   :bind ("M-o" . ace-window))
 
-(use-package winner
-  :ensure nil
-  :init
-  (winner-mode 1))
+(tab-bar-mode 1)
+(tab-bar-history-mode 1)
 
 (use-package restart-emacs)
 

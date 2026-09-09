@@ -1,6 +1,8 @@
 ;;; p3-config-base.el --- Broad global configuration -*- lexical-binding: t; -*-
 
 (require 'use-package)
+(require 'recentf)
+(require 'saveplace)
 (require 'p3-config-loader)
 (p3/config-load-module 'p3-commands)
 (p3/config-load-module 'p3-core)
@@ -180,6 +182,8 @@
 
 (global-font-lock-mode t)
 (global-auto-revert-mode t)
+(recentf-mode 1)
+(save-place-mode 1)
 
 (defun p3/set-line-numbers ()
   (interactive)
