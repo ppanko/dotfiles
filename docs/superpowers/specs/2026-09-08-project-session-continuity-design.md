@@ -9,9 +9,10 @@ Make returning to a project feel continuous without introducing a second project
 The intended workflow is:
 
 - `project.el` remains the only filesystem project identity layer;
-- one running Emacs session has at most one project tab per normalized project root;
-- switching projects reuses that tab when it exists and otherwise creates it;
+- each frame has at most one project tab per normalized project root;
+- switching projects reuses that tab when it exists in the selected frame and otherwise creates it;
 - an existing project tab keeps the window layout exactly as it was left;
+- a new project tab starts in coherent project-root context before project-file selection begins;
 - after switching, `consult-project-buffer` immediately exposes the project's live buffers and recent files;
 - recent-file history survives Emacs restarts;
 - reopening a file restores point where appropriate;
@@ -39,6 +40,8 @@ The tab name is presentation state, not identity. Renaming a tab must not create
 
 Normalization must make equivalent spellings of the same local root compare equal. The implementation should use the smallest reliable normalization needed for local project roots and must not invent a persistent project registry.
 
+Tab Bar is frame-local. Project-tab uniqueness therefore applies within each frame. Separate frames may independently contain a workspace for the same normalized project root; enforcing process-wide uniqueness would require cross-frame coordination that this design deliberately avoids.
+
 A running Emacs session may contain ordinary non-project tabs. They remain outside this model.
 
 ## Project switch behavior
@@ -50,14 +53,14 @@ Conceptually:
 ```text
 choose project
     -> normalize project root
-    -> find existing tab for that root
+    -> find existing tab for that root in the selected frame
        -> switch to it, preserving its layout
        OR
-       -> create a new project tab
+       -> create a new project tab rooted in that project
     -> invoke consult-project-buffer for that project
 ```
 
-The selected project becomes the current project context before `consult-project-buffer` runs.
+The selected project becomes the current project context before `consult-project-buffer` runs. A newly created tab must already have a buffer/default directory rooted in the selected project so canceling the Consult prompt does not leave a tab that claims one project while displaying another project's context.
 
 If the project already has a tab, switching must not rearrange, reopen, or otherwise reconstruct the tab's windows. `consult-project-buffer` appears only as the minibuffer selection surface.
 
@@ -71,7 +74,7 @@ A project tab needs enough tab-local metadata to associate it with a normalized 
 
 The implementation must not maintain a separate durable list of projects or serialize project-tab metadata across Emacs restarts.
 
-If duplicate tabs in one running session claim the same normalized root, the code should converge on one canonical project tab rather than allow two parallel workspaces for the same project. Reconciliation should prefer preserving an existing useful project tab over creating another one.
+If duplicate tabs in one frame claim the same normalized root, the code should converge on one canonical project tab rather than allow two parallel workspaces for the same project in that frame. Reconciliation should prefer preserving an existing useful project tab over creating another one.
 
 ## Recent files and `C-x b`
 
@@ -149,9 +152,10 @@ Do not create a new workspace/session module unless implementation reveals a rea
 Continuity must never make startup or project switching fragile.
 
 - A missing project root must not create a fake project tab or replacement identity.
+- Canceling project-buffer selection after creating a tab must leave that tab in coherent selected-project context.
 - A deleted recent file should be ignored/pruned through normal `recentf` behavior.
 - A file that cannot be reopened should fail as an ordinary file-open operation, not as a workspace failure.
-- Duplicate project tabs for one normalized root should be reconciled to one canonical tab.
+- Duplicate project tabs for one normalized root within a frame should be reconciled to one canonical tab.
 - Non-project tabs must remain untouched.
 - Missing or stale runtime tab metadata may be discarded without affecting `project.el` identity.
 - No stale continuity state should prevent normal Emacs use.
@@ -162,6 +166,7 @@ Continuity must never make startup or project switching fragile.
 - No per-project serialized window-layout snapshots.
 - No custom session database.
 - No project registry separate from `project.el`.
+- No process-wide cross-frame workspace registry.
 - No Projectile, Perspective, eyebrowse, Burly, activities, or other workspace framework.
 - No project dashboard.
 - No restoration of subprocess/transient buffers.
@@ -175,12 +180,13 @@ Tests should protect durable behavior rather than source spelling.
 Cover at least:
 
 - equivalent project-root spellings normalize to one workspace identity;
-- a project root maps to at most one active project tab;
+- a project root maps to at most one active project tab in a frame;
 - switching to an existing project tab preserves its current window configuration;
-- switching to a new project creates one project tab and establishes project context;
+- switching to a new project creates one project tab and establishes project context before Consult selection;
+- canceling project re-entry leaves the new tab rooted in the selected project;
 - project switching hands off to project-scoped Consult selection;
 - non-project tabs are not absorbed into the project model;
-- duplicate project-tab state is reconciled safely;
+- duplicate project-tab state within a frame is reconciled safely;
 - `recentf-mode` and `save-place-mode` are enabled persistently;
 - the existing already-open-buffer recency behavior remains effective;
 - no desktop/session restoration occurs at startup;
@@ -191,8 +197,10 @@ Avoid tests that freeze exact helper names, tab display names, comments, or inci
 ## Acceptance criteria
 
 - `project.el` remains the sole filesystem project identity layer.
-- One normalized project root maps to at most one active project tab in a running Emacs session.
+- Within each frame, one normalized project root maps to at most one active project tab.
+- Separate frames may independently contain the same project without a cross-frame registry.
 - Normal project switching reuses an existing project tab or creates one when absent.
+- A newly created project tab has selected-project context before Consult selection, including when selection is canceled.
 - Reusing a project tab does not alter its existing window layout.
 - After switching, `consult-project-buffer` immediately presents that project's live buffers and recent files.
 - `C-x b` remains global `consult-buffer` and includes persistent recent files without duplicate live-buffer entries.
@@ -204,4 +212,4 @@ Avoid tests that freeze exact helper names, tab display names, comments, or inci
 - Native Tab Bar is the workspace surface and Tab Bar history replaces overlapping `winner-mode` window history.
 - Missing files, missing roots, stale tab metadata, and duplicate tabs do not prevent normal Emacs use.
 - Non-project tabs remain possible.
-- No custom session database, serialized per-project layout store, duplicate project model, or third-party workspace framework is introduced.
+- No custom session database, serialized per-project layout store, duplicate project model, cross-frame registry, or third-party workspace framework is introduced.

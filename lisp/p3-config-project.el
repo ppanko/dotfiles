@@ -1,6 +1,9 @@
 ;;; p3-config-project.el --- Native project configuration -*- lexical-binding: t; -*-
 
 (require 'project)
+(require 'p3-project)
+
+(setq project-switch-commands 'p3/project-resume)
 
 (global-set-key (kbd "C-c p") project-prefix-map)
 (global-set-key (kbd "s-p") project-prefix-map)
