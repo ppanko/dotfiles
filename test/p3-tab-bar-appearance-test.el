@@ -22,7 +22,8 @@
   (should (eq (face-attribute 'tab-bar-tab-inactive :weight nil t) 'normal))
   (should-not (face-attribute 'tab-bar-tab-inactive :box nil nil))
   (should (eq tab-bar-close-button-show 'selected))
-  (should-not tab-bar-new-button-show))
+  (should (memq 'tab-bar-format-tabs tab-bar-format))
+  (should-not (memq 'tab-bar-format-add-tab tab-bar-format)))
 
 (provide 'p3-tab-bar-appearance-test)
 
