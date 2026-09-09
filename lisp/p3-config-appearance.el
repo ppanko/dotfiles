@@ -4,6 +4,7 @@
 (require 'hl-line)
 (require 'project)
 (require 'subr-x)
+(require 'tab-bar)
 (require 'use-package)
 
 (defvar dashboard-icon-type)
@@ -34,6 +35,9 @@
 (declare-function dashboard-insert-startupify-lists "dashboard" (&optional force-refresh))
 (declare-function flycheck-count-errors "flycheck" (errors))
 (declare-function doom-modeline-mode "doom-modeline" (&optional arg))
+
+(defconst p3/appearance-accent-color "#FFD700"
+  "Shared accent color for high-value current-context UI.")
 
 (defface p3/appearance-project-face
   '((t (:inherit font-lock-keyword-face :weight semi-bold)))
@@ -93,7 +97,27 @@
 (set-face-attribute 'mode-line-inactive nil :box nil :weight 'normal)
 (set-face-attribute 'line-number-current-line nil
                     :weight 'bold
-                    :foreground "#FFD700")
+                    :foreground p3/appearance-accent-color)
+(set-face-attribute 'tab-bar nil
+                    :inherit 'mode-line-inactive
+                    :foreground 'unspecified
+                    :background 'unspecified
+                    :box nil)
+(set-face-attribute 'tab-bar-tab nil
+                    :inherit 'tab-bar
+                    :foreground p3/appearance-accent-color
+                    :background 'unspecified
+                    :weight 'semi-bold
+                    :box nil)
+(set-face-attribute 'tab-bar-tab-inactive nil
+                    :inherit '(shadow tab-bar)
+                    :foreground 'unspecified
+                    :background 'unspecified
+                    :weight 'normal
+                    :box nil)
+(setq tab-bar-close-button-show 'selected
+      tab-bar-new-button-show nil
+      tab-bar-separator "  ")
 
 ;; Retire the old modeline when this source is reloaded into an existing
 ;; session. This does not load or configure doom-modeline.
