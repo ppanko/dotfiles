@@ -12,6 +12,9 @@
 (dolist (marker '(".projectile" "*.Rproj"))
   (add-to-list 'project-vc-extra-root-markers marker))
 
+(defconst p3/project-general-tab-name "General"
+  "Name of the shared workspace for local files outside projects.")
+
 (defun p3/project-root ()
   "Return the current built-in `project.el' root, if any."
   (when-let ((project (project-current nil)))
@@ -28,11 +31,26 @@ Return nil when ROOT does not name an existing directory."
   "Return the normalized project root recorded in TAB, if any."
   (alist-get 'p3-project-root (cdr tab)))
 
+(defun p3/project--general-tab-p (tab)
+  "Return non-nil when TAB is the shared General workspace."
+  (alist-get 'p3-general-workspace (cdr tab)))
+
 (defun p3/project--set-tab-root (tab root)
   "Record ROOT as TAB's runtime project identity."
   (setcdr tab
           (cons (cons 'p3-project-root root)
-                (assq-delete-all 'p3-project-root (cdr tab))))
+                (assq-delete-all
+                 'p3-general-workspace
+                 (assq-delete-all 'p3-project-root (cdr tab)))))
+  tab)
+
+(defun p3/project--set-general-tab (tab)
+  "Record TAB as the shared General workspace."
+  (setcdr tab
+          (cons (cons 'p3-general-workspace t)
+                (assq-delete-all
+                 'p3-project-root
+                 (assq-delete-all 'p3-general-workspace (cdr tab)))))
   tab)
 
 (defun p3/project--clear-tab-root (tab)
@@ -65,6 +83,14 @@ only their P3 project metadata."
         (tab-bar-tabs-set tabs)
         canonical))))
 
+(defun p3/project--find-tab (predicate)
+  "Return the first (INDEX . TAB) entry satisfying PREDICATE."
+  (let ((index 0))
+    (cl-loop for tab in (tab-bar-tabs)
+             do (setq index (1+ index))
+             when (funcall predicate tab)
+             return (cons index tab))))
+
 (defun p3/project-switch-to-tab (root)
   "Select or create the native project tab for ROOT in the selected frame.
 Return ROOT's normalized identity.  Reusing a tab leaves its saved window
@@ -86,6 +112,42 @@ configuration untouched."
       (tab-rename
        (file-name-nondirectory (directory-file-name normalized))))
     normalized))
+
+(defun p3/project-switch-to-general-tab ()
+  "Select or establish the shared General workspace in the selected frame."
+  (let ((match (p3/project--find-tab #'p3/project--general-tab-p)))
+    (unless match
+      (setq match
+            (p3/project--find-tab
+             (lambda (tab)
+               (and (not (p3/project--tab-root tab))
+                    (not (p3/project--general-tab-p tab))
+                    (not (alist-get 'explicit-name (cdr tab))))))))
+    (if match
+        (unless (eq (car (cdr match)) 'current-tab)
+          (tab-bar-select-tab (car match)))
+      (tab-new))
+    (let* ((tabs (tab-bar-tabs))
+           (current (cl-find-if (lambda (tab)
+                                  (eq (car tab) 'current-tab))
+                                tabs)))
+      (unless (p3/project--general-tab-p current)
+        (p3/project--set-general-tab current)
+        (tab-bar-tabs-set tabs)
+        (tab-rename p3/project-general-tab-name)))
+    p3/project-general-tab-name))
+
+(defun p3/project-route-file (filename &rest _)
+  "Route local FILENAME to its project tab or the shared General tab.
+Remote files are left in the current workspace.  Extra arguments are ignored
+so this function can advise the standard file-opening commands directly."
+  (when filename
+    (let ((file (expand-file-name filename)))
+      (unless (file-remote-p file)
+        (if-let ((project
+                  (project-current nil (file-name-directory file))))
+            (p3/project-switch-to-tab (project-root project))
+          (p3/project-switch-to-general-tab))))))
 
 (defun p3/project-resume ()
   "Resume the selected native project workspace and choose a project buffer."
