@@ -18,8 +18,8 @@
 (defvar p3/project--buffer-preview-active nil
   "Non-nil while Consult is previewing buffer candidates.")
 
-(defvar p3/project--buffer-preview-origins nil
-  "Alist of windows and buffers temporarily replaced by Consult preview.")
+(defvar p3/project--buffer-preview-window-configuration nil
+  "Window configuration saved before a guarded Consult buffer preview.")
 
 (defun p3/project-root ()
   "Return the current built-in `project.el' root, if any."
@@ -155,38 +155,35 @@ so this function can advise the standard file-opening commands directly."
             (p3/project-switch-to-tab (project-root project))
           (p3/project-switch-to-general-tab))))))
 
-(defun p3/project--remember-buffer-preview-origin ()
-  "Remember the selected window's buffer before a temporary preview switch."
-  (let ((window (selected-window)))
-    (unless (assq window p3/project--buffer-preview-origins)
-      (push (cons window (window-buffer window))
-            p3/project--buffer-preview-origins))))
-
-(defun p3/project--restore-buffer-preview-origins ()
-  "Restore buffers temporarily replaced by Consult preview."
-  (dolist (entry p3/project--buffer-preview-origins)
-    (when (and (window-live-p (car entry))
-               (buffer-live-p (cdr entry)))
-      (set-window-buffer (car entry) (cdr entry))))
-  (setq p3/project--buffer-preview-origins nil))
+(defun p3/project--restore-buffer-preview-window-configuration ()
+  "Restore the workspace layout saved before Consult buffer preview."
+  (when p3/project--buffer-preview-window-configuration
+    (let ((configuration p3/project--buffer-preview-window-configuration))
+      (setq p3/project--buffer-preview-window-configuration nil)
+      (set-window-configuration configuration))))
 
 (defun p3/project-with-buffer-preview-guard (function &rest args)
-  "Run FUNCTION with ARGS while preserving buffers replaced by preview."
+  "Run FUNCTION with ARGS while preserving the pre-preview window layout."
   (let ((p3/project--buffer-preview-active t)
-        (p3/project--buffer-preview-origins nil))
+        (p3/project--buffer-preview-window-configuration
+         (current-window-configuration)))
     (apply function args)))
 
 (defun p3/project-route-buffer (buffer-or-name &optional norecord &rest _)
   "Route a displayed BUFFER-OR-NAME to its project workspace.
-Consult preview switches use NORECORD; remember their original window buffers
-without changing workspaces.  Before a final switch, restore those buffers so
-the origin workspace keeps the layout it had before preview.  Non-file buffers
-stay in the current workspace."
+Consult preview switches use NORECORD and stay in the current workspace.
+Before an accepted switch, restore the pre-preview window configuration so
+temporary preview windows and buffers do not leak into the origin workspace.
+Non-file buffers stay in the current workspace."
   (if norecord
-      (when p3/project--buffer-preview-active
-        (p3/project--remember-buffer-preview-origin))
+      ;; The guard normally snapshots before preview begins.  Capture lazily as
+      ;; well so direct guarded calls retain the same invariant.
+      (when (and p3/project--buffer-preview-active
+                 (not p3/project--buffer-preview-window-configuration))
+        (setq p3/project--buffer-preview-window-configuration
+              (current-window-configuration)))
     (when p3/project--buffer-preview-active
-      (p3/project--restore-buffer-preview-origins))
+      (p3/project--restore-buffer-preview-window-configuration))
     (when-let* ((buffer (and buffer-or-name (get-buffer buffer-or-name)))
                 (file (buffer-local-value 'buffer-file-name buffer)))
       (p3/project-route-file file))))
