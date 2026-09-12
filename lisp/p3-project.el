@@ -15,6 +15,12 @@
 (defconst p3/project-general-tab-name "General"
   "Name of the shared workspace for local files outside projects.")
 
+(defvar p3/project--buffer-preview-active nil
+  "Non-nil while Consult is previewing buffer candidates.")
+
+(defvar p3/project--buffer-preview-origins nil
+  "Alist of windows and buffers temporarily replaced by Consult preview.")
+
 (defun p3/project-root ()
   "Return the current built-in `project.el' root, if any."
   (when-let ((project (project-current nil)))
@@ -149,12 +155,38 @@ so this function can advise the standard file-opening commands directly."
             (p3/project-switch-to-tab (project-root project))
           (p3/project-switch-to-general-tab))))))
 
+(defun p3/project--remember-buffer-preview-origin ()
+  "Remember the selected window's buffer before a temporary preview switch."
+  (let ((window (selected-window)))
+    (unless (assq window p3/project--buffer-preview-origins)
+      (push (cons window (window-buffer window))
+            p3/project--buffer-preview-origins))))
+
+(defun p3/project--restore-buffer-preview-origins ()
+  "Restore buffers temporarily replaced by Consult preview."
+  (dolist (entry p3/project--buffer-preview-origins)
+    (when (and (window-live-p (car entry))
+               (buffer-live-p (cdr entry)))
+      (set-window-buffer (car entry) (cdr entry))))
+  (setq p3/project--buffer-preview-origins nil))
+
+(defun p3/project-with-buffer-preview-guard (function &rest args)
+  "Run FUNCTION with ARGS while preserving buffers replaced by preview."
+  (let ((p3/project--buffer-preview-active t)
+        (p3/project--buffer-preview-origins nil))
+    (apply function args)))
+
 (defun p3/project-route-buffer (buffer-or-name &optional norecord &rest _)
-  "Route a displayed file BUFFER-OR-NAME to its project workspace.
-When NORECORD is non-nil, leave the current workspace unchanged so preview
-switches do not hop between project tabs.  Non-file buffers stay in the
-current workspace."
-  (unless norecord
+  "Route a displayed BUFFER-OR-NAME to its project workspace.
+Consult preview switches use NORECORD; remember their original window buffers
+without changing workspaces.  Before a final switch, restore those buffers so
+the origin workspace keeps the layout it had before preview.  Non-file buffers
+stay in the current workspace."
+  (if norecord
+      (when p3/project--buffer-preview-active
+        (p3/project--remember-buffer-preview-origin))
+    (when p3/project--buffer-preview-active
+      (p3/project--restore-buffer-preview-origins))
     (when-let* ((buffer (and buffer-or-name (get-buffer buffer-or-name)))
                 (file (buffer-local-value 'buffer-file-name buffer)))
       (p3/project-route-file file))))
