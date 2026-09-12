@@ -285,7 +285,7 @@
   (let* ((p3/config-lisp-directory
           (expand-file-name "lisp" p3-config-project-test--root))
          (project-root (make-temp-file "p3-read-only-project-" t))
-         (loose-root (make-temp-file "p3-read-only-loose-root-" t))
+         (loose-root (make-temp-file "p3-read-only-loose-" t))
          (missing-file (expand-file-name "missing.txt" loose-root)))
     (unwind-protect
         (p3-config-project-test--with-clean-tabs
