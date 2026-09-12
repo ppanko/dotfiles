@@ -11,11 +11,16 @@
   (advice-remove command #'p3/project-route-file)
   (advice-add command :before #'p3/project-route-file))
 
-;; Route already-open file buffers as they are displayed.  `norecord' buffer
-;; switches are previews and remain in the current workspace.
+;; Route already-open file buffers as they are displayed.  Consult preview
+;; switches use `norecord' and are guarded separately below.
 (dolist (command '(switch-to-buffer switch-to-buffer-other-window))
   (advice-remove command #'p3/project-route-buffer)
   (advice-add command :before #'p3/project-route-buffer))
+
+(with-eval-after-load 'consult
+  (dolist (command '(consult-buffer consult-buffer-other-window))
+    (advice-remove command #'p3/project-with-buffer-preview-guard)
+    (advice-add command :around #'p3/project-with-buffer-preview-guard)))
 
 (global-set-key (kbd "C-c p") project-prefix-map)
 (global-set-key (kbd "s-p") project-prefix-map)
