@@ -149,6 +149,16 @@ so this function can advise the standard file-opening commands directly."
             (p3/project-switch-to-tab (project-root project))
           (p3/project-switch-to-general-tab))))))
 
+(defun p3/project-route-buffer (buffer-or-name &optional norecord &rest _)
+  "Route a displayed file BUFFER-OR-NAME to its project workspace.
+When NORECORD is non-nil, leave the current workspace unchanged so preview
+switches do not hop between project tabs.  Non-file buffers stay in the
+current workspace."
+  (unless norecord
+    (when-let* ((buffer (and buffer-or-name (get-buffer buffer-or-name)))
+                (file (buffer-local-value 'buffer-file-name buffer)))
+      (p3/project-route-file file))))
+
 (defun p3/project-resume ()
   "Resume the selected native project workspace and choose a project buffer."
   (interactive)
