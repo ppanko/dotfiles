@@ -15,6 +15,12 @@
 (defconst p3/project-general-tab-name "General"
   "Name of the shared workspace for local files outside projects.")
 
+(defvar p3/project--buffer-preview-active nil
+  "Non-nil while Consult is previewing buffer candidates.")
+
+(defvar p3/project--buffer-preview-window-configuration nil
+  "Window configuration saved before a guarded Consult buffer preview.")
+
 (defun p3/project-root ()
   "Return the current built-in `project.el' root, if any."
   (when-let ((project (project-current nil)))
@@ -148,6 +154,39 @@ so this function can advise the standard file-opening commands directly."
                   (project-current nil (file-name-directory file))))
             (p3/project-switch-to-tab (project-root project))
           (p3/project-switch-to-general-tab))))))
+
+(defun p3/project--restore-buffer-preview-window-configuration ()
+  "Restore the workspace layout saved before Consult buffer preview."
+  (when p3/project--buffer-preview-window-configuration
+    (let ((configuration p3/project--buffer-preview-window-configuration))
+      (setq p3/project--buffer-preview-window-configuration nil)
+      (set-window-configuration configuration))))
+
+(defun p3/project-with-buffer-preview-guard (function &rest args)
+  "Run FUNCTION with ARGS while preserving the pre-preview window layout."
+  (let ((p3/project--buffer-preview-active t)
+        (p3/project--buffer-preview-window-configuration
+         (current-window-configuration)))
+    (apply function args)))
+
+(defun p3/project-route-buffer (buffer-or-name &optional norecord &rest _)
+  "Route a displayed BUFFER-OR-NAME to its project workspace.
+Consult preview switches use NORECORD and stay in the current workspace.
+Before an accepted switch, restore the pre-preview window configuration so
+temporary preview windows and buffers do not leak into the origin workspace.
+Non-file buffers stay in the current workspace."
+  (if norecord
+      ;; The guard normally snapshots before preview begins.  Capture lazily as
+      ;; well so direct guarded calls retain the same invariant.
+      (when (and p3/project--buffer-preview-active
+                 (not p3/project--buffer-preview-window-configuration))
+        (setq p3/project--buffer-preview-window-configuration
+              (current-window-configuration)))
+    (when p3/project--buffer-preview-active
+      (p3/project--restore-buffer-preview-window-configuration))
+    (when-let* ((buffer (and buffer-or-name (get-buffer buffer-or-name)))
+                (file (buffer-local-value 'buffer-file-name buffer)))
+      (p3/project-route-file file))))
 
 (defun p3/project-resume ()
   "Resume the selected native project workspace and choose a project buffer."
