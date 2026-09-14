@@ -42,7 +42,7 @@
 
 (defun p3/screen-record--ffmpeg-command (input-format input output)
   "Return an FFmpeg command for INPUT-FORMAT, INPUT, and OUTPUT."
-  (list "ffmpeg" "-y"
+  (list "ffmpeg" "-n"
         "-f" input-format
         "-framerate" "30"
         "-i" input
@@ -78,11 +78,24 @@
       'wf-recorder
     'ffmpeg))
 
+(defun p3/screen-record--terminal-status-p (status)
+  "Return non-nil when process STATUS represents a terminal state."
+  (memq status '(exit signal failed closed)))
+
+(defun p3/screen-record--ensure-output-directory (output)
+  "Ensure the parent directory for OUTPUT exists or signal `user-error'."
+  (let ((directory (file-name-directory output)))
+    (condition-case err
+        (make-directory directory t)
+      (file-error
+       (user-error "Cannot prepare screen-recording directory %s: %s"
+                   directory (error-message-string err))))))
+
 (defun p3/screen-record--sentinel (process event)
   "Clear recording state when PROCESS exits or is signaled.
 EVENT is the process sentinel event string."
   (when (and (eq process p3/screen-record--process)
-             (memq (process-status process) '(exit signal)))
+             (p3/screen-record--terminal-status-p (process-status process)))
     (let ((output p3/screen-record--output-path))
       (setq p3/screen-record--process nil
             p3/screen-record--backend nil
@@ -106,7 +119,7 @@ EVENT is the process sentinel event string."
          (program (executable-find (car command))))
     (unless program
       (user-error "Required screen recorder not found: %s" (car command)))
-    (make-directory (file-name-directory output) t)
+    (p3/screen-record--ensure-output-directory output)
     (let* ((resolved-command (cons program (cdr command)))
            (backend (p3/screen-record--backend-for-command command))
            (process
@@ -115,14 +128,19 @@ EVENT is the process sentinel event string."
              :buffer (get-buffer-create "*p3-screen-record*")
              :command resolved-command
              :connection-type 'pipe
-             :sentinel #'p3/screen-record--sentinel
-             :noquery t)))
+             :sentinel #'p3/screen-record--sentinel)))
       (setq p3/screen-record--process process
             p3/screen-record--backend backend
             p3/screen-record--output-path output)
-      (force-mode-line-update t)
-      (message "Screen recording started: %s" output)
-      process)))
+      ;; A very fast backend failure can occur before the sentinel sees the
+      ;; process as current. Reconcile that race immediately after ownership.
+      (if (p3/screen-record--terminal-status-p (process-status process))
+          (progn
+            (p3/screen-record--sentinel process "exited during startup")
+            nil)
+        (force-mode-line-update t)
+        (message "Screen recording started: %s" output)
+        process))))
 
 (defun p3/screen-record-stop ()
   "Ask the active screen recorder to finalize and stop cleanly."
