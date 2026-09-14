@@ -127,11 +127,12 @@ jobs:
             --eval '(setq user-emacs-directory (file-name-as-directory default-directory))' \
             --eval '(require (quote use-package-ensure))' \
             --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
+            --eval '(defvar gptel-model (quote smoke-model))' \
             --eval '(defun gptel-api-key-from-auth-source () nil)' \
             --eval '(provide (quote gptel))' \
             -l lisp/p3-config-loader.el \
             -l lisp/p3-config-gptel.el \
-            --eval '(unless (and (featurep (quote p3-config-gptel)) (featurep (quote p3-gptel)) (eq gptel-model (quote gpt-4o-mini)) (eq gptel-api-key (quote gptel-api-key-from-auth-source)) (eq (key-binding (kbd "C-c g")) p3/gptel-command-map)) (kill-emacs 1))'
+            --eval '(unless (and (featurep (quote p3-config-gptel)) (featurep (quote p3-gptel)) (eq gptel-model (quote smoke-model)) (eq gptel-api-key (quote gptel-api-key-from-auth-source)) (eq (key-binding (kbd "C-c g")) p3/gptel-command-map)) (kill-emacs 1))'
 
       - name: Smoke-load Org configuration boundary
         run: |

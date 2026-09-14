@@ -131,8 +131,9 @@ call here so it runs at the same subsystem boundary as before.
 
 ** GPT
 
-GPTel package configuration and activation live in =lisp/p3-config-gptel.el=.
-Task prompts, streaming/rollback behavior, and the task command map remain in
+GPTel package/backend registration and activation live in
+=lisp/p3-config-gptel.el=. The thin project-context and cut-out task layer,
+including native rewrite wrappers and explicit Git-diff snapshots, lives in
 =lisp/p3-gptel.el=.
 
 #+BEGIN_SRC emacs-lisp

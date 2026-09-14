@@ -1,7 +1,6 @@
 ;;; p3-config-gptel-test.el --- GPTel config boundary tests -*- lexical-binding: t; -*-
 
 (require 'ert)
-(require 'seq)
 (require 'p3-config-loader)
 
 (defconst p3-config-gptel-test--root
@@ -20,38 +19,14 @@
     (insert-file-contents (p3-config-gptel-test--path relative))
     (buffer-string)))
 
-(defun p3-config-gptel-test--forms ()
-  "Read all top-level forms from the GPTel config module."
-  (with-temp-buffer
-    (insert-file-contents
-     (p3-config-gptel-test--path "lisp/p3-config-gptel.el"))
-    (goto-char (point-min))
-    (let (forms)
-      (condition-case nil
-          (while t
-            (push (read (current-buffer)) forms))
-        (end-of-file nil))
-      (nreverse forms))))
+(ert-deftest p3-config-gptel-does-not-pin-a-model-in-source ()
+  (let ((contents (p3-config-gptel-test--contents "lisp/p3-config-gptel.el")))
+    (should-not (string-match-p "(setq[[:space:]\n]+gptel-model" contents))))
 
-(ert-deftest p3-config-gptel-preserves-package-configuration ()
-  (let ((forms (p3-config-gptel-test--forms)))
-    (should
-     (member
-      '(use-package gptel
-         :config
-         (setq gptel-model 'gpt-4o-mini
-               gptel-api-key (or (getenv "OPENAI_API_KEY")
-                                 #'gptel-api-key-from-auth-source)))
-      forms))))
-
-(ert-deftest p3-config-gptel-preserves-after-gptel-activation-timing ()
-  (let ((forms (p3-config-gptel-test--forms)))
-    (should
-     (member
-      '(with-eval-after-load 'gptel
-         (p3/config-load-module 'p3-gptel)
-         (p3/gptel-setup))
-      forms))))
+(ert-deftest p3-config-gptel-delegates-ollama-registration-to-workflow-layer ()
+  (let ((contents (p3-config-gptel-test--contents "lisp/p3-config-gptel.el")))
+    (should (string-match-p "p3/gptel-register-ollama" contents))
+    (should (string-match-p "p3/gptel-ollama-models" contents))))
 
 (ert-deftest p3-config-gptel-config-org-delegates-gptel-boundary ()
   (let ((contents (p3-config-gptel-test--contents "config.org")))
@@ -88,16 +63,15 @@
             (goto-char (point-min))
             (should
              (search-forward
-              "(define-key map (kbd \"l\") #'p3/gptel-send-current-line)"
+              "(define-key map (kbd \"g\") #'p3/gptel-project-chat)"
               nil t))
             (replace-match
-             "(define-key map (kbd \"x\") #'p3/gptel-send-current-line)"
+             "(define-key map (kbd \"x\") #'p3/gptel-project-chat)"
              t t)
             (write-region (point-min) (point-max) behavior nil 'silent))
           (p3/config-load-module 'p3-config-gptel)
-          (should
-           (eq (keymap-lookup p3/gptel-command-map "x")
-               #'p3/gptel-send-current-line)))
+          (should (eq (keymap-lookup p3/gptel-command-map "x")
+                      #'p3/gptel-project-chat)))
       (if map-was-bound
           (setq p3/gptel-command-map old-map)
         (makunbound 'p3/gptel-command-map))
