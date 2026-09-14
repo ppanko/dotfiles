@@ -39,6 +39,26 @@
      "  year = {2020}\n"
      "}\n")))
 
+(defun p3-org-export-test--write-png (path)
+  "Write a tiny valid PNG image to PATH."
+  (with-temp-buffer
+    (set-buffer-multibyte nil)
+    (insert
+     (base64-decode-string
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII="))
+    (let ((coding-system-for-write 'binary))
+      (write-region (point-min) (point-max) path nil 'silent))))
+
+(defun p3-org-export-test--docx-as-gfm (path)
+  "Return PATH converted from DOCX to GFM through Pandoc."
+  (with-temp-buffer
+    (let ((status
+           (call-process "pandoc" nil (current-buffer) nil
+                         "--from=docx" "--to=gfm" path)))
+      (unless (and (integerp status) (zerop status))
+        (error "Pandoc could not read generated DOCX: %s" (buffer-string)))
+      (buffer-string))))
+
 (defun p3-org-export-test--zip-file-p (path)
   "Return non-nil when PATH starts with the ZIP file signature."
   (with-temp-buffer
@@ -211,14 +231,37 @@
           (set-buffer-modified-p nil)
           (kill-buffer (current-buffer)))))))
 
-(ert-deftest p3-org-export-docx-runs-with-reference-document-when-pandoc-available ()
+(ert-deftest p3-org-export-docx-runs-realistic-report-through-pandoc ()
   (skip-unless (executable-find "pandoc"))
   (p3-org-export-test--with-temp-directory directory
     (let* ((source (expand-file-name "report.org" directory))
+           (bibliography (expand-file-name "references.bib" directory))
+           (figure-directory (expand-file-name "figures" directory))
+           (figure (expand-file-name "example.png" figure-directory))
            (reference-source (expand-file-name "reference.md" directory))
            (reference (expand-file-name "reference.docx" directory)))
+      (make-directory figure-directory)
+      (p3-org-export-test--write-bibliography bibliography)
+      (p3-org-export-test--write-png figure)
       (with-temp-file source
-        (insert "#+TITLE: Word Export Test\n\n* Heading\n\nBody text.\n"))
+        (insert
+         "#+TITLE: Word Export Test\n"
+         "#+AUTHOR: Example Author\n"
+         "#+BIBLIOGRAPHY: references.bib\n\n"
+         "* Executive summary\n"
+         "A paragraph with *bold*, /italic/, a [[https://example.com][link]], "
+         "a footnote[fn:1], and a citation [cite:@doe2020].\n\n"
+         "- First item\n"
+         "- Second item\n\n"
+         "* Data\n"
+         "#+CAPTION: Example table\n"
+         "| Name | Value |\n"
+         "|------+-------|\n"
+         "| A    |     1 |\n"
+         "| B    |     2 |\n\n"
+         "#+CAPTION: Example figure\n"
+         "[[file:figures/example.png]]\n\n"
+         "[fn:1] A footnote.\n"))
       (with-temp-file reference-source
         (insert "# Reference document\n"))
       (should
@@ -227,12 +270,22 @@
                       reference-source "-o" reference)))
       (with-current-buffer (find-file-noselect source)
         (unwind-protect
-            (progn
+            (let ((org-cite-global-bibliography nil))
               (org-mode)
-              (let ((output (p3-org-export-run 'docx reference)))
+              (let* ((output (p3-org-export-run 'docx reference))
+                     (roundtrip (p3-org-export-test--docx-as-gfm output)))
                 (should (file-exists-p output))
                 (should (> (file-attribute-size (file-attributes output)) 0))
-                (should (p3-org-export-test--zip-file-p output))))
+                (should (p3-org-export-test--zip-file-p output))
+                (should (string-match-p "# Executive summary" roundtrip))
+                (should (string-match-p "https://example.com" roundtrip))
+                (should (string-match-p "First item" roundtrip))
+                (should (string-match-p "| Name | Value |" roundtrip))
+                (should (string-match-p "<img src=" roundtrip))
+                (should (string-match-p "Example figure" roundtrip))
+                (should (string-match-p "Doe 2020" roundtrip))
+                (should (string-match-p "Doe, Jane" roundtrip))
+                (should (string-match-p "A footnote" roundtrip))))
           (set-buffer-modified-p nil)
           (kill-buffer (current-buffer)))))))
 
