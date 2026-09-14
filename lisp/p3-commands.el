@@ -80,9 +80,8 @@
      ("C-c n c" . "capture node")
      ("C-c n d" . "daily note"))
     ("Terminal"
-     ("C-c T" . "terminal commands")
-     ("C-x C-u" . "open shell")
-     ("C-S-c" . "copy from vterm")))
+     ("C-c T" . "project shell commands")
+     ("C-x C-u" . "open project Bash shell")))
   "Sections shown by `p3/keybinding-atlas'.")
 
 (defun p3/keybinding-atlas ()
