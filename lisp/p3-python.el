@@ -74,30 +74,44 @@ fixing the underlying problem."
      ((equal p3/python-language-server-bootstrap-failed key)
       nil)
      (t
-      (make-directory (file-name-directory tool-python) t)
-      (unless (file-executable-p tool-python)
-        (call-process system-python nil "*p3-python-bootstrap*" nil
-                      "-m" "venv"
-                      (file-name-directory
-                       (directory-file-name
-                        (file-name-directory tool-python)))))
-      (when (file-executable-p tool-python)
-        (message "Installing basedpyright for Python support...")
-        (call-process tool-python nil "*p3-python-bootstrap*" nil
-                      "-m" "pip" "install" "--upgrade" "basedpyright"))
-      (if (file-executable-p server)
+      (condition-case err
           (progn
-            (setq p3/python-language-server-bootstrap-failed nil)
-            server)
-        (setq p3/python-language-server-bootstrap-failed key)
-        (display-warning
-         'p3/python
-         (concat
-          "Could not prepare basedpyright. Python editing remains available; "
-          "see *p3-python-bootstrap*, fix the underlying problem, then run "
-          "M-x p3/python-bootstrap-language-server to retry.")
-         :warning)
-        nil)))))
+            (make-directory (file-name-directory tool-python) t)
+            (unless (file-executable-p tool-python)
+              (call-process system-python nil "*p3-python-bootstrap*" nil
+                            "-m" "venv"
+                            (file-name-directory
+                             (directory-file-name
+                              (file-name-directory tool-python)))))
+            (when (file-executable-p tool-python)
+              (message "Installing basedpyright for Python support...")
+              (call-process tool-python nil "*p3-python-bootstrap*" nil
+                            "-m" "pip" "install" "--upgrade" "basedpyright"))
+            (if (file-executable-p server)
+                (progn
+                  (setq p3/python-language-server-bootstrap-failed nil)
+                  server)
+              (setq p3/python-language-server-bootstrap-failed key)
+              (display-warning
+               'p3/python
+               (concat
+                "Could not prepare basedpyright. Python editing remains available; "
+                "see *p3-python-bootstrap*, fix the underlying problem, then run "
+                "M-x p3/python-bootstrap-language-server to retry.")
+               :warning)
+              nil))
+        (error
+         (setq p3/python-language-server-bootstrap-failed key)
+         (display-warning
+          'p3/python
+          (format
+           (concat
+            "Could not prepare basedpyright: %s. Python editing remains available; "
+            "see *p3-python-bootstrap*, fix the underlying problem, then run "
+            "M-x p3/python-bootstrap-language-server to retry.")
+           (error-message-string err))
+          :warning)
+         nil))))))
 
 ;;;###autoload
 (defun p3/python-bootstrap-language-server ()
