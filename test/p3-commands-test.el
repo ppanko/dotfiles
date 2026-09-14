@@ -1,6 +1,7 @@
 ;;; p3-commands-test.el --- Tests for generic personal commands -*- lexical-binding: t; -*-
 
 (require 'ert)
+(require 'project)
 
 (defconst p3-commands-test--root
   (file-name-directory
@@ -10,6 +11,7 @@
 
 (add-to-list 'load-path (expand-file-name "lisp" p3-commands-test--root))
 (require 'p3-commands)
+(require 'p3-config-loader)
 
 (ert-deftest p3-commands-core-helpers-remain-commands ()
   (dolist (command '(p3/keybinding-atlas
@@ -50,6 +52,27 @@
                    "native project commands"))
     (should (equal (cdr (assoc "s-p" (cdr section)))
                    "native project commands"))))
+
+(ert-deftest p3-commands-keybinding-atlas-documents-project-check-workflow ()
+  (let ((section (assoc "Project" p3/keybinding-sections)))
+    (should section)
+    (should (equal (cdr (assoc "C-c p c / C-x p c" (cdr section)))
+                   "run project check"))
+    (should (equal (cdr (assoc "g (compilation)" (cdr section)))
+                   "rerun project check"))
+    (should (equal (cdr (assoc "M-g n / M-g p" (cdr section)))
+                   "next/previous compilation error"))))
+
+(ert-deftest p3-commands-project-compilation-uses-native-project-buffer-names ()
+  (let ((p3/config-lisp-directory
+         (expand-file-name "lisp" p3-commands-test--root))
+        (saved project-compilation-buffer-name-function))
+    (unwind-protect
+        (progn
+          (p3/config-load-module 'p3-config-project)
+          (should (eq project-compilation-buffer-name-function
+                      #'project-prefixed-buffer-name)))
+      (setq project-compilation-buffer-name-function saved))))
 
 (ert-deftest p3-commands-atlas-describes-reference-prefix ()
   (let ((section (assoc "References" p3/keybinding-sections)))
