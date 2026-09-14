@@ -8,6 +8,8 @@
 
 ;;; Code:
 
+(require 'subr-x)
+
 (defgroup p3/screen-record nil
   "Full-screen video recording from Emacs."
   :group 'external)
