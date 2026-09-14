@@ -42,45 +42,20 @@
     (should (integerp shell))
     (should (< behavior shell))))
 
-(ert-deftest p3-config-terminal-preserves-platform-specific-wiring ()
+(ert-deftest p3-config-terminal-uses-one-project-shell-surface ()
   (let ((forms (p3-config-terminal-test--forms)))
     (should
      (member
-      '(when (eq system-type 'windows-nt)
-         (global-set-key (kbd "C-x C-u") #'shell))
+      '(global-set-key (kbd "C-x C-u") #'p3/project-shell)
       forms))
     (should
      (member
-      '(when (eq system-type 'gnu/linux)
-         (keymap-global-set "C-c T" p3/vterm-command-map)
-         (use-package vterm
-           :commands (vterm vterm-other-window)
-           :hook (vterm-mode . p3/vterm-mode-setup)
-           :bind (("C-x C-u" . p3/vterm)
-                  :map vterm-mode-map
-                  ("C-y" . vterm-yank)
-                  ("M-y" . vterm-yank-pop)
-                  ("C-S-v" . vterm-yank)
-                  ("C-S-c" . p3/vterm-enter-copy-mode)
-                  :map vterm-copy-mode-map
-                  ("C-S-c" . vterm-copy-mode-done))
-           :custom
-           (vterm-max-scrollback 100000)
-           (vterm-kill-buffer-on-exit t)
-           (vterm-always-compile-module t)
-           :init
-           (setq vterm-environment
-                 (cons (format "P3_BLESH_FILE=%s" (p3/blesh-file))
-                       (seq-remove
-                        (lambda (entry)
-                          (string-prefix-p "P3_BLESH_FILE=" entry))
-                        (and (boundp 'vterm-environment) vterm-environment)))
-                 vterm-shell
-                 (format "%s --noprofile --rcfile %s -i"
-                         (shell-quote-argument "/usr/bin/bash")
-                         (shell-quote-argument
-                          (expand-file-name "vterm-bashrc"
-                                            user-emacs-directory))))))
+      '(keymap-global-set "C-c T" p3/project-shell-command-map)
+      forms))
+    (should-not
+     (seq-some
+      (lambda (form)
+        (string-match-p "vterm" (prin1-to-string form)))
       forms))))
 
 (ert-deftest p3-config-terminal-config-org-delegates-shell-boundary ()

@@ -53,6 +53,19 @@ Set this in secrets.el when a machine should not use auto-detection.")
   "Return non-nil when Emacs is running natively on Windows."
   (eq system-type 'windows-nt))
 
+(defun p3/platform-bash-program ()
+  "Return the Bash executable for the current supported platform."
+  (let ((program
+         (if (p3/windows-p)
+             (and linuxy-environment-path
+                  (let ((candidate
+                         (expand-file-name "bash.exe"
+                                           linuxy-environment-path)))
+                    (and (file-regular-p candidate) candidate)))
+           (executable-find "bash"))))
+    (or program
+        (user-error "Bash is unavailable for the current platform setup"))))
+
 (defun p3/platform-configure-tramp ()
   "Configure the default TRAMP method for the current supported platform."
   (pcase system-type

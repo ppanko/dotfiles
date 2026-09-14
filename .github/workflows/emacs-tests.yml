@@ -129,7 +129,7 @@ jobs:
             -l lisp/p3-platform.el \
             -l lisp/p3-config-loader.el \
             -l lisp/p3-config-terminal.el \
-            --eval '(unless (and (featurep (quote p3-config-terminal)) (featurep (quote p3-terminal)) (keymapp p3/vterm-command-map) (string-match-p "vterm-bashrc" vterm-shell)) (kill-emacs 1))'
+            --eval '(unless (and (featurep (quote p3-config-terminal)) (featurep (quote p3-terminal)) (keymapp p3/project-shell-command-map) (eq (key-binding (kbd "C-x C-u")) (quote p3/project-shell))) (kill-emacs 1))'
 
       - name: Smoke-load GPTel configuration boundary
         run: |
