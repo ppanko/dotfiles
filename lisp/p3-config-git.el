@@ -47,6 +47,9 @@
   (with-eval-after-load 'magit-mode
     (add-hook 'after-save-hook 'magit-after-save-refresh-status t)))
 
+(use-package forge
+  :after magit)
+
 (use-package git-gutter-fringe+
   :init (global-git-gutter+-mode)
   :diminish git-gutter+-mode
