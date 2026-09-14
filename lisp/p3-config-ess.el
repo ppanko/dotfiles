@@ -104,6 +104,10 @@
 
 (add-to-list 'file-coding-system-alist '("\\.Rmd\\'" . utf-8-dos))
 
+;; `find-file-hook' is the mode-independent authority for R Markdown files.
+;; Keep the Markdown hook as a harmless fallback for buffers whose mode changes
+;; after visiting the file; the setup function itself is extension-gated.
+(add-hook 'find-file-hook #'p3/ess-configure-rmarkdown-compile)
 (add-hook 'markdown-mode-hook #'p3/ess-configure-rmarkdown-compile)
 
 (provide 'p3-config-ess)
