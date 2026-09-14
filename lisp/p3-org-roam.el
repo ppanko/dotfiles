@@ -7,14 +7,20 @@
 (require 'subr-x)
 
 (defvar org-agenda-files)
+(defvar org-agenda-redo-command)
 (defvar org-roam-capture-templates)
 (defvar org-roam-directory)
+(defvar org-use-property-inheritance)
 
 (defvar p3/org-roam-project-associations nil
   "Machine-local normalized project-root to Org-roam hub-ID mappings.")
 
+(defvar-local p3/org-roam-project-agenda-hub-id nil
+  "Hub ID represented by the current project Agenda buffer.")
+
 (declare-function consult-ripgrep "consult" (dir &optional initial))
 (declare-function org-agenda "org-agenda" (&optional arg keys restriction))
+(declare-function org-tags-view "org-agenda" (&optional todo-only match))
 (declare-function org-roam-capture- "org-roam-capture" (&rest args))
 (declare-function org-roam-db-update-file "org-roam-db" (&optional file-path))
 (declare-function org-roam-node-create "org-roam-node" (&rest args))
@@ -385,6 +391,37 @@ When REPLACE-ROOT is non-nil, explicitly replace an existing root mapping."
       (org-roam-capture- :node node
                          :templates (list template)
                          :props '(:finalize find-file)))))
+
+(defun p3/org-roam--project-todos (hub-id)
+  "Generate the native Org Agenda TODO view for HUB-ID."
+  (let ((org-agenda-files
+         (delete-dups (copy-sequence (p3/org-roam-list-notes))))
+        (org-use-property-inheritance '("P3_PROJECT")))
+    (let ((buffer
+           (or (org-tags-view t (format "P3_PROJECT=\"%s\"" hub-id))
+               (current-buffer))))
+      (when (buffer-live-p buffer)
+        (with-current-buffer buffer
+          (setq-local p3/org-roam-project-agenda-hub-id hub-id)
+          (setq-local org-agenda-redo-command
+                      '(p3/org-roam-project-agenda-redo))))
+      buffer)))
+
+(defun p3/org-roam-project-agenda-redo ()
+  "Regenerate the current project Agenda from its stored hub ID."
+  (interactive)
+  (unless p3/org-roam-project-agenda-hub-id
+    (user-error "This buffer has no project Agenda context"))
+  (p3/org-roam--project-todos p3/org-roam-project-agenda-hub-id))
+
+(defun p3/org-roam-project-todos ()
+  "Show unfinished TODOs for the current literate project."
+  (interactive)
+  (let ((hub-id (p3/org-roam-project-context)))
+    (unless hub-id
+      (user-error "No project context; establish a project hub first"))
+    (p3/org-roam--hub-node hub-id)
+    (p3/org-roam--project-todos hub-id)))
 
 (provide 'p3-org-roam)
 
