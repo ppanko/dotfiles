@@ -105,8 +105,13 @@
        ("C-c n d" . org-roam-dailies-goto-today)
        ("C-c n t" . org-roam-dailies-capture-today)
        ("C-c n C-t" . org-roam-tag-add)
-       ("C-c n a" . p3/org-roam-get-agenda)
-       ("C-c n p" . p3/org-roam-project-command-map))))))
+       ("C-c n a" . p3/org-roam-get-agenda))))))
+
+(ert-deftest p3-config-org-roam-binds-project-prefix-as-keymap ()
+  (should
+   (equal
+    (p3-config-org-roam-test--keyword-values :bind-keymap)
+    '(("C-c n p" . p3/org-roam-project-command-map)))))
 
 (ert-deftest p3-config-org-roam-project-command-map-exposes-small-workflow ()
   (should (boundp 'p3/org-roam-project-command-map))
