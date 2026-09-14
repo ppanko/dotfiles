@@ -8,6 +8,9 @@
 (p3/ess-setup)
 
 (p3/config-load-module 'p3-r-tools)
+(p3/config-load-module 'p3-r-tidyverse-completion)
+(declare-function p3/r-tidyverse-completion-setup "p3-r-tidyverse-completion" ())
+(p3/r-tidyverse-completion-setup)
 (p3/config-load-module 'p3-r-language-server)
 (declare-function p3/r-language-server-setup "p3-r-language-server" ())
 (p3/r-language-server-setup)
