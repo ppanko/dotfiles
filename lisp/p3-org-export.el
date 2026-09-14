@@ -228,22 +228,24 @@ argument prompts for a one-off reference document."
           :media-directory (concat base "-media"))))
 
 (defun p3-office-import--docx-arguments (source output media-directory)
-  "Build Pandoc arguments for importing DOCX SOURCE into Org OUTPUT."
+  "Build Pandoc arguments for recovering DOCX SOURCE content into Org OUTPUT."
   (let ((media-path
          (file-relative-name media-directory
                              (file-name-directory (expand-file-name source)))))
-    (list "--from=docx+styles"
+    (list "--from=docx"
           "--to=org"
-          "--track-changes=all"
           (concat "--extract-media=" media-path)
           source "-o" output)))
 
 (defun p3-office-import--docx-notice (source diagnostics)
-  "Return the durable import notice for SOURCE and Pandoc DIAGNOSTICS."
+  "Return the durable content-recovery notice for SOURCE and DIAGNOSTICS."
   (concat
    "# P3 Office import: " (file-name-nondirectory source) "\n"
-   "# This DOCX -> Org conversion is potentially lossy. Keep the original DOCX "
-   "for review of layout, tracked changes/comments, and native Word objects.\n"
+   "# This DOCX -> Org conversion recovers document content and is potentially "
+   "lossy. Keep the original DOCX as the fidelity reference.\n"
+   "# Custom Word styles and review metadata (tracked changes/comments) are not "
+   "retained as reliable Org semantics; consult the original DOCX for them, "
+   "layout, and native Word objects.\n"
    (unless (string-empty-p diagnostics)
      (concat
       "# Pandoc diagnostics reported during conversion:\n"
@@ -264,11 +266,12 @@ argument prompts for a one-off reference document."
     source))
 
 (defun p3-office-import-docx-run (source)
-  "Convert incoming DOCX SOURCE to a sibling Org file and return its path.
+  "Recover incoming DOCX SOURCE content into a sibling Org file.
 
 Embedded media is extracted to a sibling `-media' directory. Existing output
-or media paths are never silently overwritten. Pandoc diagnostics are retained
-in the generated Org notice so conversion warnings remain visible."
+or media paths are never silently overwritten. Custom Word styles and review
+metadata are not treated as preserved Org semantics; the generated notice keeps
+that loss explicit. Pandoc diagnostics are also retained in the generated Org."
   (let* ((source (p3-office-import--validate-docx-source source))
          (paths (p3-office-import--docx-paths source))
          (output (plist-get paths :output))
@@ -329,11 +332,11 @@ in the generated Org notice so conversion warnings remain visible."
       output)))
 
 (defun p3/office-import-docx (source)
-  "Convert incoming DOCX SOURCE to a sibling Org file and open it.
+  "Recover incoming DOCX SOURCE content to a sibling Org file and open it.
 
-This is an inspection/editing convenience, not a lossless round-trip. The
-original DOCX remains the reference for Word-specific layout and native
-objects."
+This is a content-recovery convenience, not a lossless round-trip. The
+original DOCX remains authoritative for Word-specific styling, review metadata,
+layout, and native objects."
   (interactive (list (read-file-name "Import DOCX: " nil nil t)))
   (find-file (p3-office-import-docx-run source)))
 
