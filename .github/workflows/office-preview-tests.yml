@@ -1,0 +1,82 @@
+name: Office preview integration
+
+on:
+  pull_request:
+    types:
+      - opened
+      - ready_for_review
+    paths:
+      - "lisp/p3-org-export.el"
+      - "lisp/p3-office-preview.el"
+      - "lisp/p3-config-org.el"
+      - "test/p3-office-preview-test.el"
+      - "test/fixtures/libreoffice-incoming.pptx"
+      - ".github/workflows/office-preview-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: office-preview-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-preview:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Install Emacs and headless LibreOffice Impress
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emacs-nox
+          sudo apt-get install -y --no-install-recommends libreoffice-impress-nogui
+          soffice --version
+
+      - name: Byte-compile Office preview module
+        run: |
+          emacs -Q --batch \
+            -L lisp \
+            --eval '(setq byte-compile-error-on-warn t)' \
+            -f batch-byte-compile \
+            lisp/p3-office-preview.el
+
+      - name: Run Office preview integration tests
+        run: |
+          emacs -Q --batch \
+            -L lisp \
+            -l test/p3-office-preview-test.el \
+            -f ert-run-tests-batch-and-exit
+
+  windows-boundary:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+
+      - name: Install Emacs
+        shell: powershell
+        run: choco install emacs -y --no-progress
+
+      - name: Byte-compile Office preview module
+        shell: powershell
+        run: >-
+          emacs -Q --batch -L lisp
+          --eval '(setq byte-compile-error-on-warn t)'
+          -f batch-byte-compile
+          lisp/p3-office-preview.el
+
+      - name: Run Windows Office preview boundary
+        shell: powershell
+        run: >-
+          emacs -Q --batch -L lisp
+          -l test/p3-office-preview-test.el
+          -f ert-run-tests-batch-and-exit

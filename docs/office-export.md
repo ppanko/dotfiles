@@ -46,7 +46,19 @@ Pandoc selects layouts from the reference PPTX by their standard names. A custom
 
 Office export is intentionally strict: any Pandoc warning causes the export to fail. This prevents a missing layout, missing asset, or other warning-driven degradation from being reported as a successful handoff artifact. If Pandoc's warning policy later proves too broad in normal use, narrow it based on a concrete benign warning rather than silently accepting degraded output.
 
-Column widths are controlled by the PowerPoint layout rather than by an Emacs-side positioning system. Precise visual inspection and the render/preview loop are a later part of the Office workflow.
+Column widths are controlled by the PowerPoint layout rather than by an Emacs-side positioning system.
+
+## PowerPoint preview loop
+
+Use `M-x p3/org-export-pptx-preview` from an Org presentation to export through the normal PPTX profile, render that **actual generated PPTX** to PDF with LibreOffice Impress, and open the PDF in Emacs. A prefix argument selects a one-off reference presentation just as the normal export workflow can.
+
+Use `M-x p3/office-preview-pptx` to render and inspect an existing PPTX without exporting Org first.
+
+LibreOffice is an optional runtime dependency for preview only. The command first looks for `soffice` or `libreoffice` on `exec-path`; native Windows also checks the standard LibreOffice installation directories. Set `p3-office-libreoffice-program` when a machine needs an explicit executable override.
+
+Rendered PDFs live under `p3-office-preview-directory`, which defaults to a disposable temporary cache. Each render also uses a fresh temporary LibreOffice user profile, so preview does not depend on or contend with an already-running desktop LibreOffice session. Rendering happens in a fresh staging directory and replaces the cached preview only after LibreOffice succeeds and produces a non-empty PDF. Repeated previews therefore preserve the last successful render if a later conversion fails, and an already open Emacs preview buffer is refreshed after a successful render.
+
+The PDF is only a preview artifact. Org remains the editable source and the generated PPTX remains the presentation deliverable. The preview path deliberately uses LibreOffice's PPTX renderer rather than an HTML/reveal.js approximation, and it does not introduce an Emacs-side slide-layout engine.
 
 ## Incoming DOCX inspection
 
