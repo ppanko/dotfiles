@@ -62,6 +62,26 @@
             (should-not (string-match-p "untracked.txt" snapshot))))
       (delete-directory directory t))))
 
+(ert-deftest p3-gptel-git-diff-rejects-renamed-sensitive-path ()
+  "A renamed secret must not evade the path-based diff guard."
+  (let ((directory (make-temp-file "p3-gptel-secret-" t)))
+    (unwind-protect
+        (progn
+          (should (zerop (p3-gptel-test--git directory "init" "-q")))
+          (should (zerop (p3-gptel-test--git directory "config" "user.email" "p3@example.invalid")))
+          (should (zerop (p3-gptel-test--git directory "config" "user.name" "P3 Test")))
+          (p3-gptel-test--write directory ".env" "TOKEN=secret\n")
+          (should (zerop (p3-gptel-test--git directory "add" ".env")))
+          (should (zerop (p3-gptel-test--git directory "commit" "-q" "-m" "baseline")))
+          (should (zerop (p3-gptel-test--git directory "mv" ".env" "settings.txt")))
+          (let ((default-directory (file-name-as-directory directory)))
+            (should-error (p3/gptel-add-git-diff) :type 'user-error)))
+      (delete-directory directory t))))
+
+(ert-deftest p3-gptel-rewrite-native-entrypoint-is-autoloaded ()
+  "Cut-out rewrite commands must work before gptel-rewrite has been loaded."
+  (should (autoloadp (symbol-function 'gptel--suffix-rewrite))))
+
 (ert-deftest p3-gptel-cutout-request-does-not-inherit-chat-context ()
   (should (fboundp 'p3/gptel-review-region))
   (with-temp-buffer
