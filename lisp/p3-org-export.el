@@ -263,22 +263,18 @@ argument prompts for a one-off reference document."
       (user-error "DOCX file is not readable: %s" source))
     source))
 
-(defun p3-office-import-docx-run (source &optional output)
-  "Convert incoming DOCX SOURCE to Org and return the output path.
+(defun p3-office-import-docx-run (source)
+  "Convert incoming DOCX SOURCE to a sibling Org file and return its path.
 
-The default OUTPUT is a sibling `.org' file. Embedded media is extracted to a
-sibling `-media' directory. Existing output or media paths are never silently
-overwritten. Pandoc diagnostics are retained in the generated Org notice so
-conversion warnings remain visible."
+Embedded media is extracted to a sibling `-media' directory. Existing output
+or media paths are never silently overwritten. Pandoc diagnostics are retained
+in the generated Org notice so conversion warnings remain visible."
   (let* ((source (p3-office-import--validate-docx-source source))
          (paths (p3-office-import--docx-paths source))
-         (output (expand-file-name (or output (plist-get paths :output))))
+         (output (plist-get paths :output))
          (media-directory (plist-get paths :media-directory))
          (output-directory (file-name-directory output))
          (pandoc (p3-org-export--pandoc-executable)))
-    (unless (file-directory-p output-directory)
-      (user-error "Import output directory does not exist: %s"
-                  output-directory))
     (when (file-exists-p output)
       (user-error "Refusing to overwrite existing Org import: %s" output))
     (when (file-exists-p media-directory)
@@ -288,6 +284,7 @@ conversion warnings remain visible."
            (make-temp-file
             (expand-file-name ".p3-docx-import-" output-directory)
             nil ".org"))
+          (stderr-file (make-temp-file "p3-docx-import-stderr-"))
           (completed nil))
       (unwind-protect
           (with-temp-buffer
@@ -297,8 +294,18 @@ conversion warnings remain visible."
                      source temporary-output media-directory))
                    (status
                     (apply #'process-file
-                           pandoc nil (current-buffer) nil arguments))
-                   (diagnostics (string-trim (buffer-string))))
+                           pandoc nil (list (current-buffer) stderr-file)
+                           nil arguments))
+                   (stdout (string-trim (buffer-string)))
+                   (stderr
+                    (with-temp-buffer
+                      (insert-file-contents stderr-file)
+                      (string-trim (buffer-string))))
+                   (diagnostics
+                    (string-trim
+                     (concat stderr
+                             (unless (string-empty-p stderr) "\n")
+                             stdout))))
               (unless (and (integerp status) (zerop status))
                 (user-error "Pandoc DOCX import failed (status %s): %s"
                             status diagnostics))
@@ -311,6 +318,8 @@ conversion warnings remain visible."
                   (insert converted)))
               (rename-file temporary-output output)
               (setq completed t)))
+        (when (file-exists-p stderr-file)
+          (delete-file stderr-file))
         (unless completed
           (when (file-exists-p temporary-output)
             (delete-file temporary-output))
