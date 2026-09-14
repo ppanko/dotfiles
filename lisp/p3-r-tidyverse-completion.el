@@ -91,14 +91,16 @@ consulted.  Busy, missing, stale, and errored processes return nil quietly."
         (if (p3/r-tidyverse--cache-entry-valid-p entry process last-eval)
             (nth 3 entry)
           (condition-case nil
-              (with-temp-buffer
-                ;; Pass PROCESS explicitly and disable prompt checking so this
-                ;; query can never select or create another ESS process.
-                (ess-command command (current-buffer) nil t nil process)
-                (let ((columns (p3/r-tidyverse--parse-schema-output
-                                (buffer-string))))
-                  (p3/r-tidyverse--cache-put
-                   symbol process (current-time) columns)))
+              (let ((columns
+                     (with-temp-buffer
+                       ;; Pass PROCESS explicitly and disable prompt checking
+                       ;; so this query can never select or create another ESS
+                       ;; process.
+                       (ess-command command (current-buffer) nil t nil process)
+                       (p3/r-tidyverse--parse-schema-output
+                        (buffer-string)))))
+                (p3/r-tidyverse--cache-put
+                 symbol process (current-time) columns))
             (error nil)))))))
 
 (defun p3/r-tidyverse--function-info (open)
