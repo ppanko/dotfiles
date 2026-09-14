@@ -207,11 +207,9 @@ Signal `user-error' when the stored identity is stale or invalid."
 
 (defun p3/org-roam--association-hub-node ()
   "Return a valid hub node for an association operation."
-  (or (when-let ((hub-id (p3/org-roam-project-context)))
-        (condition-case nil
-            (p3/org-roam--hub-node hub-id)
-          (user-error nil)))
-      (p3/org-roam--read-hub-node)))
+  (if-let ((hub-id (p3/org-roam-project-context)))
+      (p3/org-roam--hub-node hub-id)
+    (p3/org-roam--read-hub-node)))
 
 (defun p3/org-roam-project-associate (&optional whole-file)
   "Associate, change, or remove project membership at point.
@@ -404,7 +402,12 @@ When REPLACE-ROOT is non-nil, explicitly replace an existing root mapping."
         (with-current-buffer buffer
           (setq-local p3/org-roam-project-agenda-hub-id hub-id)
           (setq-local org-agenda-redo-command
-                      '(p3/org-roam-project-agenda-redo))))
+                      '(p3/org-roam-project-agenda-redo))
+          (let ((inhibit-read-only t))
+            (add-text-properties
+             (point-min) (point-max)
+             (list 'org-redo-cmd
+                   '(p3/org-roam-project-agenda-redo))))))
       buffer)))
 
 (defun p3/org-roam-project-agenda-redo ()
