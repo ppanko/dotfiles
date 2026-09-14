@@ -21,9 +21,25 @@
 ;; The test exercises configuration behavior, not package installation.
 (setq use-package-ensure-function (lambda (&rest _) t))
 
-(load-file
- (expand-file-name "lisp/p3-config-editing.el"
-                   p3-config-editing-windows-test--root))
+;; Loading the owner can execute undo-tree's :config when the package exists
+;; on a developer machine.  Redirect durable state before loading so that test
+;; discovery can never create %LOCALAPPDATA%/Emacs/undo/ in the real profile.
+(defconst p3-config-editing-windows-test--state-root
+  (make-temp-file "p3-config-editing-windows-state-" t))
+
+(let ((process-environment (copy-sequence process-environment))
+      (test-home
+       (expand-file-name "home/" p3-config-editing-windows-test--state-root)))
+  (make-directory test-home t)
+  (setenv "HOME" (directory-file-name test-home))
+  (setenv "USERPROFILE" (directory-file-name test-home))
+  (setenv "LOCALAPPDATA"
+          (directory-file-name p3-config-editing-windows-test--state-root))
+  (setenv "XDG_STATE_HOME"
+          (directory-file-name p3-config-editing-windows-test--state-root))
+  (load-file
+   (expand-file-name "lisp/p3-config-editing.el"
+                     p3-config-editing-windows-test--root)))
 
 (load-file
  (expand-file-name "test/p3-recovery-state-test.el"
