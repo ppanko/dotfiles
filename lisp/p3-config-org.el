@@ -73,6 +73,10 @@
   :config
   (p3-org-export-setup))
 
+(use-package p3-office-preview
+  :ensure nil
+  :demand t)
+
 (when (eq system-type 'gnu/linux)
   (add-to-list 'org-file-apps '("pdf" . "evince %s")))
 
