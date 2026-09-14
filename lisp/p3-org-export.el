@@ -304,18 +304,21 @@ argument prompts for a one-off reference document."
   "Return absolute PPTX SOURCE after validating it."
   (p3-office-import--validate-source source "pptx" "PPTX"))
 
-(defun p3-office-import--pandoc-supports-input-format-p (input-format)
-  "Return non-nil when Pandoc advertises INPUT-FORMAT as an exact reader name."
+(defun p3-office-import--pandoc-input-formats ()
+  "Return the input formats advertised by Pandoc.
+Signal `user-error' when the capability query itself fails."
   (let ((pandoc (p3-org-export--pandoc-executable)))
     (with-temp-buffer
       (let ((status
              (process-file pandoc nil (current-buffer) nil
                            "--list-input-formats")))
-        (and (integerp status)
-             (zerop status)
-             (member input-format
-                     (split-string (buffer-string)
-                                   "[\r\n]+" t "[[:space:]]+")))))))
+        (unless (and (integerp status) (zerop status))
+          (user-error "Could not query Pandoc input formats (status %s)" status))
+        (split-string (buffer-string) "[\r\n]+" t "[[:space:]]+")))))
+
+(defun p3-office-import--pandoc-supports-input-format-p (input-format)
+  "Return non-nil when Pandoc advertises INPUT-FORMAT as an exact reader name."
+  (member input-format (p3-office-import--pandoc-input-formats)))
 
 (defun p3-office-import--run-content-recovery
     (source input-format notice-function)
