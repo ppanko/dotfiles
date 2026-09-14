@@ -90,11 +90,40 @@
           (with-current-buffer chat
             (should (local-variable-p 'gptel-context))
             (should-not gptel-context)
-            (should (equal default-directory root)))
+            (should (equal default-directory root))
+            (should (equal p3/gptel-project-root root)))
           (should (equal (default-value 'gptel-context) '((global-context)))))
       (set-default 'gptel-context old-default)
       (when (buffer-live-p chat) (kill-buffer chat))
       (delete-directory root t))))
+
+(ert-deftest p3-gptel-project-chat-clears-context-when-reused-across-projects ()
+  "Selecting a P3 chat from another project must not carry its context across."
+  (let ((root-a (file-name-as-directory (make-temp-file "p3-gptel-project-a-" t)))
+        (root-b (file-name-as-directory (make-temp-file "p3-gptel-project-b-" t)))
+        (chat (generate-new-buffer " *p3-gptel-project-reuse*"))
+        current-root)
+    (unwind-protect
+        (progn
+          (with-current-buffer chat
+            (setq-local gptel-context '((project-a-context))
+                        p3/gptel-project-root root-a
+                        default-directory root-a))
+          (setq current-root root-b)
+          (cl-letf (((symbol-function 'project-current)
+                     (lambda (&optional _maybe-prompt) 'project))
+                    ((symbol-function 'project-root)
+                     (lambda (_project) current-root))
+                    ((symbol-function 'gptel)
+                     (lambda () (interactive) chat)))
+            (p3/gptel-project-chat))
+          (with-current-buffer chat
+            (should-not gptel-context)
+            (should (equal p3/gptel-project-root root-b))
+            (should (equal default-directory root-b))))
+      (when (buffer-live-p chat) (kill-buffer chat))
+      (delete-directory root-a t)
+      (delete-directory root-b t))))
 
 (ert-deftest p3-gptel-git-diff-snapshot-includes-staged-and-unstaged-only ()
   (should (fboundp 'p3/gptel-git-diff-snapshot))
