@@ -1,6 +1,8 @@
 ;;; p3-commands-test.el --- Tests for generic personal commands -*- lexical-binding: t; -*-
 
 (require 'ert)
+(require 'cl-lib)
+(require 'compile)
 (require 'project)
 
 (defconst p3-commands-test--root
@@ -12,6 +14,7 @@
 (add-to-list 'load-path (expand-file-name "lisp" p3-commands-test--root))
 (require 'p3-commands)
 (require 'p3-config-loader)
+(require 'p3-project)
 
 (ert-deftest p3-commands-core-helpers-remain-commands ()
   (dolist (command '(p3/keybinding-atlas
@@ -63,16 +66,66 @@
     (should (equal (cdr (assoc "M-g n / M-g p" (cdr section)))
                    "next/previous compilation error"))))
 
-(ert-deftest p3-commands-project-compilation-uses-native-project-buffer-names ()
+(ert-deftest p3-commands-project-compilation-wires-p3-project-policy ()
   (let ((p3/config-lisp-directory
          (expand-file-name "lisp" p3-commands-test--root))
-        (saved project-compilation-buffer-name-function))
+        (saved project-compilation-buffer-name-function)
+        (saved-c (lookup-key project-prefix-map (kbd "c"))))
     (unwind-protect
         (progn
           (p3/config-load-module 'p3-config-project)
           (should (eq project-compilation-buffer-name-function
-                      #'project-prefixed-buffer-name)))
-      (setq project-compilation-buffer-name-function saved))))
+                      #'p3/project-compilation-buffer-name))
+          (should (eq (lookup-key project-prefix-map (kbd "c"))
+                      #'p3/project-compile)))
+      (setq project-compilation-buffer-name-function saved)
+      (define-key project-prefix-map (kbd "c") saved-c))))
+
+(ert-deftest p3-commands-project-compilation-buffer-names-do-not-collide ()
+  (let* ((parent-a (make-temp-file "p3-project-check-a-" t))
+         (parent-b (make-temp-file "p3-project-check-b-" t))
+         (root-a (expand-file-name "api" parent-a))
+         (root-b (expand-file-name "api" parent-b)))
+    (unwind-protect
+        (progn
+          (make-directory root-a)
+          (make-directory root-b)
+          (let ((name-a (let ((default-directory root-a))
+                          (p3/project-compilation-buffer-name "compilation")))
+                (name-b (let ((default-directory root-b))
+                          (p3/project-compilation-buffer-name "compilation"))))
+            (should-not (equal name-a name-b))
+            (should (string-match-p "api" name-a))
+            (should (string-match-p "api" name-b))))
+      (delete-directory parent-a t)
+      (delete-directory parent-b t))))
+
+(ert-deftest p3-commands-project-compile-uses-root-dir-locals-from-non-file-buffer ()
+  (let* ((root (make-temp-file "p3-project-check-root-" t))
+         (dir-locals (expand-file-name ".dir-locals.el" root))
+         observed-directory
+         observed-command)
+    (unwind-protect
+        (progn
+          (with-temp-file dir-locals
+            (insert "((nil . ((compile-command . \"make check\"))))\n"))
+          (with-temp-buffer
+            (setq default-directory temporary-file-directory)
+            (let ((compilation-read-command t))
+              (cl-letf (((symbol-function 'project-current)
+                         (lambda (&optional _maybe-prompt _directory)
+                           'fake-project))
+                        ((symbol-function 'project-root)
+                         (lambda (_project) root))
+                        ((symbol-function 'compile)
+                         (lambda (&optional _command _comint)
+                           (interactive)
+                           (setq observed-directory default-directory
+                                 observed-command compile-command))))
+                (p3/project-compile))))
+          (should (file-equal-p observed-directory root))
+          (should (equal observed-command "make check")))
+      (delete-directory root t))))
 
 (ert-deftest p3-commands-atlas-surfaces-ess-tracebug-map ()
   (let ((section (assoc "R / ESS" p3/keybinding-sections)))
