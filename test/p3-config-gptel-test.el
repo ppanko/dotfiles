@@ -63,14 +63,15 @@
             (goto-char (point-min))
             (should
              (search-forward
-              "(define-key map (kbd \"g\") #'gptel)"
+              "(define-key map (kbd \"g\") #'p3/gptel-project-chat)"
               nil t))
             (replace-match
-             "(define-key map (kbd \"x\") #'gptel)"
+             "(define-key map (kbd \"x\") #'p3/gptel-project-chat)"
              t t)
             (write-region (point-min) (point-max) behavior nil 'silent))
           (p3/config-load-module 'p3-config-gptel)
-          (should (eq (keymap-lookup p3/gptel-command-map "x") #'gptel)))
+          (should (eq (keymap-lookup p3/gptel-command-map "x")
+                      #'p3/gptel-project-chat)))
       (if map-was-bound
           (setq p3/gptel-command-map old-map)
         (makunbound 'p3/gptel-command-map))
