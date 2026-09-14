@@ -9,6 +9,7 @@
 
 (require 'seq)
 (require 'subr-x)
+(require 'url-util)
 (require 'p3-org-export)
 
 (defgroup p3-office-preview nil
@@ -80,9 +81,21 @@ PLATFORM defaults to `system-type'."
     (expand-file-name (format "%s-%s" base identity)
                       p3-office-preview-directory)))
 
-(defun p3-office-preview--pptx-arguments (source output-directory)
-  "Build LibreOffice arguments to render PPTX SOURCE into OUTPUT-DIRECTORY."
-  (list "--headless"
+(defun p3-office-preview--file-url (path)
+  "Return an encoded local file URL for PATH suitable for LibreOffice."
+  (let* ((absolute (expand-file-name path))
+         (normalized (subst-char-in-string ?\\ ?/ absolute))
+         (url (concat "file://"
+                      (unless (string-prefix-p "/" normalized) "/")
+                      normalized)))
+    (url-encode-url url)))
+
+(defun p3-office-preview--pptx-arguments
+    (source output-directory profile-url)
+  "Build LibreOffice arguments to render PPTX SOURCE into OUTPUT-DIRECTORY.
+PROFILE-URL names a disposable LibreOffice user profile for this render."
+  (list (concat "-env:UserInstallation=" profile-url)
+        "--headless"
         "--nologo"
         "--nodefault"
         "--norestore"
@@ -113,8 +126,9 @@ PLATFORM defaults to `system-type'."
   "Render actual PPTX SOURCE to a cached PDF and return the PDF path.
 
 Rendering occurs in a fresh staging directory below
-`p3-office-preview-directory'. A prior successful preview is replaced only
-after LibreOffice exits successfully and produces a non-empty PDF."
+`p3-office-preview-directory' with an isolated LibreOffice user profile. A
+prior successful preview is replaced only after LibreOffice exits successfully
+and produces a non-empty PDF."
   (setq source (p3-office-preview--validate-pptx-source source))
   (let* ((libreoffice (p3-office--libreoffice-executable))
          (preview-root (file-name-as-directory
@@ -130,9 +144,13 @@ after LibreOffice exits successfully and produces a non-empty PDF."
       (unwind-protect
           (with-temp-buffer
             (let* ((default-directory (file-name-directory source))
+                   (profile-url
+                    (p3-office-preview--file-url
+                     (expand-file-name "libreoffice-profile"
+                                       staging-directory)))
                    (arguments
                     (p3-office-preview--pptx-arguments
-                     source staging-directory))
+                     source staging-directory profile-url))
                    (status
                     (apply #'process-file
                            libreoffice nil (list (current-buffer) stderr-file)
