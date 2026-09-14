@@ -187,12 +187,13 @@ and produces a non-empty PDF."
       preview)))
 
 (defun p3-office-preview--open-pdf (path)
-  "Open rendered PDF PATH in another window, refreshing an existing buffer."
-  (when-let ((buffer (get-file-buffer path)))
-    (with-current-buffer buffer
-      (unless (buffer-modified-p)
-        (revert-buffer t t))))
-  (find-file-other-window path))
+  "Open rendered PDF PATH in another window and refresh the visited buffer."
+  (let ((buffer (find-file-other-window path)))
+    (when (buffer-live-p buffer)
+      (with-current-buffer buffer
+        (unless (buffer-modified-p)
+          (revert-buffer t t))))
+    buffer))
 
 ;;;###autoload
 (defun p3/office-preview-pptx (source)
