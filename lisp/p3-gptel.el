@@ -1,13 +1,15 @@
 ;;; p3-gptel.el --- Thin GPTel project and task workflow -*- lexical-binding: t; -*-
 
+(require 'project)
 (require 'seq)
 (require 'subr-x)
 (require 'p3-git)
 
 (defvar gptel-context nil)
+(defvar gptel-mode nil)
 (defvar gptel-use-context nil)
 
-(declare-function gptel "gptel" (&optional name initial major-mode directory))
+(declare-function gptel "gptel" (name &optional key initial interactivep))
 (declare-function gptel-menu "gptel-transient" ())
 (declare-function gptel-add "gptel-context" (&optional arg confirm))
 (declare-function gptel-add-file "gptel-context" (path))
@@ -28,6 +30,9 @@
     (review . "Review the selected code critically. Identify correctness, maintainability, and robustness issues without modifying the source."))
   "Instructions for P3's small set of GPTel cut-out tasks.")
 
+(defvar-local p3/gptel-git-diff-root nil
+  "Repository root captured by this P3 Git-diff snapshot buffer.")
+
 (defun p3/gptel-sensitive-path-p (path)
   "Return non-nil when PATH has an obvious credential-like file name.
 
@@ -37,7 +42,7 @@ not a general secret-content scanner."
     (let ((case-fold-search t)
           (name (file-name-nondirectory path)))
       (string-match-p
-       "\\`\\(?:\\.env\\(?:\\..+\\)?\\|secrets?\\(?:\\..+\\)?\\|credentials?\\(?:\\..+\\)?\\)\\'"
+       "\\`\\(?:\\.env\\|secrets?\\|credentials?\\)\\(?:\\'\\|[._-]\\)"
        name))))
 
 (defun p3/gptel-sensitive-buffer-p ()
@@ -127,6 +132,28 @@ optional backend rather than guessing which local models are installed."
   (interactive)
   (p3/gptel--request-region-task 'review))
 
+(defun p3/gptel-project-chat ()
+  "Start or select a GPTel chat scoped to the current project directory.
+
+GPTel continues to own chat naming, persistence, backend/model state, and
+conversation resumption.  P3 only records the caller's `project.el' directory
+and ensures the selected chat has its own explicit context list."
+  (interactive)
+  (let* ((project (project-current nil))
+         (directory (file-name-as-directory
+                     (if project (project-root project) default-directory)))
+         (chat (call-interactively #'gptel)))
+    (unless (buffer-live-p chat)
+      (user-error "GPTel did not return a live chat buffer"))
+    (with-current-buffer chat
+      (setq-local default-directory directory)
+      ;; A project chat should never inherit the process-wide context merely
+      ;; because another buffer used GPTel.  Existing chat-local context is
+      ;; preserved when an already-isolated GPTel buffer is selected again.
+      (unless (local-variable-p 'gptel-context)
+        (setq-local gptel-context nil)))
+    chat))
+
 (defun p3/gptel-git-root (&optional directory)
   "Return the Git root containing DIRECTORY or `default-directory'."
   (file-name-as-directory
@@ -150,13 +177,33 @@ new paths remain explicit for the sensitive-path guard."
     (p3/git-run directory "diff" "--no-renames" "--name-only" "HEAD" "--")
     "\n" t)))
 
-(defun p3/gptel-add-git-diff ()
-  "Add or explicitly refresh the current repository Git diff in GPTel context.
+(defun p3/gptel--context-buffer (entry)
+  "Return the buffer represented by GPTel context ENTRY, if any."
+  (cond
+   ((bufferp entry) entry)
+   ((bufferp (car-safe entry)) (car entry))))
 
-The context is a snapshot of staged and unstaged tracked changes against HEAD.
-Untracked files are not included.  Re-running this command is the only way the
-snapshot contents change."
+(defun p3/gptel--git-diff-context-p (entry root)
+  "Return non-nil when context ENTRY is P3's Git snapshot for ROOT."
+  (when-let ((buffer (p3/gptel--context-buffer entry)))
+    (and (buffer-live-p buffer)
+         (equal (buffer-local-value 'p3/gptel-git-diff-root buffer) root))))
+
+(defun p3/gptel--ensure-local-context ()
+  "Ensure GPTel context mutations in the current buffer remain local."
+  (unless (local-variable-p 'gptel-context)
+    (setq-local gptel-context (copy-tree gptel-context))))
+
+(defun p3/gptel-add-git-diff ()
+  "Add or explicitly refresh this chat's current repository Git diff.
+
+The attachment is an immutable snapshot of staged and unstaged tracked changes
+against HEAD; untracked files are excluded.  Re-running this command creates a
+new snapshot and replaces only this chat's previous P3 snapshot for the same
+repository.  Existing snapshots are never rewritten in place."
   (interactive)
+  (unless (bound-and-true-p gptel-mode)
+    (user-error "Add Git diff from the target GPTel chat buffer"))
   (let* ((root (p3/gptel-git-root))
          (sensitive (p3/gptel--git-diff-sensitive-paths root)))
     (when sensitive
@@ -167,21 +214,28 @@ snapshot contents change."
         (user-error "No tracked changes against HEAD"))
       (let* ((project-name
               (file-name-nondirectory (directory-file-name root)))
+             ;; Every refresh gets a distinct buffer object.  GPTel context is
+             ;; live, so reusing and rewriting a buffer would silently mutate
+             ;; evidence already attached to another conversation.
              (buffer
-              (get-buffer-create (format "*GPTel Git Diff: %s*" project-name))))
+              (generate-new-buffer
+               (format " *GPTel Git Diff: %s*" project-name))))
         (with-current-buffer buffer
-          (let ((inhibit-read-only t))
-            (erase-buffer)
-            (insert diff)
-            (goto-char (point-min))
-            (setq-local default-directory root)
-            (when (fboundp 'diff-mode)
-              (diff-mode))))
-        ;; Use GPTel's own context variable rather than maintaining parallel P3
-        ;; attachment state.  A stable buffer identity makes re-running this
-        ;; command an explicit refresh of the already-attached snapshot.
-        (unless (assoc buffer gptel-context)
-          (push (list buffer) gptel-context))
+          (insert diff)
+          (goto-char (point-min))
+          (when (fboundp 'diff-mode)
+            (diff-mode))
+          (setq-local default-directory root
+                      p3/gptel-git-diff-root root)
+          (setq buffer-read-only t)
+          (set-buffer-modified-p nil))
+        (p3/gptel--ensure-local-context)
+        (setq gptel-context
+              (seq-remove
+               (lambda (entry)
+                 (p3/gptel--git-diff-context-p entry root))
+               gptel-context))
+        (push buffer gptel-context)
         (message "GPTel context refreshed from tracked Git diff: %s" project-name)
         buffer))))
 
@@ -190,7 +244,7 @@ snapshot contents change."
 
 (setq p3/gptel-command-map
       (let ((map (make-sparse-keymap)))
-        (define-key map (kbd "g") #'gptel)
+        (define-key map (kbd "g") #'p3/gptel-project-chat)
         (define-key map (kbd "m") #'gptel-menu)
         (define-key map (kbd "a") #'gptel-add)
         (define-key map (kbd "f") #'gptel-add-file)
