@@ -148,6 +148,42 @@
                     (propertize "${tags:10}" 'face 'org-tag)))
       (org-roam-db-autosync-mode)))))
 
+(ert-deftest p3-config-org-roam-association-does-not-hide-stale-context ()
+  (let (fallback-read)
+    (cl-letf (((symbol-function 'p3/org-roam-project-context)
+               (lambda () "stale-hub"))
+              ((symbol-function 'p3/org-roam--hub-node)
+               (lambda (_hub-id) (user-error "stale hub")))
+              ((symbol-function 'p3/org-roam--read-hub-node)
+               (lambda ()
+                 (setq fallback-read t)
+                 'other-hub)))
+      (should-error (p3/org-roam--association-hub-node)
+                    :type 'user-error)
+      (should-not fallback-read))))
+
+(ert-deftest p3-config-org-roam-project-agenda-overrides-native-redo-form ()
+  (let ((buffer (get-buffer-create "*p3-project-native-redo-test*")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'p3/org-roam-list-notes)
+                   (lambda () '("a.org")))
+                  ((symbol-function 'org-tags-view)
+                   (lambda (&rest _)
+                     (with-current-buffer buffer
+                       (let ((inhibit-read-only t))
+                         (erase-buffer)
+                         (insert "Project TODO\n")
+                         (add-text-properties
+                          (point-min) (point-max)
+                          '(org-redo-cmd (org-tags-view t "old")))))
+                     buffer)))
+          (p3/org-roam--project-todos "hub")
+          (with-current-buffer buffer
+            (should
+             (equal (get-text-property (point-min) 'org-redo-cmd)
+                    '(p3/org-roam-project-agenda-redo)))))
+      (kill-buffer buffer))))
+
 (provide 'p3-config-org-roam-test)
 
 ;;; p3-config-org-roam-test.el ends here
