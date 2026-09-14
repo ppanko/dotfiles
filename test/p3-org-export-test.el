@@ -180,6 +180,51 @@
                        (string-trim (buffer-string)))))))
       (delete-file script))))
 
+(defun p3-org-export-test--rename-reference-pptx-layout (path old-name new-name)
+  "Rename OLD-NAME to NEW-NAME in reference PPTX PATH."
+  (let ((script (make-temp-file "p3-org-export-pptx-layout-" nil ".py")))
+    (unwind-protect
+        (progn
+          (with-temp-file script
+            (insert
+             "import os, re, sys, tempfile, zipfile\n"
+             "import xml.etree.ElementTree as ET\n"
+             "path, old, new = sys.argv[1:4]\n"
+             "p = 'http://schemas.openxmlformats.org/presentationml/2006/main'\n"
+             "ET.register_namespace('p', p)\n"
+             "with zipfile.ZipFile(path, 'r') as zin:\n"
+             "    files = {name: zin.read(name) for name in zin.namelist()}\n"
+             "found = False\n"
+             "for name, data in list(files.items()):\n"
+             "    if not re.fullmatch(r'ppt/slideLayouts/slideLayout[0-9]+\\.xml', name):\n"
+             "        continue\n"
+             "    root = ET.fromstring(data)\n"
+             "    common = root.find('{%s}cSld' % p)\n"
+             "    if common is not None and common.get('name') == old:\n"
+             "        common.set('name', new)\n"
+             "        files[name] = ET.tostring(root, encoding='utf-8', xml_declaration=True)\n"
+             "        found = True\n"
+             "if not found:\n"
+             "    raise RuntimeError('reference PPTX has no layout named %s' % old)\n"
+             "fd, tmp = tempfile.mkstemp(suffix='.pptx')\n"
+             "os.close(fd)\n"
+             "try:\n"
+             "    with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zout:\n"
+             "        for name, data in files.items():\n"
+             "            zout.writestr(name, data)\n"
+             "    os.replace(tmp, path)\n"
+             "finally:\n"
+             "    if os.path.exists(tmp): os.unlink(tmp)\n"))
+          (with-temp-buffer
+            (let ((status
+                   (call-process
+                    (p3-org-export-test--python-executable)
+                    nil (current-buffer) nil script path old-name new-name)))
+              (unless (and (integerp status) (zerop status))
+                (error "Could not rename reference PPTX layout: %s"
+                       (string-trim (buffer-string)))))))
+      (delete-file script))))
+
 (defun p3-org-export-test--pptx-slide-layout-names (path)
   "Return the layout name used by each slide in PPTX PATH."
   (with-temp-buffer
@@ -511,18 +556,18 @@
          "** Bullets\n"
          "- First point\n"
          "- Second point\n\n"
-         "#+BEGIN_NOTES\n"
+         "#+begin_notes\n"
          "Remember this point.\n"
-         "#+END_NOTES\n\n"
+         "#+end_notes\n\n"
          "** Two columns\n"
-         "#+BEGIN_COLUMNS\n"
-         "#+BEGIN_COLUMN\n"
+         "#+begin_columns\n"
+         "#+begin_column\n"
          "Left column\n"
-         "#+END_COLUMN\n"
-         "#+BEGIN_COLUMN\n"
+         "#+end_column\n"
+         "#+begin_column\n"
          "Right column\n"
-         "#+END_COLUMN\n"
-         "#+END_COLUMNS\n\n"
+         "#+end_column\n"
+         "#+end_columns\n\n"
          "** Data\n"
          "Data summary.\n\n"
          "| Name | Value |\n"
@@ -601,24 +646,38 @@
           (set-buffer-modified-p nil)
           (kill-buffer (current-buffer)))))))
 
-(ert-deftest p3-org-export-pptx-warning-fails-without-overwriting-output ()
-  (skip-unless (executable-find "pandoc"))
+(ert-deftest p3-org-export-pptx-missing-required-layout-fails-without-overwriting-output ()
+  (skip-unless (and (executable-find "pandoc")
+                    (p3-org-export-test--python-executable)))
   (p3-org-export-test--with-temp-directory directory
     (let* ((source (expand-file-name "slides.org" directory))
            (output (expand-file-name "slides.pptx" directory))
+           (reference-source (expand-file-name "reference.md" directory))
+           (reference (expand-file-name "reference.pptx" directory))
            (sentinel "previous valid output"))
       (with-temp-file source
         (insert
-         "#+TITLE: Missing Asset\n\n"
-         "* Figure\n"
-         "[[file:figures/does-not-exist.png]]\n"))
+         "#+TITLE: Missing Layout\n\n"
+         "* Two columns\n"
+         "#+begin_columns\n"
+         "#+begin_column\nLeft\n#+end_column\n"
+         "#+begin_column\nRight\n#+end_column\n"
+         "#+end_columns\n"))
+      (with-temp-file reference-source
+        (insert "# Reference\n\n## Slide\n\nReference content.\n"))
+      (should
+       (zerop
+        (call-process "pandoc" nil nil nil
+                      reference-source "-o" reference)))
+      (p3-org-export-test--rename-reference-pptx-layout
+       reference "Two Content" "P3 Missing Two Content")
       (with-temp-file output
         (insert sentinel))
       (with-current-buffer (find-file-noselect source)
         (unwind-protect
             (progn
               (org-mode)
-              (should-error (p3-org-export-run 'pptx nil)
+              (should-error (p3-org-export-run 'pptx reference)
                             :type 'user-error)
               (should (equal (p3-org-export-test--contents output)
                              sentinel)))
