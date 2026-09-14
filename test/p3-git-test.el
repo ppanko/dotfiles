@@ -92,6 +92,23 @@
       (when (buffer-live-p other)
         (kill-buffer other)))))
 
+(ert-deftest p3-git-config-declares-forge-as-magit-extension ()
+  (let ((path (expand-file-name "lisp/p3-config-git.el" p3-git-test--root)))
+    (with-temp-buffer
+      (insert-file-contents path)
+      (let* ((contents (buffer-string))
+             (magit-position
+              (string-match (regexp-quote "(use-package magit") contents))
+             (forge-position
+              (string-match (regexp-quote "(use-package forge") contents)))
+        (should magit-position)
+        (should forge-position)
+        (should (< magit-position forge-position))
+        (should
+         (string-match-p
+          (regexp-quote "(use-package forge\n  :after magit\n  :defer t)")
+          contents))))))
+
 (provide 'p3-git-test)
 
 ;;; p3-git-test.el ends here
