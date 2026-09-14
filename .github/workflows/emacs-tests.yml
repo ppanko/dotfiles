@@ -47,6 +47,7 @@ jobs:
             lisp/p3-config-loader.el \
             lisp/p3-core.el \
             lisp/p3-commands.el \
+            lisp/p3-screen-record.el \
             lisp/p3-reference.el \
             lisp/p3-config-reference.el \
             lisp/p3-git.el \
@@ -222,5 +223,6 @@ jobs:
             -l test/p3-reference-adversarial-test.el \
             -l test/p3-config-reference-test.el \
             -l test/p3-commands-test.el \
+            -l test/p3-screen-record-test.el \
             -l test/p3-git-test.el \
             -f ert-run-tests-batch-and-exit
