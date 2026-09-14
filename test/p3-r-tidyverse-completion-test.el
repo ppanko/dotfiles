@@ -96,6 +96,18 @@
      '(("spacecraft" . ("id" "country_code" "launch_date"))))
     '("id" "country" "label"))))
 
+(ert-deftest p3-r-tidyverse-parser-preserves-point ()
+  (with-temp-buffer
+    (insert "mutate(spacecraft, label = country_")
+    (goto-char (point-max))
+    (let ((origin (point)))
+      (cl-letf (((symbol-function 'p3/r-tidyverse--live-columns)
+                 (lambda (_symbol)
+                   '("id" "country_code" "launch_date"))))
+        (should (equal (p3/r-tidyverse-columns-at-point)
+                       '("id" "country_code" "launch_date")))
+        (should (= (point) origin))))))
+
 (ert-deftest p3-r-tidyverse-refuses-arbitrary-pipeline-evaluation ()
   (let ((queries 0))
     (unless (fboundp 'p3/r-tidyverse-columns-at-point)
@@ -222,12 +234,13 @@
 (ert-deftest p3-r-tidyverse-buffer-setup-merges-company-backend-ahead-of-generic-r ()
   (unless (fboundp 'p3/r-tidyverse-completion-buffer-setup)
     (ert-fail "tidyverse completion buffer setup is not implemented"))
-  (let ((company-backends
-         '((:separate
-            company-R-library company-R-args company-R-objects
-            company-dabbrev-code :with company-yasnippet)
-           company-capf))
-        (completion-at-point-functions nil))
+  (with-temp-buffer
+    (setq-local company-backends
+                '((:separate
+                   company-R-library company-R-args company-R-objects
+                   company-dabbrev-code :with company-yasnippet)
+                  company-capf))
+    (setq-local completion-at-point-functions nil)
     (p3/r-tidyverse-completion-buffer-setup)
     (should
      (equal
