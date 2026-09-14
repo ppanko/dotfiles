@@ -132,7 +132,8 @@ consulted.  Busy, missing, stale, and errored processes return nil quietly."
                               :function-start (cadr info)
                               :open open)))
           (unless found
-            (setq open (nth 1 (syntax-ppss open)))))
+            (setq open
+                  (nth 1 (save-excursion (syntax-ppss open))))))
         found))))
 
 (defun p3/r-tidyverse--pipe-before (position)
@@ -156,7 +157,7 @@ consulted.  Busy, missing, stale, and errored processes return nil quietly."
     (catch 'comma
       (while (search-forward "," end t)
         (let* ((position (1- (point)))
-               (state (syntax-ppss position)))
+               (state (save-excursion (syntax-ppss position))))
           (when (and (not (nth 3 state))
                      (not (nth 4 state))
                      (eq (nth 1 state) open))
@@ -165,14 +166,14 @@ consulted.  Busy, missing, stale, and errored processes return nil quietly."
 
 (defun p3/r-tidyverse--split-top-level-args (start end)
   "Split arguments between START and END at top-level commas."
-  (let ((depth (car (syntax-ppss start)))
+  (let ((depth (car (save-excursion (syntax-ppss start))))
         (piece-start start)
         pieces)
     (save-excursion
       (goto-char start)
       (while (search-forward "," end t)
         (let* ((position (1- (point)))
-               (state (syntax-ppss position)))
+               (state (save-excursion (syntax-ppss position))))
           (when (and (not (nth 3 state))
                      (not (nth 4 state))
                      (= (car state) depth))
