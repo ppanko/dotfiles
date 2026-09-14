@@ -213,12 +213,14 @@ hatch."
       (when (and (not (and arg (< (prefix-numeric-value arg) 0)))
                  (p3/gptel-sensitive-buffer-p))
         (user-error "Refusing to add content from a sensitive-looking file"))
-      (let* ((chat (p3/gptel--choose-project-chat root))
-             (gptel-context
-              (copy-tree (buffer-local-value 'gptel-context chat))))
-        (gptel-add arg t)
+      (let ((chat (p3/gptel--choose-project-chat root))
+            new-context)
+        (let ((gptel-context
+               (copy-tree (buffer-local-value 'gptel-context chat))))
+          (gptel-add arg t)
+          (setq new-context gptel-context))
         (with-current-buffer chat
-          (setq-local gptel-context gptel-context))
+          (setq-local gptel-context new-context))
         (message "GPTel context updated for %s" (buffer-name chat)))))))
 
 (defun p3/gptel-git-root (&optional directory)
