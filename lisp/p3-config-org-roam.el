@@ -50,6 +50,8 @@
          ("C-c n t" . org-roam-dailies-capture-today)
          ("C-c n C-t" . org-roam-tag-add)
          ("C-c n a" . p3/org-roam-get-agenda))
+  :bind-keymap
+  ("C-c n p" . p3/org-roam-project-command-map)
   :config
   (setq org-roam-node-display-template
         (concat "${title:*} "
