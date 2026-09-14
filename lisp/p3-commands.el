@@ -53,7 +53,7 @@
      ("C-c l a" . "code actions")
      ("C-c l f" . "format buffer"))
     ("GPTel"
-     ("C-c g g" . "start GPTel chat")
+     ("C-c g g" . "start project GPTel chat")
      ("C-c g m" . "GPTel menu / backend / model")
      ("C-c g a" . "add/remove region or buffer context")
      ("C-c g f" . "add file context")
