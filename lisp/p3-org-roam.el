@@ -350,6 +350,42 @@ When REPLACE-ROOT is non-nil, explicitly replace an existing root mapping."
       (user-error "No Org-roam project context or filesystem project")))
     (org-roam-node-visit node)))
 
+(defun p3/org-roam--project-node-p (node hub-id)
+  "Return non-nil when file NODE is explicitly associated with HUB-ID."
+  (and node
+       (zerop (or (org-roam-node-level node) 0))
+       (equal (p3/org-roam--node-file-project-id node) hub-id)))
+
+(defun p3/org-roam-project-find-note ()
+  "Find an Org-roam file node explicitly associated with the current project."
+  (interactive)
+  (let ((hub-id (p3/org-roam-project-context)))
+    (unless hub-id
+      (user-error "No project context; establish a project hub first"))
+    (p3/org-roam--hub-node hub-id)
+    (let ((node
+           (org-roam-node-read
+            nil
+            (lambda (candidate)
+              (p3/org-roam--project-node-p candidate hub-id))
+            nil t)))
+      (org-roam-node-visit node))))
+
+(defun p3/org-roam-project-new-note ()
+  "Capture a new Org-roam file node associated with the current project."
+  (interactive)
+  (let ((hub-id (p3/org-roam-project-context)))
+    (unless hub-id
+      (user-error
+       "No project context; run p3/org-roam-project-note first"))
+    (p3/org-roam--hub-node hub-id)
+    (let* ((title (read-string "Project note title: "))
+           (node (org-roam-node-create :title title))
+           (template (p3/org-roam--project-template hub-id nil)))
+      (org-roam-capture- :node node
+                         :templates (list template)
+                         :props '(:finalize find-file)))))
+
 (provide 'p3-org-roam)
 
 ;;; p3-org-roam.el ends here
