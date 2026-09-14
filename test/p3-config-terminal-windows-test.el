@@ -36,8 +36,11 @@
   (should (eq system-type 'windows-nt))
   (should (featurep 'p3-config-terminal))
   (should (featurep 'p3-terminal))
-  (should (eq (key-binding (kbd "C-x C-u")) #'shell))
+  (should (keymapp p3/project-shell-command-map))
+  (should (eq (key-binding (kbd "C-x C-u")) #'p3/project-shell))
+  (should (eq (key-binding (kbd "C-c T")) p3/project-shell-command-map))
   (should (string-suffix-p "bash.exe" shell-file-name t))
+  (should (string-suffix-p "bash.exe" (p3/platform-bash-program) t))
   (should (memq #'p3/windows-shell-mode-setup shell-mode-hook)))
 
 (provide 'p3-config-terminal-windows-test)

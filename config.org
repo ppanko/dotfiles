@@ -215,9 +215,10 @@ and PDF behavior lives in =lisp/p3-config-reference.el=.
 
 ** Shell
 
-Terminal package wiring and platform-specific shell activation live in
-=lisp/p3-config-terminal.el=. Project-aware terminal behavior remains in
-=lisp/p3-terminal.el=, while Windows shell mechanics remain in =p3-platform=.
+Shared project-aware Bash wiring lives in =lisp/p3-config-terminal.el=.
+Project-shell session behavior lives in =lisp/p3-terminal.el=, while
+platform-specific Bash discovery and Windows shell mechanics remain in
+=p3-platform=.
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-terminal)

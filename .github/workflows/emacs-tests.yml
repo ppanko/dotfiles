@@ -73,11 +73,11 @@ jobs:
             lisp/p3-config-terminal.el \
             lisp/p3-ess.el \
             lisp/p3-r-tools.el \
+            lisp/p3-r-tidyverse-completion.el \
             lisp/p3-gptel.el \
             lisp/p3-config-gptel.el \
             lisp/p3-org.el \
             lisp/p3-config-org.el \
-            lisp/p3-office-preview.el \
             lisp/p3-org-roam.el \
             lisp/p3-config-org-roam.el \
             lisp/p3-org-present.el \
@@ -129,7 +129,7 @@ jobs:
             -l lisp/p3-platform.el \
             -l lisp/p3-config-loader.el \
             -l lisp/p3-config-terminal.el \
-            --eval '(unless (and (featurep (quote p3-config-terminal)) (featurep (quote p3-terminal)) (keymapp p3/vterm-command-map) (string-match-p "vterm-bashrc" vterm-shell)) (kill-emacs 1))'
+            --eval '(unless (and (featurep (quote p3-config-terminal)) (featurep (quote p3-terminal)) (keymapp p3/project-shell-command-map) (eq (key-binding (kbd "C-x C-u")) (quote p3/project-shell))) (kill-emacs 1))'
 
       - name: Smoke-load GPTel configuration boundary
         run: |
@@ -154,7 +154,7 @@ jobs:
             --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
             -l lisp/p3-config-loader.el \
             -l lisp/p3-config-org.el \
-            --eval '(unless (and (featurep (quote p3-config-org)) (featurep (quote p3-org)) (eq org-startup-folded (quote content)) (eq org-confirm-babel-evaluate t) (featurep (quote p3-org-export)) (featurep (quote p3-office-preview))) (kill-emacs 1))'
+            --eval '(unless (and (featurep (quote p3-config-org)) (featurep (quote p3-org)) (eq org-startup-folded (quote content)) (eq org-confirm-babel-evaluate t) (featurep (quote p3-org-export))) (kill-emacs 1))'
 
       - name: Smoke-load Org-roam configuration boundary
         run: |
@@ -220,6 +220,7 @@ jobs:
             -l test/p3-gptel-test.el \
             -l test/p3-config-gptel-test.el \
             -l test/p3-r-tools-test.el \
+            -l test/p3-r-tidyverse-completion-test.el \
             -l test/p3-org-test.el \
             -l test/p3-config-org-test.el \
             -l test/p3-org-roam-test.el \
@@ -228,7 +229,6 @@ jobs:
             -l test/p3-config-org-present-test.el \
             -l test/p3-org-export-test.el \
             -l test/p3-org-import-test.el \
-            -l test/p3-office-preview-test.el \
             -l test/p3-reference-test.el \
             -l test/p3-reference-reconstruction-test.el \
             -l test/p3-reference-adversarial-test.el \

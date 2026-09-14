@@ -25,14 +25,14 @@ on:
       - "lisp/p3-config-git.el"
       - "lisp/p3-config-python.el"
       - "lisp/p3-config-org.el"
-      - "lisp/p3-org-export.el"
-      - "lisp/p3-office-preview.el"
       - "lisp/p3-config-org-roam.el"
       - "lisp/p3-config-org-present.el"
+      - "lisp/p3-terminal.el"
       - "lisp/p3-config-terminal.el"
       - "lisp/p3-ess.el"
       - "lisp/p3-r-tools.el"
       - "lisp/p3-r-language-server.el"
+      - "lisp/p3-r-tidyverse-completion.el"
       - "test/p3-platform-test.el"
       - "test/p3-project-test.el"
       - "test/p3-project-windows-test.el"
@@ -49,6 +49,8 @@ on:
       - "test/p3-config-org-roam-test.el"
       - "test/p3-config-org-present-test.el"
       - "test/p3-config-reference-test.el"
+      - "test/p3-terminal-test.el"
+      - "test/p3-terminal-integration-test.el"
       - "test/p3-config-terminal-test.el"
       - "test/p3-config-terminal-windows-test.el"
       - "test/p3-reference-test.el"
@@ -57,9 +59,9 @@ on:
       - "test/p3-ess-test.el"
       - "test/p3-r-tools-test.el"
       - "test/p3-r-language-server-test.el"
+      - "test/p3-r-tidyverse-completion-test.el"
       - "test/p3-commands-test.el"
       - "test/p3-screen-record-test.el"
-      - "test/p3-office-preview-test.el"
       - "test/p3-git-test.el"
       - ".github/workflows/windows-platform-tests.yml"
   workflow_dispatch:
@@ -116,7 +118,8 @@ jobs:
           lisp/p3-config-appearance.el
           lisp/p3-config-editing.el
           lisp/p3-r-language-server.el
-          lisp/p3-office-preview.el
+          lisp/p3-r-tidyverse-completion.el
+          lisp/p3-terminal.el
           lisp/p3-config-terminal.el
 
       - name: Run Windows editing configuration regression
@@ -139,14 +142,8 @@ jobs:
           emacs -Q --batch -L lisp
           -l test/p3-platform-test.el
           -l test/p3-project-windows-test.el
+          -l test/p3-terminal-test.el
           -l test/p3-screen-record-test.el
-          -f ert-run-tests-batch-and-exit
-
-      - name: Run Windows Office preview boundary
-        shell: powershell
-        run: >-
-          emacs -Q --batch -L lisp
-          -l test/p3-office-preview-test.el
           -f ert-run-tests-batch-and-exit
 
       - name: Run Windows config architecture tests
@@ -170,6 +167,7 @@ jobs:
           -l test/p3-reference-reconstruction-test.el
           -l test/p3-reference-adversarial-test.el
           -l test/p3-r-language-server-test.el
+          -l test/p3-r-tidyverse-completion-test.el
           -l test/p3-commands-test.el
           -l test/p3-git-test.el
           -f ert-run-tests-batch-and-exit
