@@ -430,6 +430,64 @@
       (should repaired)
       (should (eq visited 'new-hub-node)))))
 
+(ert-deftest p3-org-roam-project-node-filter-requires-file-scope-and-hub-id ()
+  (cl-letf (((symbol-function 'org-roam-node-level)
+             (lambda (node) (plist-get node :level)))
+            ((symbol-function 'org-roam-node-properties)
+             (lambda (node) (plist-get node :properties))))
+    (should
+     (p3/org-roam--project-node-p
+      '(:level 0 :properties (("P3_PROJECT" . "hub"))) "hub"))
+    (should-not
+     (p3/org-roam--project-node-p
+      '(:level 0 :properties (("P3_PROJECT" . "other"))) "hub"))
+    (should-not
+     (p3/org-roam--project-node-p
+      '(:level 2 :properties (("P3_PROJECT" . "hub"))) "hub"))))
+
+(ert-deftest p3-org-roam-project-find-note-uses-required-filtered-completion ()
+  (let (seen-filter seen-require visited)
+    (cl-letf (((symbol-function 'p3/org-roam-project-context)
+               (lambda () "hub"))
+              ((symbol-function 'p3/org-roam--hub-node)
+               (lambda (_id) 'hub-node))
+              ((symbol-function 'org-roam-node-read)
+               (lambda (_initial filter _sort require-match)
+                 (setq seen-filter filter
+                       seen-require require-match)
+                 'chosen-node))
+              ((symbol-function 'org-roam-node-visit)
+               (lambda (node &rest _) (setq visited node))))
+      (p3/org-roam-project-find-note)
+      (should (functionp seen-filter))
+      (should seen-require)
+      (should (eq visited 'chosen-node)))))
+
+(ert-deftest p3-org-roam-project-new-note-errors-without-context ()
+  (cl-letf (((symbol-function 'p3/org-roam-project-context)
+             (lambda () nil)))
+    (should-error (p3/org-roam-project-new-note) :type 'user-error)))
+
+(ert-deftest p3-org-roam-project-new-note-injects-project-file-property ()
+  (let (template)
+    (cl-letf (((symbol-function 'p3/org-roam-project-context)
+               (lambda () "hub"))
+              ((symbol-function 'p3/org-roam--hub-node)
+               (lambda (_id) 'hub-node))
+              ((symbol-function 'read-string)
+               (lambda (&rest _) "Project Note"))
+              ((symbol-function 'org-roam-node-create)
+               (lambda (&rest args) args))
+              ((symbol-function 'org-roam-capture-)
+               (lambda (&rest args)
+                 (setq template (car (plist-get args :templates))))))
+      (p3/org-roam-project-new-note)
+      (let* ((plist (nthcdr 4 template))
+             (target (plist-get plist :if-new))
+             (head (nth 2 target)))
+        (should (string-match-p "P3_PROJECT: hub" head))
+        (should-not (plist-get plist :immediate-finish))))))
+
 (provide 'p3-org-roam-test)
 
 ;;; p3-org-roam-test.el ends here
