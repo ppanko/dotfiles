@@ -25,6 +25,10 @@
  (expand-file-name "lisp/p3-config-editing.el"
                    p3-config-editing-windows-test--root))
 
+(load-file
+ (expand-file-name "test/p3-recovery-state-test.el"
+                   p3-config-editing-windows-test--root))
+
 ;; smartparens is intentionally absent from the bare CI Emacs.  Loading the
 ;; owner still installs its hook, so remove that unrelated hook before ERT
 ;; creates diagnostic Emacs Lisp buffers.
