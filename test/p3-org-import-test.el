@@ -9,6 +9,11 @@
     (file-name-directory (or load-file-name buffer-file-name))))
   "Root of the Emacs configuration under test.")
 
+(defconst p3-org-import-test--libreoffice-pptx-fixture
+  (expand-file-name "test/fixtures/libreoffice-incoming.pptx"
+                    p3-org-import-test--config-directory)
+  "Compact incoming PPTX fixture derived from a LibreOffice-generated deck.")
+
 (add-to-list 'load-path
              (expand-file-name "lisp" p3-org-import-test--config-directory))
 
@@ -163,6 +168,19 @@
     (should (p3-office-import--pandoc-supports-input-format-p "pptx"))
     (should-not (p3-office-import--pandoc-supports-input-format-p "pdfx"))))
 
+(ert-deftest p3-office-import-pandoc-input-format-probe-failure-is-actionable ()
+  (cl-letf (((symbol-function 'p3-org-export--pandoc-executable)
+             (lambda () "pandoc"))
+            ((symbol-function 'process-file)
+             (lambda (&rest _args) 17)))
+    (let ((error
+           (should-error
+            (p3-office-import--pandoc-supports-input-format-p "pptx")
+            :type 'user-error)))
+      (should
+       (string-match-p "Could not query Pandoc input formats.*status 17"
+                       (error-message-string error))))))
+
 (ert-deftest p3-office-import-pptx-default-paths-are-predictable ()
   (p3-org-import-test--with-temp-directory directory
     (let* ((source (expand-file-name "slides.pptx" directory))
@@ -216,42 +234,24 @@
            (string-match-p "Pandoc 3\\.8\\.3 or newer"
                            (error-message-string error))))))))
 
-(ert-deftest p3-office-import-pptx-runs-realistic-deck-through-pandoc ()
+(ert-deftest p3-office-import-pptx-runs-libreoffice-deck-through-pandoc ()
   (skip-unless
    (and (executable-find "pandoc")
         (p3-office-import--pandoc-supports-input-format-p "pptx")))
   (p3-org-import-test--with-temp-directory directory
-    (let* ((markdown (expand-file-name "slides.md" directory))
-           (figure (expand-file-name "example.png" directory))
-           (source (expand-file-name "incoming.pptx" directory))
+    (let* ((source (expand-file-name "incoming.pptx" directory))
            (default-directory directory))
-      (p3-org-import-test--write-png figure)
-      (with-temp-file markdown
-        (insert
-         "% Incoming deck\n\n"
-         "# First slide\n\n"
-         "- First point\n"
-         "- Second point\n\n"
-         "# Data slide\n\n"
-         "| Name | Value |\n"
-         "|---|---:|\n"
-         "| A | 1 |\n\n"
-         "![Example figure](example.png)\n"))
-      (should
-       (zerop
-        (call-process "pandoc" nil nil nil
-                      "--from=markdown" "--to=pptx"
-                      markdown "-o" source)))
+      (copy-file p3-org-import-test--libreoffice-pptx-fixture source)
       (let* ((output (p3-office-import-pptx-run source))
              (paths (p3-office-import--pptx-paths source))
              (media-directory (plist-get paths :media-directory))
              (contents (p3-org-import-test--contents output)))
         (should (equal output (expand-file-name "incoming.org" directory)))
         (should (string-match-p "potentially lossy" contents))
-        (should (string-match-p "First slide" contents))
-        (should (string-match-p "First point" contents))
-        (should (string-match-p "Data slide" contents))
-        (should (string-match-p "Name" contents))
+        (should (string-match-p "External deck" contents))
+        (should (string-match-p "Alpha point" contents))
+        (should (string-match-p "Beta point" contents))
+        (should (string-match-p "Image slide" contents))
         (should (string-match-p "incoming-media" contents))
         (should-not (string-match-p (regexp-quote directory) contents))
         (should (file-directory-p media-directory))
