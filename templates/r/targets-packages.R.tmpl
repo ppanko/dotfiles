@@ -1,0 +1,13 @@
+# Project dependency declarations.
+# Edit targetPackages when target workers need an additional package.
+
+pipelinePackages <- c(
+  "targets",
+  "tarchetypes",
+  "crew",
+  "here"
+)
+
+targetPackages <- {{target-packages}}
+
+bootstrapPackages <- unique(c(pipelinePackages, targetPackages))

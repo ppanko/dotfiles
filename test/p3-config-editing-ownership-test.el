@@ -72,7 +72,7 @@
     (should (string-match-p
              (regexp-quote "(p3/config-load-module 'p3-core)") base))
     (should (string-match-p "default-process-coding-system" base))
-    (should (string-match-p "file-coding-system-alist" ess))
+    (should-not (string-match-p "file-coding-system-alist" ess))
     (should-not (string-match-p "file-coding-system-alist" base))
     (should (string-match-p "tramp-default-method" platform))
     (should-not (string-match-p "tramp-default-method" base))

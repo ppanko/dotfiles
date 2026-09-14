@@ -1,0 +1,69 @@
+# Explicit project environment setup.
+# Run with `Rscript bootstrap.R` or `source("bootstrap.R")`.
+
+projectRepos <- c(CRAN = "https://cloud.r-project.org")
+
+if (!requireNamespace("renv", quietly = TRUE)) {
+  install.packages("renv", repos = projectRepos)
+}
+
+source(file.path("R", "packages.R"))
+
+if (file.exists("renv.lock")) {
+  renv::load(project = getwd())
+  renv::restore(project = getwd(), prompt = FALSE)
+} else {
+  tryCatch(
+    {
+      if (file.exists(file.path("renv", "activate.R"))) {
+        renv::load(project = getwd())
+      } else {
+        renv::init(
+          bare = TRUE,
+          repos = projectRepos,
+          restart = FALSE
+        )
+      }
+
+      # renv initialization creates a bare lockfile. Do not let that file
+      # masquerade as a completed bootstrap if installation later fails.
+      if (file.exists("renv.lock")) {
+        unlink("renv.lock")
+      }
+
+      renv::install(
+        bootstrapPackages,
+        repos = projectRepos,
+        prompt = FALSE
+      )
+
+      # Discover target-only dependencies without evaluating the unfinished
+      # project pipeline. Normal pipeline evaluation remains strict.
+      discoveryScript <- tempfile(pattern = "p3-target-deps-", fileext = ".R")
+      writeLines(
+        c(
+          "library(targets)",
+          "source(file.path(\"R\", \"packages.R\"))",
+          "tar_option_set(packages = targetPackages, format = \"parquet\")",
+          "list()"
+        ),
+        discoveryScript
+      )
+      tryCatch(
+        targets::tar_renv(
+          extras = character(),
+          script = discoveryScript
+        ),
+        finally = unlink(discoveryScript)
+      )
+
+      renv::snapshot(repos = projectRepos, prompt = FALSE)
+    },
+    error = function(error) {
+      if (file.exists("renv.lock")) {
+        unlink("renv.lock")
+      }
+      stop(error)
+    }
+  )
+}

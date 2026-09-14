@@ -10,6 +10,7 @@
 (require 'cl-lib)
 (require 'seq)
 (require 'subr-x)
+(require 'p3-platform)
 (require 'p3-project)
 
 (declare-function ess-eval-linewise "ess-inf")
@@ -47,6 +48,13 @@
   :type 'integer
   :group 'p3-r)
 
+(defcustom p3-r-target-runtime-packages
+  '("readr" "data.table" "arrow" "writexl"
+    "dplyr" "lubridate" "tidyr" "purrr" "DT")
+  "Packages attached while generated targets execute."
+  :type '(repeat string)
+  :group 'p3-r)
+
 (defcustom p3-r-helper-file-candidates
   '("R/utils.R" "R/99_helperFunctions.R")
   "Project-relative R helper files, in preferred order."
@@ -73,10 +81,14 @@
      :description "Targets pipeline with renv and local workers"
      :directories ("R" "data" "data-raw" "output" "reports"
                    "reports/graphics" "bin")
-     :files ((:path "R/utils.R" :template "targets-utils.R.tmpl"
+     :files ((:path "R/packages.R" :template "targets-packages.R.tmpl"
+              :title "Project dependencies")
+             (:path "R/utils.R" :template "targets-utils.R.tmpl"
               :title "Helper functions")
              (:path "_targets.R" :template "targets.R.tmpl"
-              :title "_targets pipeline"))))
+              :title "_targets pipeline")
+             (:path "bootstrap.R" :template "bootstrap.R.tmpl"
+              :title "Project bootstrap"))))
   "R project profiles.
 
 Each entry is (NAME :description STRING :directories (DIR...)
@@ -135,12 +147,21 @@ placeholders.  Signal an error if any placeholder remains unresolved."
     (mapcar #'symbol-name (p3-r--profile-names))
     nil t nil nil (symbol-name p3-r-default-profile))))
 
+(defun p3-r--r-character-vector (strings)
+  "Render STRINGS as a readable R character vector."
+  (concat
+   "c(\n"
+   (mapconcat (lambda (string) (format "  \"%s\"" string)) strings ",\n")
+   "\n)"))
+
 (defun p3-r--template-values (project-name &optional title)
   "Return standard template values for PROJECT-NAME and optional TITLE."
   `((author . ,p3-r-author)
     (date . ,(format-time-string "%m/%d/%Y"))
     (project-name . ,project-name)
     (target-workers . ,p3-r-target-workers)
+    (target-packages . ,(p3-r--r-character-vector
+                         p3-r-target-runtime-packages))
     (title . ,(or title ""))))
 
 (defun p3-r--project-plan (project-root profile-name)
@@ -210,6 +231,91 @@ a prefix argument enables replacement after the destination list is checked."
     (p3-r--write-plan plan overwrite)
     (message "Created %s R project: %s" profile (abbreviate-file-name root))
     root))
+
+(defvar p3-r--project-process nil
+  "Live asynchronous R project bootstrap process, if any.")
+
+(defun p3-r--project-process-sentinel (process _event)
+  "Report completion of asynchronous R project PROCESS."
+  (when (memq (process-status process) '(exit signal))
+    (let ((buffer (process-buffer process))
+          (root (process-get process 'p3-r-root)))
+      (when (eq process p3-r--project-process)
+        (setq p3-r--project-process nil))
+      (if (and (eq (process-status process) 'exit)
+               (zerop (process-exit-status process)))
+          (message "R project environment ready: %s"
+                   (abbreviate-file-name root))
+        (when (buffer-live-p buffer)
+          (display-buffer buffer))
+        (message "R project environment setup failed; see %s"
+                 (if (buffer-live-p buffer)
+                     (buffer-name buffer)
+                   "bootstrap process output"))))))
+
+(defun p3-r--run-project-r (root expression &optional vanilla)
+  "Run R EXPRESSION asynchronously from ROOT.
+
+When VANILLA is non-nil, suppress R startup files.  Display the bootstrap
+buffer immediately so long installs and restores remain observable."
+  (when (and p3-r--project-process
+             (process-live-p p3-r--project-process))
+    (user-error "An R project environment setup is already running"))
+  (let* ((program (p3/r-program))
+         (buffer (get-buffer-create "*p3-r-project-bootstrap*"))
+         (directory (file-name-as-directory root))
+         (args (if vanilla
+                   (list "--slave" "--vanilla" "-e" expression)
+                 (list "--slave" "--no-save" "--no-restore"
+                       "-e" expression))))
+    (unless program
+      (user-error "No usable R executable is configured"))
+    (with-current-buffer buffer
+      (erase-buffer)
+      (setq default-directory directory))
+    (let ((default-directory directory))
+      (setq p3-r--project-process
+            (make-process
+             :name "p3-r-project-bootstrap"
+             :buffer buffer
+             :command (cons program args)
+             :connection-type 'pipe
+             :noquery t
+             :sentinel #'p3-r--project-process-sentinel)))
+    (process-put p3-r--project-process 'p3-r-root directory)
+    (display-buffer buffer)
+    (message "Preparing R project environment in %s..."
+             (abbreviate-file-name directory))
+    p3-r--project-process))
+
+;;;###autoload
+(defun p3-r-bootstrap-project ()
+  "Prepare the current R project's renv environment explicitly.
+
+Generated targets projects carry a portable `bootstrap.R' that can also be run
+from RStudio or command-line R.  Older lockfile-only projects explicitly load
+their renv project before restore.  Normal targets execution never calls this
+command."
+  (interactive)
+  (let ((root (p3/project-root)))
+    (unless root
+      (user-error "Current buffer is not in a project"))
+    (setq root (file-name-as-directory root))
+    (let ((bootstrap-file (expand-file-name "bootstrap.R" root))
+          (lockfile (expand-file-name "renv.lock" root)))
+      (cond
+       ((file-exists-p bootstrap-file)
+        (p3-r--run-project-r
+         root "source(\"bootstrap.R\", chdir = TRUE)" t))
+       ((file-exists-p lockfile)
+        (p3-r--run-project-r
+         root
+         (concat "renv::load(project = getwd()); "
+                 "renv::restore(project = getwd(), prompt = FALSE)")
+         t))
+       (t
+        (user-error
+         "No bootstrap.R or renv.lock found in %s" root))))))
 
 (defun p3-r--insert-template (name values)
   "Insert rendered template NAME using VALUES."
@@ -399,6 +505,7 @@ Use the active region when available; otherwise process the entire buffer."
 (defvar-keymap p3-r-command-map
   :doc "Commands for R projects, templates, and ESS."
   "p" #'p3-r-new-project
+  "b" #'p3-r-bootstrap-project
   "h" #'p3-r-insert-script-header
   "w" #'p3-r-insert-word-report-header
   "c" #'p3-r-insert-chunk
