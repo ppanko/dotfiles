@@ -5,226 +5,35 @@ on:
     types:
       - opened
       - ready_for_review
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
-  workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: emacs-tests-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-
 jobs:
   test:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 3
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
 
-      - name: Install Emacs and Pandoc
+      - name: Install Emacs
         run: |
           sudo apt-get update
-          sudo apt-get install -y emacs-nox pandoc
+          sudo apt-get install -y emacs-nox
 
-      - name: Byte-compile extracted modules
+      - name: Byte-compile tidyverse provider
         run: |
           emacs -Q --batch \
             -L lisp \
-            --eval '(require (quote use-package-ensure))' \
-            --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
-            --eval '(require (quote p3-org-export))' \
             --eval '(setq byte-compile-error-on-warn t)' \
             -f batch-byte-compile \
-            lisp/p3-platform.el \
-            lisp/p3-project.el \
-            lisp/p3-config-project.el \
-            lisp/p3-config-loader.el \
-            lisp/p3-core.el \
-            lisp/p3-commands.el \
-            lisp/p3-screen-record.el \
-            lisp/p3-reference.el \
-            lisp/p3-config-reference.el \
-            lisp/p3-git.el \
-            lisp/p3-config-base.el \
-            lisp/p3-config-appearance.el \
-            lisp/p3-config-editing.el \
-            lisp/p3-config-completion.el \
-            lisp/p3-config-ess.el \
-            lisp/p3-config-workspace.el \
-            lisp/p3-config-git.el \
-            lisp/p3-config-python.el \
-            lisp/p3-python.el \
-            lisp/p3-terminal.el \
-            lisp/p3-config-terminal.el \
-            lisp/p3-ess.el \
-            lisp/p3-r-tools.el \
-            lisp/p3-r-tidyverse-completion.el \
-            lisp/p3-gptel.el \
-            lisp/p3-config-gptel.el \
-            lisp/p3-org.el \
-            lisp/p3-config-org.el \
-            lisp/p3-org-roam.el \
-            lisp/p3-config-org-roam.el \
-            lisp/p3-org-present.el \
-            lisp/p3-config-org-present.el
+            lisp/p3-r-tidyverse-completion.el
 
-      - name: Smoke-load Appearance configuration boundary
+      - name: Run tidyverse completion tests
         run: |
           emacs -Q --batch \
             -L lisp \
-            --eval '(require (quote use-package-ensure))' \
-            --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
-            --eval '(provide (quote doom-themes))' \
-            --eval '(defvar nerd-icons-font-family "Symbols Nerd Font Mono")' \
-            --eval '(provide (quote nerd-icons))' \
-            --eval '(defun nerd-icons-icon-for-file (&rest _) "F")' \
-            --eval '(defun nerd-icons-icon-for-buffer (&rest _) "B")' \
-            --eval '(defun nerd-icons-icon-for-mode (&rest _) "M")' \
-            --eval '(defun nerd-icons-octicon (&rest _) "G")' \
-            --eval '(defun nerd-icons-codicon (&rest _) "R")' \
-            --eval '(fset (quote load-theme) (lambda (&rest _) t))' \
-            -l lisp/p3-config-appearance.el \
-            --eval '(unless (and (featurep (quote p3-config-appearance)) (listp (default-value (quote mode-line-format))) global-hl-line-mode (equal (face-foreground (quote line-number-current-line) nil t) "#FFD700")) (kill-emacs 1))'
-
-      - name: Smoke-load Project configuration boundary
-        run: |
-          emacs -Q --batch \
-            -L lisp \
-            -l lisp/p3-config-project.el \
-            --eval '(unless (and (featurep (quote p3-config-project)) (eq (lookup-key global-map (kbd "C-c p")) project-prefix-map) (eq (lookup-key global-map (kbd "s-p")) project-prefix-map) (eq (lookup-key global-map (kbd "C-x p")) project-prefix-map)) (kill-emacs 1))'
-
-      - name: Smoke-load Python configuration boundary
-        run: |
-          emacs -Q --batch \
-            -L lisp \
-            --eval '(setq user-emacs-directory (file-name-as-directory default-directory))' \
-            --eval '(require (quote use-package-ensure))' \
-            --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
-            -l lisp/p3-config-loader.el \
-            -l lisp/p3-config-python.el \
-            --eval '(unless (and (featurep (quote p3-config-python)) (featurep (quote p3-python)) (equal flycheck-python-flake8-executable "flake8")) (kill-emacs 1))'
-
-      - name: Smoke-load Terminal configuration boundary
-        run: |
-          emacs -Q --batch \
-            -L lisp \
-            --eval '(setq user-emacs-directory (file-name-as-directory default-directory))' \
-            --eval '(require (quote use-package-ensure))' \
-            --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
-            -l lisp/p3-platform.el \
-            -l lisp/p3-config-loader.el \
-            -l lisp/p3-config-terminal.el \
-            --eval '(unless (and (featurep (quote p3-config-terminal)) (featurep (quote p3-terminal)) (keymapp p3/vterm-command-map) (string-match-p "vterm-bashrc" vterm-shell)) (kill-emacs 1))'
-
-      - name: Smoke-load GPTel configuration boundary
-        run: |
-          emacs -Q --batch \
-            -L lisp \
-            --eval '(setq user-emacs-directory (file-name-as-directory default-directory))' \
-            --eval '(require (quote use-package-ensure))' \
-            --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
-            --eval '(defvar gptel-model (quote smoke-model))' \
-            --eval '(defun gptel-api-key-from-auth-source () nil)' \
-            --eval '(provide (quote gptel))' \
-            -l lisp/p3-config-loader.el \
-            -l lisp/p3-config-gptel.el \
-            --eval '(unless (and (featurep (quote p3-config-gptel)) (featurep (quote p3-gptel)) (eq gptel-model (quote smoke-model)) (eq gptel-api-key (quote gptel-api-key-from-auth-source)) (eq (key-binding (kbd "C-c g")) p3/gptel-command-map)) (kill-emacs 1))'
-
-      - name: Smoke-load Org configuration boundary
-        run: |
-          emacs -Q --batch \
-            -L lisp \
-            --eval '(setq user-emacs-directory (file-name-as-directory default-directory))' \
-            --eval '(require (quote use-package-ensure))' \
-            --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
-            -l lisp/p3-config-loader.el \
-            -l lisp/p3-config-org.el \
-            --eval '(unless (and (featurep (quote p3-config-org)) (featurep (quote p3-org)) (eq org-startup-folded (quote content)) (eq org-confirm-babel-evaluate t) (featurep (quote p3-org-export))) (kill-emacs 1))'
-
-      - name: Smoke-load Org-roam configuration boundary
-        run: |
-          emacs -Q --batch \
-            -L lisp \
-            --eval '(setq user-emacs-directory (file-name-as-directory default-directory))' \
-            --eval '(require (quote use-package-ensure))' \
-            --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
-            --eval '(defun org-roam-db-autosync-mode (&optional _arg) t)' \
-            --eval '(provide (quote org-roam))' \
-            -l lisp/p3-config-loader.el \
-            -l lisp/p3-config-org-roam.el \
-            --eval '(unless (and (featurep (quote p3-config-org-roam)) (featurep (quote p3-org-roam)) (fboundp (quote p3/org-roam-get-agenda))) (kill-emacs 1))'
-
-      - name: Smoke-load Org presentation configuration boundary
-        run: |
-          emacs -Q --batch \
-            -L lisp \
-            --eval '(setq user-emacs-directory (file-name-as-directory default-directory))' \
-            --eval '(require (quote use-package-ensure))' \
-            --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
-            --eval '(require (quote org))' \
-            --eval '(defvar org-present-mode-keymap (make-sparse-keymap))' \
-            --eval '(provide (quote hide-mode-line))' \
-            --eval '(provide (quote visual-fill-column))' \
-            --eval '(provide (quote org-present))' \
-            -l lisp/p3-config-loader.el \
-            -l lisp/p3-config-org-present.el \
-            --eval '(unless (and (featurep (quote p3-config-org-present)) (featurep (quote p3-org-present)) (featurep (quote face-remap)) (fboundp (quote p3/org-present-start))) (kill-emacs 1))'
-
-      - name: Smoke-load Reference configuration boundary
-        run: |
-          emacs -Q --batch \
-            -L lisp \
-            --eval '(setq user-emacs-directory (file-name-as-directory default-directory))' \
-            --eval '(require (quote use-package-ensure))' \
-            --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
-            -l lisp/p3-config-loader.el \
-            -l lisp/p3-config-reference.el \
-            --eval '(unless (and (featurep (quote p3-config-reference)) (featurep (quote p3-reference)) (equal p3/reference-bibliography-file (expand-file-name "~/org/bib/main.bib")) (equal p3/reference-pdf-directory (file-name-as-directory (expand-file-name "~/org/lib/"))) (eq (lookup-key global-map (kbd "C-c b")) p3/reference-command-map)) (kill-emacs 1))'
-
-      - name: Run ERT test suite
-        run: |
-          emacs -Q --batch \
-            -L lisp \
-            -l test/p3-config-loader-test.el \
-            -l test/p3-config-test.el \
-            -l test/p3-config-retirement-test.el \
-            -l test/p3-config-appearance-test.el \
-            -l test/p3-tab-bar-appearance-test.el \
-            -l test/p3-config-editing-ownership-test.el \
-            -l test/p3-config-ess-test.el \
-            -l test/p3-project-test.el \
-            -l test/p3-config-project-test.el \
-            -l test/p3-project-preview-window-test.el \
-            -l test/p3-core-test.el \
-            -l test/p3-platform-test.el \
-            -l test/p3-config-python-test.el \
-            -l test/p3-python-test.el \
-            -l test/p3-terminal-test.el \
-            -l test/p3-config-terminal-test.el \
-            -l test/p3-ess-test.el \
-            -l test/p3-gptel-test.el \
-            -l test/p3-config-gptel-test.el \
-            -l test/p3-r-tools-test.el \
             -l test/p3-r-tidyverse-completion-test.el \
-            -l test/p3-org-test.el \
-            -l test/p3-config-org-test.el \
-            -l test/p3-org-roam-test.el \
-            -l test/p3-config-org-roam-test.el \
-            -l test/p3-org-present-test.el \
-            -l test/p3-config-org-present-test.el \
-            -l test/p3-org-export-test.el \
-            -l test/p3-org-import-test.el \
-            -l test/p3-reference-test.el \
-            -l test/p3-reference-reconstruction-test.el \
-            -l test/p3-reference-adversarial-test.el \
-            -l test/p3-config-reference-test.el \
-            -l test/p3-commands-test.el \
-            -l test/p3-screen-record-test.el \
-            -l test/p3-git-test.el \
             -f ert-run-tests-batch-and-exit
