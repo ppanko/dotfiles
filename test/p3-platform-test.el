@@ -217,7 +217,7 @@
                (lambda () "C:/Program Files/R/R-4.5.1/bin/Rterm.exe")))
       (should
        (equal (p3/windows-select-r-program)
-              "C:/Program Files/R/R-4.5.0/bin/Rterm.exe")))))
+              "C:/Program Files/R/R-4.5.1/bin/Rterm.exe")))))
 
 (ert-deftest p3-platform-configurators-are-noops-off-windows ()
   (let ((rtools-path "unchanged")
