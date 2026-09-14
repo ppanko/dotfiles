@@ -49,15 +49,89 @@
     (let ((coding-system-for-write 'binary))
       (write-region (point-min) (point-max) path nil 'silent))))
 
-(defun p3-org-export-test--docx-as-gfm (path)
-  "Return PATH converted from DOCX to GFM through Pandoc."
+(defun p3-org-export-test--python-executable ()
+  "Return a Python executable suitable for DOCX package inspection."
+  (or (executable-find "python3")
+      (executable-find "python")))
+
+(defun p3-org-export-test--zip-member-contents (archive member)
+  "Return MEMBER contents from ZIP ARCHIVE as UTF-8 text."
   (with-temp-buffer
     (let ((status
-           (call-process "pandoc" nil (current-buffer) nil
-                         "--from=docx" "--to=gfm" path)))
+           (call-process
+            (p3-org-export-test--python-executable)
+            nil (current-buffer) nil
+            "-c"
+            (concat
+             "import sys, zipfile; "
+             "sys.stdout.write(zipfile.ZipFile(sys.argv[1]).read(sys.argv[2]).decode('utf-8'))")
+            archive member)))
       (unless (and (integerp status) (zerop status))
-        (error "Pandoc could not read generated DOCX: %s" (buffer-string)))
+        (error "Could not read %s from %s: %s"
+               member archive (buffer-string)))
       (buffer-string))))
+
+(defun p3-org-export-test--zip-members (archive)
+  "Return member names from ZIP ARCHIVE."
+  (with-temp-buffer
+    (let ((status
+           (call-process
+            (p3-org-export-test--python-executable)
+            nil (current-buffer) nil
+            "-c"
+            (concat
+             "import sys, zipfile; "
+             "sys.stdout.write('\\n'.join(zipfile.ZipFile(sys.argv[1]).namelist()))")
+            archive)))
+      (unless (and (integerp status) (zerop status))
+        (error "Could not list %s: %s" archive (buffer-string)))
+      (split-string (buffer-string) "\n" t))))
+
+(defun p3-org-export-test--customize-reference-docx (path)
+  "Customize PATH outside Pandoc to simulate an external Word template."
+  (let ((script (make-temp-file "p3-org-export-reference-" nil ".py")))
+    (unwind-protect
+        (progn
+          (with-temp-file script
+            (insert
+             "import os, sys, tempfile, zipfile\n"
+             "import xml.etree.ElementTree as ET\n"
+             "path = sys.argv[1]\n"
+             "w = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'\n"
+             "ET.register_namespace('w', w)\n"
+             "with zipfile.ZipFile(path, 'r') as zin:\n"
+             "    files = {name: zin.read(name) for name in zin.namelist()}\n"
+             "styles = ET.fromstring(files['word/styles.xml'])\n"
+             "heading = next(s for s in styles.findall('{%s}style' % w) if s.get('{%s}styleId' % w) == 'Heading1')\n"
+             "rpr = heading.find('{%s}rPr' % w)\n"
+             "if rpr is None:\n"
+             "    rpr = ET.SubElement(heading, '{%s}rPr' % w)\n"
+             "fonts = rpr.find('{%s}rFonts' % w)\n"
+             "if fonts is None:\n"
+             "    fonts = ET.SubElement(rpr, '{%s}rFonts' % w)\n"
+             "fonts.set('{%s}ascii' % w, 'Courier New')\n"
+             "fonts.set('{%s}hAnsi' % w, 'Courier New')\n"
+             "files['word/styles.xml'] = ET.tostring(styles, encoding='utf-8', xml_declaration=True)\n"
+             "document = ET.fromstring(files['word/document.xml'])\n"
+             "margin = document.find('.//{%s}sectPr/{%s}pgMar' % (w, w))\n"
+             "margin.set('{%s}top' % w, '1008')\n"
+             "files['word/document.xml'] = ET.tostring(document, encoding='utf-8', xml_declaration=True)\n"
+             "fd, tmp = tempfile.mkstemp(suffix='.docx')\n"
+             "os.close(fd)\n"
+             "try:\n"
+             "    with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zout:\n"
+             "        for name, data in files.items():\n"
+             "            zout.writestr(name, data)\n"
+             "    os.replace(tmp, path)\n"
+             "finally:\n"
+             "    if os.path.exists(tmp): os.unlink(tmp)\n"))
+          (let ((status
+                 (call-process
+                  (p3-org-export-test--python-executable)
+                  nil nil nil script path)))
+            (unless (and (integerp status) (zerop status))
+              (error "Could not customize reference DOCX"))))
+      (delete-file script))))
 
 (defun p3-org-export-test--zip-file-p (path)
   "Return non-nil when PATH starts with the ZIP file signature."
@@ -232,7 +306,8 @@
           (kill-buffer (current-buffer)))))))
 
 (ert-deftest p3-org-export-docx-runs-realistic-report-through-pandoc ()
-  (skip-unless (executable-find "pandoc"))
+  (skip-unless (and (executable-find "pandoc")
+                    (p3-org-export-test--python-executable)))
   (p3-org-export-test--with-temp-directory directory
     (let* ((source (expand-file-name "report.org" directory))
            (bibliography (expand-file-name "references.bib" directory))
@@ -253,6 +328,9 @@
          "a footnote[fn:1], and a citation [cite:@doe2020].\n\n"
          "- First item\n"
          "- Second item\n\n"
+         "#+BEGIN_EXPORT openxml\n"
+         "<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>\n"
+         "#+END_EXPORT\n\n"
          "* Data\n"
          "#+CAPTION: Example table\n"
          "| Name | Value |\n"
@@ -268,24 +346,44 @@
        (zerop
         (call-process "pandoc" nil nil nil
                       reference-source "-o" reference)))
+      (p3-org-export-test--customize-reference-docx reference)
       (with-current-buffer (find-file-noselect source)
         (unwind-protect
             (let ((org-cite-global-bibliography nil))
               (org-mode)
               (let* ((output (p3-org-export-run 'docx reference))
-                     (roundtrip (p3-org-export-test--docx-as-gfm output)))
+                     (document-xml
+                      (p3-org-export-test--zip-member-contents
+                       output "word/document.xml"))
+                     (styles-xml
+                      (p3-org-export-test--zip-member-contents
+                       output "word/styles.xml"))
+                     (relationships
+                      (p3-org-export-test--zip-member-contents
+                       output "word/_rels/document.xml.rels"))
+                     (footnotes
+                      (p3-org-export-test--zip-member-contents
+                       output "word/footnotes.xml"))
+                     (members (p3-org-export-test--zip-members output)))
                 (should (file-exists-p output))
                 (should (> (file-attribute-size (file-attributes output)) 0))
                 (should (p3-org-export-test--zip-file-p output))
-                (should (string-match-p "# Executive summary" roundtrip))
-                (should (string-match-p "https://example.com" roundtrip))
-                (should (string-match-p "First item" roundtrip))
-                (should (string-match-p "| Name | Value |" roundtrip))
-                (should (string-match-p "<img src=" roundtrip))
-                (should (string-match-p "Example figure" roundtrip))
-                (should (string-match-p "Doe 2020" roundtrip))
-                (should (string-match-p "Doe, Jane" roundtrip))
-                (should (string-match-p "A footnote" roundtrip))))
+                (should (string-match-p "Executive summary" document-xml))
+                (should (string-match-p "<w:tbl" document-xml))
+                (should (string-match-p "<w:numPr" document-xml))
+                (should (string-match-p "<w:drawing" document-xml))
+                (should (string-match-p "Example figure" document-xml))
+                (should (string-match-p "Doe" document-xml))
+                (should (string-match-p "Example Article" document-xml))
+                (should (string-match-p "w:type=\"page\"" document-xml))
+                (should (string-match-p "w:top=\"1008\"" document-xml))
+                (should (string-match-p "Courier New" styles-xml))
+                (should (string-match-p "https://example.com" relationships))
+                (should (string-match-p "A footnote" footnotes))
+                (should
+                 (string-match-p
+                  "word/media/[^\n]*\\.png"
+                  (mapconcat #'identity members "\n")))))
           (set-buffer-modified-p nil)
           (kill-buffer (current-buffer)))))))
 
