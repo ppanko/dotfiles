@@ -2,6 +2,7 @@
 
 (require 'ert)
 (require 'cl-lib)
+(require 'use-package)
 
 (defconst p3-git-test--root
   (file-name-directory
@@ -92,22 +93,29 @@
       (when (buffer-live-p other)
         (kill-buffer other)))))
 
-(ert-deftest p3-git-config-declares-forge-as-magit-extension ()
-  (let ((path (expand-file-name "lisp/p3-config-git.el" p3-git-test--root)))
-    (with-temp-buffer
-      (insert-file-contents path)
-      (let* ((contents (buffer-string))
-             (magit-position
-              (string-match (regexp-quote "(use-package magit") contents))
-             (forge-position
-              (string-match (regexp-quote "(use-package forge") contents)))
-        (should magit-position)
-        (should forge-position)
-        (should (< magit-position forge-position))
-        (should
-         (string-match-p
-          (regexp-quote "(use-package forge\n  :after magit)")
-          contents))))))
+(ert-deftest p3-git-config-keeps-magit-usable-without-forge ()
+  (let* ((path (expand-file-name "lisp/p3-config-git.el" p3-git-test--root))
+         (global-map (copy-keymap global-map))
+         (features (cons 'magit
+                         (delq 'forge
+                               (delq 'p3-config-git
+                                     (copy-sequence features)))))
+         (after-load-alist (copy-tree after-load-alist))
+         (use-package-always-ensure nil)
+         (original-require (symbol-function 'require)))
+    (cl-letf (((symbol-function 'require)
+               (lambda (feature &rest arguments)
+                 (if (eq feature 'forge)
+                     (signal 'file-missing
+                             '("Cannot open load file" "forge"))
+                   (apply original-require feature arguments)))))
+      (load path nil t))
+    (should (featurep 'p3-config-git))
+    (should (keymapp p3/magit-command-map))
+    (should (eq (lookup-key global-map (kbd "C-c m"))
+                p3/magit-command-map))
+    (should (fboundp 'p3/git-run))
+    (should-not (featurep 'forge))))
 
 (provide 'p3-git-test)
 
