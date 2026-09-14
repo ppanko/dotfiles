@@ -35,6 +35,7 @@
 (declare-function dashboard-insert-startupify-lists "dashboard" (&optional force-refresh))
 (declare-function flycheck-count-errors "flycheck" (errors))
 (declare-function doom-modeline-mode "doom-modeline" (&optional arg))
+(declare-function p3/screen-record-indicator "p3-screen-record" ())
 
 (defconst p3/appearance-accent-color "#FFD700"
   "Shared accent color for high-value current-context UI.")
@@ -361,9 +362,15 @@
                  (p3/appearance--format-construct mode-line-process))))
       (unless (string-empty-p text) text))))
 
+(defun p3/appearance--recording-segment ()
+  "Return visible screen-recording state when capture is active."
+  (when (fboundp 'p3/screen-record-indicator)
+    (p3/screen-record-indicator)))
+
 (defun p3/appearance--left-segment ()
   "Return the left identity area of the mode line."
   (p3/appearance--join-left
+   (p3/appearance--recording-segment)
    (p3/appearance--buffer-state)
    (p3/appearance--remote-segment)
    (p3/appearance--file-segment)

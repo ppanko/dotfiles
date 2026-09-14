@@ -6,6 +6,7 @@
 (require 'p3-config-loader)
 (p3/config-load-module 'p3-commands)
 (p3/config-load-module 'p3-core)
+(p3/config-load-module 'p3-screen-record)
 
 (defvar dashboard-startup-banner)
 (defvar dashboard-center-content)
