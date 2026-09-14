@@ -5,6 +5,7 @@
 
 (p3/config-load-module 'p3-ess)
 (declare-function p3/ess-setup "p3-ess" ())
+(declare-function p3/ess-configure-rmarkdown-compile "p3-ess" ())
 (p3/ess-setup)
 
 (p3/config-load-module 'p3-r-tools)
@@ -103,12 +104,11 @@
 
 (add-to-list 'file-coding-system-alist '("\\.Rmd\\'" . utf-8-dos))
 
-(defun compile-rmd ()
-  (set (make-local-variable 'compile-command)
-       (concat "R -e \"rmarkdown::render('" buffer-file-name "')\"")))
-
-(add-hook 'ess-mode-hook 'compile-rmd)
-(add-hook 'markdown-mode-hook 'compile-rmd)
+;; `find-file-hook' is the mode-independent authority for R Markdown files.
+;; Keep the Markdown hook as a harmless fallback for buffers whose mode changes
+;; after visiting the file; the setup function itself is extension-gated.
+(add-hook 'find-file-hook #'p3/ess-configure-rmarkdown-compile)
+(add-hook 'markdown-mode-hook #'p3/ess-configure-rmarkdown-compile)
 
 (provide 'p3-config-ess)
 

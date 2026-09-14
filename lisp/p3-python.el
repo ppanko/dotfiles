@@ -7,6 +7,9 @@
 
 (defvar eglot-server-programs)
 
+(defvar p3/python-language-server-bootstrap-failed nil
+  "System-Python/server key whose basedpyright bootstrap failed this session.")
+
 (defun p3/python-project-interpreter ()
   "Return the project-local Python executable, when one exists."
   (when-let ((root (p3/project-root)))
@@ -47,7 +50,11 @@
     user-emacs-directory)))
 
 (defun p3/python-ensure-language-server ()
-  "Install and return the managed basedpyright language-server executable."
+  "Install and return the managed basedpyright language-server executable.
+
+A failed bootstrap is attempted only once per system-Python/server pair during
+an Emacs session.  Use `p3/python-bootstrap-language-server' to retry after
+fixing the underlying problem."
   (let* ((windows-p (eq system-type 'windows-nt))
          (system-python (or (executable-find (if windows-p "python" "python3"))
                             (executable-find "python")))
@@ -56,20 +63,65 @@
          (server (p3/python-tools-path
                   (if windows-p
                       "Scripts/basedpyright-langserver.exe"
-                    "bin/basedpyright-langserver"))))
-    (when (and system-python (not (file-executable-p server)))
-      (make-directory (file-name-directory tool-python) t)
-      (unless (file-executable-p tool-python)
-        (call-process system-python nil "*p3-python-bootstrap*" nil
-                      "-m" "venv"
-                      (file-name-directory
-                       (directory-file-name
-                        (file-name-directory tool-python)))))
-      (when (file-executable-p tool-python)
-        (message "Installing basedpyright for Python support...")
-        (call-process tool-python nil "*p3-python-bootstrap*" nil
-                      "-m" "pip" "install" "--upgrade" "basedpyright")))
-    (and (file-executable-p server) server)))
+                    "bin/basedpyright-langserver")))
+         (key (cons system-python server)))
+    (cond
+     ((file-executable-p server)
+      (setq p3/python-language-server-bootstrap-failed nil)
+      server)
+     ((null system-python)
+      nil)
+     ((equal p3/python-language-server-bootstrap-failed key)
+      nil)
+     (t
+      (condition-case err
+          (progn
+            (make-directory (file-name-directory tool-python) t)
+            (unless (file-executable-p tool-python)
+              (call-process system-python nil "*p3-python-bootstrap*" nil
+                            "-m" "venv"
+                            (file-name-directory
+                             (directory-file-name
+                              (file-name-directory tool-python)))))
+            (when (file-executable-p tool-python)
+              (message "Installing basedpyright for Python support...")
+              (call-process tool-python nil "*p3-python-bootstrap*" nil
+                            "-m" "pip" "install" "--upgrade" "basedpyright"))
+            (if (file-executable-p server)
+                (progn
+                  (setq p3/python-language-server-bootstrap-failed nil)
+                  server)
+              (setq p3/python-language-server-bootstrap-failed key)
+              (display-warning
+               'p3/python
+               (concat
+                "Could not prepare basedpyright. Python editing remains available; "
+                "see *p3-python-bootstrap*, fix the underlying problem, then run "
+                "M-x p3/python-bootstrap-language-server to retry.")
+               :warning)
+              nil))
+        (error
+         (setq p3/python-language-server-bootstrap-failed key)
+         (display-warning
+          'p3/python
+          (format
+           (concat
+            "Could not prepare basedpyright: %s. Python editing remains available; "
+            "see *p3-python-bootstrap*, fix the underlying problem, then run "
+            "M-x p3/python-bootstrap-language-server to retry.")
+           (error-message-string err))
+          :warning)
+         nil))))))
+
+;;;###autoload
+(defun p3/python-bootstrap-language-server ()
+  "Retry preparation of the managed basedpyright language server."
+  (interactive)
+  (setq p3/python-language-server-bootstrap-failed nil)
+  (if-let ((server (p3/python-ensure-language-server)))
+      (message "Python language server ready: %s" (abbreviate-file-name server))
+    (user-error
+     "Python language-server bootstrap failed; see *p3-python-bootstrap*")))
 
 (defun p3/python-eglot-ensure ()
   "Start Eglot with the managed basedpyright language server."

@@ -184,18 +184,14 @@
           (ess-R-fl-keyword:%op% . t)))
       pairs))))
 
-(ert-deftest p3-config-ess-preserves-rmarkdown-compile-hook ()
+(ert-deftest p3-config-ess-delegates-rmarkdown-compile-behavior ()
   (let ((forms (p3-config-ess-test--forms "lisp/p3-config-ess.el")))
+    (should-not (p3-config-ess-test--defun-form 'compile-rmd))
+    (should-not (member '(add-hook 'ess-mode-hook 'compile-rmd) forms))
     (should
-     (equal
-      (p3-config-ess-test--defun-form 'compile-rmd)
-      '(defun compile-rmd ()
-         (set (make-local-variable 'compile-command)
-              (concat "R -e \"rmarkdown::render('"
-                      buffer-file-name
-                      "')\"")))))
-    (should (member '(add-hook 'ess-mode-hook 'compile-rmd) forms))
-    (should (member '(add-hook 'markdown-mode-hook 'compile-rmd) forms))))
+     (member
+      '(add-hook 'markdown-mode-hook #'p3/ess-configure-rmarkdown-compile)
+      forms))))
 
 (ert-deftest p3-r-language-server-api-is-explicit ()
   (dolist (function '(p3/r-program
