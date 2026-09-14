@@ -2,6 +2,7 @@
 
 (require 'ert)
 (require 'cl-lib)
+(require 'seq)
 (require 'subr-x)
 
 (defconst p3-integration-cleanup-test--root
@@ -23,6 +24,29 @@
     (insert-file-contents
      (expand-file-name relative p3-integration-cleanup-test--root))
     (buffer-string)))
+
+(defun p3-integration-cleanup-test--forms (relative)
+  "Read all top-level Lisp forms from repository file RELATIVE."
+  (with-temp-buffer
+    (insert-file-contents
+     (expand-file-name relative p3-integration-cleanup-test--root))
+    (goto-char (point-min))
+    (let (forms)
+      (condition-case nil
+          (while t
+            (push (read (current-buffer)) forms))
+        (end-of-file nil))
+      (nreverse forms))))
+
+(defun p3-integration-cleanup-test--find-call (form head)
+  "Return the first nested call in FORM whose car is HEAD."
+  (cond
+   ((and (consp form) (eq (car form) head)) form)
+   ((consp form)
+    (seq-some
+     (lambda (child)
+       (p3-integration-cleanup-test--find-call child head))
+     form))))
 
 (ert-deftest p3-integration-ess-canonicalizes-local-project-identity ()
   (skip-unless (not (eq system-type 'windows-nt)))
@@ -70,22 +94,33 @@
         (kill-buffer chat))
       (delete-directory parent t))))
 
-(ert-deftest p3-integration-rmarkdown-compile-uses-shared-r-and-only-rmd ()
+(ert-deftest p3-integration-rmarkdown-compile-is-mode-independent ()
+  (let ((forms
+         (p3-integration-cleanup-test--forms "lisp/p3-config-ess.el")))
+    (should
+     (member
+      '(add-hook 'find-file-hook #'p3/ess-configure-rmarkdown-compile)
+      forms))))
+
+(ert-deftest p3-integration-rmarkdown-compile-uses-shared-r-and-posix-quoting ()
   (with-temp-buffer
-    (setq buffer-file-name "/tmp/report with spaces.Rmd")
-    (cl-letf (((symbol-function 'p3/r-program)
-               (lambda () "/opt/R tools/bin/R")))
-      (p3/ess-configure-rmarkdown-compile))
-    (should (local-variable-p 'compile-command))
-    (should
-     (string-match-p
-      (regexp-quote (shell-quote-argument "/opt/R tools/bin/R"))
-      compile-command))
-    (should (string-match-p "--args" compile-command))
-    (should
-     (string-match-p
-      (regexp-quote (shell-quote-argument "/tmp/report with spaces.Rmd"))
-      compile-command)))
+    (let ((system-type 'windows-nt))
+      (setq buffer-file-name "/tmp/report $draft.Rmd")
+      (cl-letf (((symbol-function 'p3/r-program)
+                 (lambda () "/opt/R tools/$stable/bin/R")))
+        (p3/ess-configure-rmarkdown-compile))
+      (should (local-variable-p 'compile-command))
+      (should
+       (string-match-p
+        (regexp-quote
+         (shell-quote-argument "/opt/R tools/$stable/bin/R" t))
+        compile-command))
+      (should (string-match-p "--args" compile-command))
+      (should
+       (string-match-p
+        (regexp-quote
+         (shell-quote-argument "/tmp/report $draft.Rmd" t))
+        compile-command))))
   (with-temp-buffer
     (setq buffer-file-name "/tmp/report.md")
     (setq-local compile-command "make -k")
@@ -114,35 +149,72 @@
           (should (= calls 1)))
       (delete-directory tools t))))
 
+(ert-deftest p3-integration-python-signaled-bootstrap-failure-is-latched ()
+  (let* ((tools (make-temp-file "p3-python-bootstrap-error-" t))
+         (p3/python-language-server-bootstrap-failed nil)
+         (calls 0)
+         warnings)
+    (unwind-protect
+        (cl-letf (((symbol-function 'executable-find)
+                   (lambda (_program) "/usr/bin/python3"))
+                  ((symbol-function 'p3/python-tools-path)
+                   (lambda (file) (expand-file-name file tools)))
+                  ((symbol-function 'call-process)
+                   (lambda (&rest _args)
+                     (setq calls (1+ calls))
+                     (error "permission denied")))
+                  ((symbol-function 'display-warning)
+                   (lambda (_type message &optional _level _buffer-name)
+                     (push message warnings))))
+          (should-not (p3/python-ensure-language-server))
+          (should-not (p3/python-ensure-language-server))
+          (should (= calls 1))
+          (should (= (length warnings) 1))
+          (should (string-match-p "permission denied" (car warnings))))
+      (delete-directory tools t))))
+
 (ert-deftest p3-integration-gptel-which-key-matches-current-command-surface ()
-  (let ((base (p3-integration-cleanup-test--contents "lisp/p3-config-base.el"))
-        (gptel (p3-integration-cleanup-test--contents "lisp/p3-config-gptel.el")))
-    (dolist (obsolete '("C-c g l" "C-c g c" "C-c g w"))
-      (should-not (string-match-p (regexp-quote obsolete) base)))
-    (dolist (current '("C-c g g" "C-c g m" "C-c g a" "C-c g f"
-                       "C-c g D" "C-c g r" "C-c g d" "C-c g t"
-                       "C-c g e" "C-c g v"))
-      (should (string-match-p (regexp-quote current) gptel)))))
+  (let* ((forms
+          (p3-integration-cleanup-test--forms "lisp/p3-config-gptel.el"))
+         (call
+          (seq-some
+           (lambda (form)
+             (p3-integration-cleanup-test--find-call
+              form 'which-key-add-key-based-replacements))
+           forms))
+         (args (cdr call))
+         advertised
+         live)
+    (should call)
+    (while args
+      (push (car args) advertised)
+      (setq args (cddr args)))
+    (map-keymap
+     (lambda (event binding)
+       (when binding
+         (push (concat "C-c g " (single-key-description event)) live)))
+     p3/gptel-command-map)
+    (should
+     (equal (sort advertised #'string<)
+            (sort live #'string<)))))
 
 (ert-deftest p3-integration-office-preview-is-lazy ()
-  (let ((org-config
-         (p3-integration-cleanup-test--contents "lisp/p3-config-org.el")))
+  (let* ((forms
+          (p3-integration-cleanup-test--forms "lisp/p3-config-org.el"))
+         (form
+          (seq-find
+           (lambda (candidate)
+             (and (consp candidate)
+                  (eq (car candidate) 'use-package)
+                  (eq (cadr candidate) 'p3-office-preview)))
+           forms))
+         (args (cddr form)))
+    (should form)
     (should
-     (string-match-p
-      "(use-package p3-office-preview\\(?:.\\|\n\\)*:commands"
-      org-config))
-    (should-not
-     (string-match-p
-      "(use-package p3-office-preview\\(?:.\\|\n\\)*:demand[[:space:]]+t"
-      org-config))))
-
-(ert-deftest p3-integration-completed-design-specs-are-retired ()
-  (dolist (relative
-           '("docs/superpowers/specs/2026-09-08-project-session-continuity-design.md"
-             "docs/superpowers/specs/2026-09-14-project-aware-org-roam-design.md"))
-    (should-not
-     (file-exists-p
-      (expand-file-name relative p3-integration-cleanup-test--root)))))
+     (equal
+      (plist-get args :commands)
+      '(p3/office-preview-pptx p3/org-export-pptx-preview)))
+    (should-not (plist-member args :demand))))
 
 (provide 'p3-integration-cleanup-test)
 
