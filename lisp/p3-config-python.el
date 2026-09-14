@@ -7,7 +7,6 @@
 
 (defvar python-mode-map)
 (defvar python-ts-mode-map)
-(defvar eglot-mode-map)
 (defvar flycheck-python-flake8-executable)
 
 (use-package python
@@ -18,7 +17,8 @@
               ("C-c C-c" . p3/python-send-region-or-paragraph-and-step)
               ("C-<up>" . backward-paragraph)
               ("C-<down>" . forward-paragraph)
-              ("C-c C-z" . p3/python-display-shell))
+              ("C-c C-z" . p3/python-display-shell)
+              ("C-c l f" . eglot-format))
   :hook ((python-mode . p3/python-setup-project-interpreter)
          (python-mode . p3/python-eglot-ensure)
          (python-mode . p3/python-disable-flycheck))
@@ -40,15 +40,8 @@
     (define-key python-ts-mode-map (kbd "C-c C-c") #'p3/python-send-region-or-paragraph-and-step)
     (define-key python-ts-mode-map (kbd "C-<up>") #'backward-paragraph)
     (define-key python-ts-mode-map (kbd "C-<down>") #'forward-paragraph)
-    (define-key python-ts-mode-map (kbd "C-c C-z") #'p3/python-display-shell)))
-
-(use-package eglot
-  :ensure t
-  :commands eglot-ensure
-  :bind (:map eglot-mode-map
-              ("C-c l r" . eglot-rename)
-              ("C-c l a" . eglot-code-actions)
-              ("C-c l f" . eglot-format)))
+    (define-key python-ts-mode-map (kbd "C-c C-z") #'p3/python-display-shell)
+    (define-key python-ts-mode-map (kbd "C-c l f") #'eglot-format)))
 
 (setq flycheck-python-flake8-executable "flake8")
 

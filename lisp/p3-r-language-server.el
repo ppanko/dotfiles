@@ -1,0 +1,290 @@
+;;; p3-r-language-server.el --- Managed R language-server integration -*- lexical-binding: t; -*-
+
+;;; Commentary:
+;; Keep editor tooling outside project libraries while using the same R
+;; installation authority as ESS.  Eglot supplies semantic behavior; this file
+;; only resolves/bootstrap the R-side server and preserves existing Company and
+;; Flycheck ownership.
+
+;;; Code:
+
+(require 'cl-lib)
+(require 'subr-x)
+(require 'p3-platform)
+
+(defvar eglot-ignored-server-capabilities)
+(defvar eglot-server-programs)
+(defvar eglot-stay-out-of)
+
+(defconst p3/r-eglot-ignored-capabilities
+  '(:documentFormattingProvider
+    :documentRangeFormattingProvider
+    :documentOnTypeFormattingProvider
+    :semanticTokensProvider
+    :foldingRangeProvider
+    :typeHierarchyProvider
+    :inlayHintProvider
+    :inlineValueProvider
+    :colorProvider
+    :selectionRangeProvider
+    :linkedEditingRangeProvider
+    :codeLensProvider
+    :documentLinkProvider)
+  "R server capabilities intentionally outside the semantic workflow scope.")
+
+(defvar p3/r-language-server-bootstrap-failed nil
+  "Program/library key whose language-server bootstrap failed this session.")
+
+(defvar p3/r-language-server-ready nil
+  "Cons of R program and managed library known usable this session.")
+
+(defvar p3/r-language-server-warning-key nil
+  "Last R language-server setup problem already reported this session.")
+
+(defun p3/r-language-server-warn-once (key message)
+  "Report MESSAGE once for language-server problem KEY."
+  (unless (equal key p3/r-language-server-warning-key)
+    (setq p3/r-language-server-warning-key key)
+    (display-warning 'p3/r-language-server message :warning)))
+
+(defun p3/r-language-server-platform-key ()
+  "Return a filesystem-safe key for the current platform."
+  (pcase system-type
+    ('windows-nt "windows")
+    ('gnu/linux "linux")
+    (_ (replace-regexp-in-string "/" "-" (symbol-name system-type)))))
+
+(defun p3/r-version (&optional program)
+  "Return the full version of R from PROGRAM, or nil when unavailable."
+  (when-let ((program (or program (p3/r-program))))
+    (with-temp-buffer
+      (let ((status
+             (call-process
+              program nil t nil
+              "--slave" "--vanilla" "-e"
+              "cat(paste(R.version$major, R.version$minor, sep='.'))")))
+        (when (and (integerp status) (zerop status))
+          (let ((version (string-trim (buffer-string))))
+            (and (string-match-p "\\`[0-9]+\\.[0-9]+" version)
+                 version)))))))
+
+(defun p3/r-major-minor-version (version)
+  "Return major.minor from R VERSION, or nil when VERSION is malformed."
+  (when (and version
+             (string-match "\\`\\([0-9]+\\.[0-9]+\\)" version))
+    (match-string 1 version)))
+
+(defun p3/r-language-server-tool-root ()
+  "Return the normalized machine-local root for managed R editor tools."
+  (let* ((raw (replace-regexp-in-string
+               "\\\\" "/" user-emacs-directory t t))
+         (absolute
+          (cond
+           ((and (eq system-type 'windows-nt)
+                 (string-match "\\`\\([A-Za-z]\\):/" raw))
+            (concat (downcase (match-string 1 raw)) (substring raw 1)))
+           ((and (eq system-type 'gnu/linux)
+                 (string-prefix-p "/" raw))
+            raw)
+           (t (expand-file-name raw)))))
+    (file-name-as-directory absolute)))
+
+(defun p3/r-language-server-library (version)
+  "Return the managed editor-tool library for R VERSION."
+  (when-let ((major-minor (p3/r-major-minor-version version)))
+    (file-name-as-directory
+     (concat
+      (p3/r-language-server-tool-root)
+      (format "r-tools/%s/R-%s/library"
+              (p3/r-language-server-platform-key)
+              major-minor)))))
+
+(defun p3/r-string-literal (text)
+  "Return TEXT as a double-quoted R string literal."
+  (let ((text (replace-regexp-in-string "\\\\" "/" text t t)))
+    (format "\"%s\""
+            (replace-regexp-in-string "\"" "\\\\\"" text t t))))
+
+(defun p3/r-language-server-library-expression (library body)
+  "Return R code that prepends LIBRARY before evaluating BODY."
+  (format ".libPaths(c(%s, .libPaths())); %s"
+          (p3/r-string-literal (directory-file-name library))
+          body))
+
+(defun p3/r-call-managed-tool-process (program library destination display expression)
+  "Run PROGRAM for managed R tooling with LIBRARY isolated from user/site libs.
+DESTINATION and DISPLAY are passed through to `call-process'.  EXPRession runs
+with LIBRARY as `R_LIBS', while `R_LIBS_USER' and `R_LIBS_SITE' are explicitly
+set to NULL so R cannot satisfy editor-tool dependencies from incidental
+machine-global libraries.  R's own `.Library' remains available."
+  (let ((process-environment (copy-sequence process-environment)))
+    (setenv "R_LIBS" (directory-file-name library))
+    (setenv "R_LIBS_USER" "NULL")
+    (setenv "R_LIBS_SITE" "NULL")
+    (call-process program nil destination display
+                  "--slave" "--vanilla" "-e" expression)))
+
+(defun p3/r-language-server-installed-p (program library)
+  "Return non-nil when PROGRAM can load `languageserver' from LIBRARY itself."
+  (let* ((library-literal
+          (p3/r-string-literal (directory-file-name library)))
+         (expression
+          (format
+           (concat
+            "quit(status=if (tryCatch({"
+            "loadNamespace(\"languageserver\", lib.loc=%s); TRUE"
+            "}, error=function(e) FALSE)) 0L else 1L)")
+           library-literal))
+         (status
+          (p3/r-call-managed-tool-process
+           program library nil nil expression)))
+    (and (integerp status) (zerop status))))
+
+(defun p3/r-install-language-server (program library)
+  "Install released CRAN `languageserver' with PROGRAM into LIBRARY.
+Return non-nil only when the installed package can subsequently be loaded."
+  (make-directory library t)
+  (let* ((buffer (get-buffer-create "*p3-r-language-server-bootstrap*"))
+         (expression
+          (format
+           (concat "install.packages(\"languageserver\", lib=%s, "
+                   "repos=\"https://cloud.r-project.org\", dependencies=NA)")
+           (p3/r-string-literal (directory-file-name library))))
+         status)
+    (with-current-buffer buffer
+      (erase-buffer))
+    (message "Installing R languageserver into %s..."
+             (abbreviate-file-name library))
+    (setq status
+          (p3/r-call-managed-tool-process
+           program library buffer t expression))
+    (if (and (integerp status)
+             (zerop status)
+             (p3/r-language-server-installed-p program library))
+        t
+      (display-warning
+       'p3/r-language-server
+       (format
+        (concat "Could not install R languageserver with %s. "
+                "See %s for CRAN/build output.")
+        program (buffer-name buffer))
+       :warning)
+      nil)))
+
+(defun p3/r-ensure-language-server ()
+  "Return a usable managed `languageserver' library, bootstrapping if needed."
+  (if-let ((program (p3/r-program)))
+      (if (and p3/r-language-server-ready
+               (equal program (car p3/r-language-server-ready)))
+          (cdr p3/r-language-server-ready)
+        (if-let* ((version (p3/r-version program))
+                  (library (p3/r-language-server-library version)))
+            (let ((key (cons program library)))
+              (cond
+               ((p3/r-language-server-installed-p program library)
+                (setq p3/r-language-server-ready key)
+                library)
+               ((equal p3/r-language-server-bootstrap-failed key)
+                nil)
+               (t
+                (condition-case err
+                    (if (p3/r-install-language-server program library)
+                        (progn
+                          (setq p3/r-language-server-bootstrap-failed nil
+                                p3/r-language-server-warning-key nil
+                                p3/r-language-server-ready key)
+                          library)
+                      (setq p3/r-language-server-bootstrap-failed key)
+                      nil)
+                  (error
+                   (setq p3/r-language-server-bootstrap-failed key)
+                   (p3/r-language-server-warn-once
+                    (list 'bootstrap key)
+                    (format
+                     (concat "R languageserver bootstrap failed with %s: %s. "
+                             "ESS remains available; fix the underlying problem, "
+                             "then run M-x p3/r-bootstrap-language-server to retry.")
+                     program (error-message-string err)))
+                   nil)))))
+          (p3/r-language-server-warn-once
+           (list 'version program)
+           (format
+            (concat "Could not determine the version of R at %s. "
+                    "ESS remains available; check the configured R executable, "
+                    "then run M-x p3/r-bootstrap-language-server to retry.")
+            program))
+          nil))
+    (p3/r-language-server-warn-once
+     'no-r
+     (concat
+      "No usable R executable is configured for semantic R support. "
+      "ESS editing remains available; install/configure R, then run "
+      "M-x p3/r-bootstrap-language-server to retry."))
+    nil))
+
+;;;###autoload
+(defun p3/r-bootstrap-language-server ()
+  "Retry preparation of the managed R language server explicitly."
+  (interactive)
+  (setq p3/r-language-server-bootstrap-failed nil
+        p3/r-language-server-ready nil
+        p3/r-language-server-warning-key nil)
+  (condition-case err
+      (if-let ((library (p3/r-ensure-language-server)))
+          (message "R languageserver ready: %s" (abbreviate-file-name library))
+        (user-error "R languageserver bootstrap failed; see warnings/output buffer"))
+    (file-error
+     (let ((message (error-message-string err)))
+       (p3/r-language-server-warn-once
+        (list 'bootstrap message)
+        (format "R languageserver bootstrap failed: %s" message))
+       (user-error "R languageserver bootstrap failed: %s" message)))))
+
+(defun p3/r-language-server-command ()
+  "Return the Eglot command for the selected managed R language server."
+  (when-let* ((library (p3/r-ensure-language-server))
+              (program (p3/r-program)))
+    (list
+     program "--slave" "-e"
+     (p3/r-language-server-library-expression
+      library "languageserver::run()"))))
+
+(defun p3/r-eglot-ensure ()
+  "Start R Eglot with only the semantic capabilities owned by this workflow."
+  (condition-case err
+      (when-let ((command (p3/r-language-server-command)))
+        (require 'eglot)
+        (setq-local
+         eglot-stay-out-of
+         (cl-remove-duplicates
+          (append '(flymake "company") eglot-stay-out-of)
+          :test #'equal))
+        (setq-local
+         eglot-ignored-server-capabilities
+         (cl-remove-duplicates
+          (append p3/r-eglot-ignored-capabilities
+                  eglot-ignored-server-capabilities)
+          :test #'eq))
+        (setq-local eglot-server-programs (copy-tree eglot-server-programs))
+        (setf (alist-get '(R-mode ess-r-mode)
+                         eglot-server-programs nil nil #'equal)
+              command)
+        (eglot-ensure))
+    (error
+     (let ((message (error-message-string err)))
+       (p3/r-language-server-warn-once
+        (list 'startup message)
+        (format
+         (concat "R semantic setup failed: %s. ESS/editing remains available; "
+                 "fix the R setup and run M-x p3/r-bootstrap-language-server "
+                 "to retry.")
+         message)))
+     nil)))
+
+(defun p3/r-language-server-setup ()
+  "Install the R language-server hook exactly once and after R buffer setup."
+  (add-hook 'ess-r-mode-hook #'p3/r-eglot-ensure 90))
+
+(provide 'p3-r-language-server)
+
+;;; p3-r-language-server.el ends here

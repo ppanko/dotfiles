@@ -3,6 +3,7 @@
 (require 'use-package)
 
 (defvar company-dabbrev-downcase)
+(defvar eglot-mode-map)
 (defvar xref-show-xrefs-function)
 (defvar xref-show-definitions-function)
 
@@ -88,6 +89,13 @@
   :hook (after-init . global-company-mode)
   :config
   (setq company-dabbrev-downcase nil))
+
+(use-package eglot
+  :ensure t
+  :commands eglot-ensure
+  :bind (:map eglot-mode-map
+              ("C-c l r" . eglot-rename)
+              ("C-c l a" . eglot-code-actions)))
 
 (provide 'p3-config-completion)
 
