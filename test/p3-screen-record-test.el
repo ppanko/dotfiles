@@ -29,6 +29,13 @@
   (should (featurep 'p3-screen-record))
   (should (commandp 'p3/screen-record)))
 
+(ert-deftest p3-screen-record-base-loads-behavior-owner ()
+  (let ((base (p3-screen-record-test--contents "lisp/p3-config-base.el")))
+    (should
+     (string-match-p
+      (regexp-quote "(p3/config-load-module 'p3-screen-record)")
+      base))))
+
 (ert-deftest p3-screen-record-windows-command-uses-gdigrab-without-audio ()
   (p3-screen-record-test--with-module
    (let ((system-type 'windows-nt))
@@ -88,8 +95,10 @@
      (cl-letf (((symbol-function 'format-time-string)
                 (lambda (&rest _) "20260914-101530")))
        (should
-        (equal (p3/screen-record--output-file)
-               "/tmp/recordings/screen-20260914-101530.mp4"))))))
+        (equal
+         (p3/screen-record--output-file)
+         (expand-file-name "screen-20260914-101530.mp4"
+                           "/tmp/recordings/")))))))
 
 (ert-deftest p3-screen-record-start-prevents-a-second-live-recording ()
   (p3-screen-record-test--with-module
@@ -105,6 +114,7 @@
    (let ((p3/screen-record--process nil)
          (p3/screen-record--backend nil)
          (captured-command nil)
+         (created-directory nil)
          (mode-line-refreshed nil))
      (cl-letf (((symbol-function 'p3/screen-record--output-file)
                 (lambda () "/tmp/screen.mp4"))
@@ -114,7 +124,9 @@
                ((symbol-function 'executable-find)
                 (lambda (program)
                   (when (equal program "ffmpeg") "/usr/bin/ffmpeg")))
-               ((symbol-function 'make-directory) (lambda (&rest _) t))
+               ((symbol-function 'make-directory)
+                (lambda (directory &rest _)
+                  (setq created-directory directory)))
                ((symbol-function 'make-process)
                 (lambda (&rest plist)
                   (setq captured-command (plist-get plist :command))
@@ -124,6 +136,7 @@
        (p3/screen-record-start)
        (should (eq p3/screen-record--process 'recorder-process))
        (should (eq p3/screen-record--backend 'ffmpeg))
+       (should (equal created-directory (file-name-directory "/tmp/screen.mp4")))
        (should (equal captured-command
                       '("/usr/bin/ffmpeg" "-f" "x11grab" "-i" ":0"
                         "/tmp/screen.mp4")))
@@ -160,6 +173,25 @@
                 (lambda (process) (setq interrupted process))))
        (p3/screen-record-stop)
        (should (eq interrupted 'recorder-process))))))
+
+(ert-deftest p3-screen-record-toggle-dispatches-to-current-state ()
+  (p3-screen-record-test--with-module
+   (let (started stopped active)
+     (cl-letf (((symbol-function 'p3/screen-record-active-p)
+                (lambda () active))
+               ((symbol-function 'p3/screen-record-start)
+                (lambda () (setq started t)))
+               ((symbol-function 'p3/screen-record-stop)
+                (lambda () (setq stopped t))))
+       (setq active nil)
+       (p3/screen-record)
+       (should started)
+       (should-not stopped)
+       (setq started nil
+             active t)
+       (p3/screen-record)
+       (should stopped)
+       (should-not started)))))
 
 (ert-deftest p3-screen-record-sentinel-clears-stale-recording-state ()
   (p3-screen-record-test--with-module
