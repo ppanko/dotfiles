@@ -42,6 +42,8 @@ Right column.
 
 Keep these special-block names lowercase. Pandoc preserves the Org special-block class name, while its PowerPoint writer recognizes the lowercase `notes`, `columns`, and `column` classes.
 
-Pandoc selects layouts from the reference PPTX by their standard names. A reference deck intended for general use should retain the standard layouts `Title Slide`, `Title and Content`, `Section Header`, `Two Content`, `Comparison`, `Content with Caption`, and `Blank`. Export is strict: if Pandoc has to warn about a degraded presentation, including a missing required layout, the export fails rather than silently producing a fallback deck.
+Pandoc selects layouts from the reference PPTX by their standard names. A custom reference deck used by this workflow must retain all seven standard layouts Pandoc expects: `Title Slide`, `Title and Content`, `Section Header`, `Two Content`, `Comparison`, `Content with Caption`, and `Blank`. Pandoc resolves these layouts from the reference deck up front; a missing standard layout can therefore trigger a warning even when that layout is not used by the current presentation.
+
+Office export is intentionally strict: any Pandoc warning causes the export to fail. This prevents a missing layout, missing asset, or other warning-driven degradation from being reported as a successful handoff artifact. If Pandoc's warning policy later proves too broad in normal use, narrow it based on a concrete benign warning rather than silently accepting degraded output.
 
 Column widths are controlled by the PowerPoint layout rather than by an Emacs-side positioning system. Precise visual inspection and the render/preview loop are a later part of the Office workflow.
