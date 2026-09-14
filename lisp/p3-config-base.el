@@ -200,7 +200,7 @@
 (global-set-key (kbd "<C-wheel-down>") 'text-scale-decrease)
 (global-set-key (kbd "<C-wheel-up>") 'text-scale-increase)
 
-(let ((backup-dir "~/.cache/tmp/emacs/backups")
+(let ((backup-dir (expand-file-name "backups/" (p3/state-directory)))
       (auto-saves-dir "~/.cache/tmp/emacs/auto-saves/"))
   (dolist (dir (list backup-dir auto-saves-dir))
     (when (not (file-directory-p dir))
