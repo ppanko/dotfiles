@@ -25,6 +25,8 @@ on:
       - "lisp/p3-config-git.el"
       - "lisp/p3-config-python.el"
       - "lisp/p3-config-org.el"
+      - "lisp/p3-org-export.el"
+      - "lisp/p3-office-preview.el"
       - "lisp/p3-config-org-roam.el"
       - "lisp/p3-config-org-present.el"
       - "lisp/p3-config-terminal.el"
@@ -57,6 +59,7 @@ on:
       - "test/p3-r-language-server-test.el"
       - "test/p3-commands-test.el"
       - "test/p3-screen-record-test.el"
+      - "test/p3-office-preview-test.el"
       - "test/p3-git-test.el"
       - ".github/workflows/windows-platform-tests.yml"
   workflow_dispatch:
@@ -113,6 +116,7 @@ jobs:
           lisp/p3-config-appearance.el
           lisp/p3-config-editing.el
           lisp/p3-r-language-server.el
+          lisp/p3-office-preview.el
           lisp/p3-config-terminal.el
 
       - name: Run Windows editing configuration regression
@@ -136,6 +140,13 @@ jobs:
           -l test/p3-platform-test.el
           -l test/p3-project-windows-test.el
           -l test/p3-screen-record-test.el
+          -f ert-run-tests-batch-and-exit
+
+      - name: Run Windows Office preview boundary
+        shell: powershell
+        run: >-
+          emacs -Q --batch -L lisp
+          -l test/p3-office-preview-test.el
           -f ert-run-tests-batch-and-exit
 
       - name: Run Windows config architecture tests
