@@ -22,12 +22,18 @@
      ("M-g n / M-g p" . "next/previous compilation error"))
     ("R / ESS"
      ("C-c R" . "R project, templates, and tools")
+     ("C-c C-t" . "ESS Tracebug/debug commands")
      ("C-c i" . "evaluate library section")
      ("C-c v" . "view data frame")
      ("C-c m" . "run targets make")
      ("C-c d" . "debug targets make")
      ("C-c l" . "load targets object")
      ("S-RET" . "evaluate and step"))
+    ("Language intelligence"
+     ("M-." . "go to definition")
+     ("M-?" . "find references")
+     ("C-c l r" . "rename symbol")
+     ("C-c l a" . "code actions"))
     ("Org"
      ("C-c s" . "insert source block")
      ("C-c C-o" . "open link at point")
@@ -52,8 +58,6 @@
      ("S-RET" . "send statement")
      ("C-c C-c" . "send region/paragraph")
      ("C-c C-z" . "show Python shell")
-     ("C-c l r" . "rename symbol")
-     ("C-c l a" . "code actions")
      ("C-c l f" . "format buffer"))
     ("GPTel"
      ("C-c g g" . "start project GPTel chat")
