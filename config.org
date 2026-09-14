@@ -114,7 +114,17 @@ startup boundary.
 ** Git
 
 Git subprocess/synchronization behavior lives in =lisp/p3-git.el=; Magit,
-git-gutter, and bindings live in =lisp/p3-config-git.el=.
+git-gutter, and bindings live in =lisp/p3-config-git.el=. Forge is an optional
+remote issue/review layer loaded after Magit; local Git and Magit workflows do
+not depend on Forge being authenticated, online, or able to support a remote.
+
+For a supported provider, configure credentials through Forge/Ghub's normal
+=auth-source= setup rather than tracked configuration. For Github.com, also set
+the Forge identity Git setting (for example, =git config --global github.user
+USERNAME=). From a Magit buffer, =N a= adds the current repository to Forge's
+local database on first use; thereafter =N= opens Forge's native dispatch for
+issues, pull requests, discussion, and remote-topic operations. Unsupported or
+partially supported remotes remain ordinary Magit/Git repositories.
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-git)
