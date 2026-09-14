@@ -39,33 +39,39 @@
       (write-region (point-min) (point-max) path nil 'silent))))
 
 (ert-deftest p3-office-import-docx-default-paths-are-predictable ()
-  (let* ((source "/tmp/example.docx")
-         (paths (p3-office-import--docx-paths source)))
-    (should (equal (plist-get paths :output) "/tmp/example.org"))
-    (should (equal (plist-get paths :media-directory)
-                   "/tmp/example-media"))))
+  (p3-org-import-test--with-temp-directory directory
+    (let* ((source (expand-file-name "example.docx" directory))
+           (paths (p3-office-import--docx-paths source)))
+      (should (equal (plist-get paths :output)
+                     (expand-file-name "example.org" directory)))
+      (should (equal (plist-get paths :media-directory)
+                     (expand-file-name "example-media" directory))))))
 
-(ert-deftest p3-office-import-docx-arguments-preserve-review-information ()
-  (should
-   (equal
-    (p3-office-import--docx-arguments
-     "/tmp/example.docx"
-     "/tmp/example.org"
-     "/tmp/example-media")
-    '("--from=docx+styles"
-      "--to=org"
-      "--track-changes=all"
-      "--extract-media=example-media"
-      "/tmp/example.docx"
-      "-o"
-      "/tmp/example.org"))))
+(ert-deftest p3-office-import-docx-arguments-use-content-recovery-contract ()
+  (p3-org-import-test--with-temp-directory directory
+    (let ((source (expand-file-name "example.docx" directory))
+          (output (expand-file-name "example.org" directory))
+          (media-directory (expand-file-name "example-media" directory)))
+      (should
+       (equal
+        (p3-office-import--docx-arguments source output media-directory)
+        (list "--from=docx"
+              "--to=org"
+              "--extract-media=example-media"
+              source
+              "-o"
+              output))))))
 
 (ert-deftest p3-office-import-docx-notice-is-durable-and-explicitly-lossy ()
-  (let ((notice
-         (p3-office-import--docx-notice "/tmp/incoming.docx" "")))
-    (should (string-match-p "incoming\\.docx" notice))
-    (should (string-match-p "potentially lossy" notice))
-    (should (string-match-p "original DOCX" notice))))
+  (p3-org-import-test--with-temp-directory directory
+    (let* ((source (expand-file-name "incoming.docx" directory))
+           (notice (p3-office-import--docx-notice source "")))
+      (should (string-match-p "incoming\\.docx" notice))
+      (should (string-match-p "potentially lossy" notice))
+      (should (string-match-p "original DOCX" notice))
+      (should (string-match-p "custom Word styles" notice))
+      (should (string-match-p "review metadata" notice))
+      (should (string-match-p "not retained" notice)))))
 
 (ert-deftest p3-office-import-docx-retains-pandoc-stderr-diagnostics ()
   (p3-org-import-test--with-temp-directory directory
@@ -89,9 +95,11 @@
           (should (string-match-p "synthetic import warning" contents)))))))
 
 (ert-deftest p3-office-import-docx-rejects-non-docx-input ()
-  (should-error
-   (p3-office-import-docx-run "/tmp/not-word.txt")
-   :type 'user-error))
+  (p3-org-import-test--with-temp-directory directory
+    (should-error
+     (p3-office-import-docx-run
+      (expand-file-name "not-word.txt" directory))
+     :type 'user-error)))
 
 (ert-deftest p3-office-import-docx-refuses-to-overwrite-existing-output ()
   (p3-org-import-test--with-temp-directory directory
@@ -134,6 +142,8 @@
              (contents (p3-org-import-test--contents output)))
         (should (equal output (expand-file-name "incoming.org" directory)))
         (should (string-match-p "potentially lossy" contents))
+        (should (string-match-p "custom Word styles" contents))
+        (should (string-match-p "review metadata" contents))
         (should (string-match-p "\\* Incoming report" contents))
         (should (string-match-p "First item" contents))
         (should (string-match-p "| Name" contents))
