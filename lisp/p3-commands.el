@@ -16,7 +16,10 @@
      ("M-o" . "select window"))
     ("Project"
      ("C-c p / C-x p" . "native project commands")
-     ("s-p" . "native project commands"))
+     ("s-p" . "native project commands")
+     ("C-c p c / C-x p c" . "run project check")
+     ("g (compilation)" . "rerun project check")
+     ("M-g n / M-g p" . "next/previous compilation error"))
     ("R / ESS"
      ("C-c R" . "R project, templates, and tools")
      ("C-c i" . "evaluate library section")
