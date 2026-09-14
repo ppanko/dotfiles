@@ -19,7 +19,7 @@
 (defcustom p3-office-libreoffice-program nil
   "Optional LibreOffice executable override.
 
-When nil, discover `soffice' or `libreoffice' on `exec-path', then try the
+When nil, discover a LibreOffice command-line launcher on `exec-path', then try
 standard native installation paths for the current platform."
   :type '(choice (const :tag "Auto-detect" nil) string)
   :group 'p3-office-preview)
@@ -35,7 +35,9 @@ standard native installation paths for the current platform."
 PLATFORM defaults to `system-type'."
   (pcase (or platform system-type)
     ('windows-nt
-     '("C:/Program Files/LibreOffice/program/soffice.exe"
+     '("C:/Program Files/LibreOffice/program/soffice.com"
+       "C:/Program Files/LibreOffice/program/soffice.exe"
+       "C:/Program Files (x86)/LibreOffice/program/soffice.com"
        "C:/Program Files (x86)/LibreOffice/program/soffice.exe"))
     (_ nil)))
 
@@ -54,6 +56,11 @@ PLATFORM defaults to `system-type'."
 (defun p3-office--libreoffice-executable ()
   "Return a usable LibreOffice executable or signal an actionable error."
   (or (p3-office--configured-libreoffice-executable)
+      ;; On Windows prefer the console launcher so synchronous CLI calls wait
+      ;; for conversion to finish and expose diagnostics. These explicit names
+      ;; are harmless on other platforms and fall through to the normal names.
+      (executable-find "soffice.com")
+      (executable-find "soffice.exe")
       (executable-find "soffice")
       (executable-find "libreoffice")
       (seq-find #'file-executable-p
