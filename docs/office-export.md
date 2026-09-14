@@ -50,9 +50,9 @@ Column widths are controlled by the PowerPoint layout rather than by an Emacs-si
 
 ## Incoming DOCX inspection
 
-Use `M-x p3/office-import-docx` for a Word file that needs to be inspected or continued in Emacs. `report.docx` becomes a sibling `report.org`, with embedded media extracted beside it under `report-media/`.
+Use `M-x p3/office-import-docx` when the useful semantic content of a Word file needs to be recovered for inspection or continued editing in Emacs. `report.docx` becomes a sibling `report.org`, with embedded media extracted beside it under `report-media/`.
 
-The importer asks Pandoc's DOCX reader to expose custom styles and retain tracked changes and comments where Pandoc can represent them. The generated Org starts with a durable warning that conversion is potentially lossy and records any Pandoc diagnostics produced during conversion. Keep the original DOCX as the reference for Word-specific layout, review markup, text boxes, and native Office objects.
+This is deliberately a content-recovery path, not a preservation path for Word-specific semantics. Custom Word style identities and review metadata such as tracked changes and comments are not retained as reliable Org structure. The generated Org starts with a durable warning that makes those losses explicit and records any Pandoc diagnostics produced during conversion. Keep the original DOCX as the fidelity reference for styling, review history, layout, text boxes, and native Office objects.
 
 The importer refuses to overwrite an existing sibling Org file or media directory. Extracted-media links remain relative so the imported Org, DOCX, and media directory can move together without embedding machine-specific paths.
 
