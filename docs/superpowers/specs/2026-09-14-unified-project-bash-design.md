@@ -12,7 +12,7 @@ The existing Windows shell behavior is the baseline. It already works well with 
 2. **Platform code selects Bash; terminal code owns workflow.** `p3-platform.el` remains responsible for platform-specific executable/environment discovery. `p3-terminal.el` owns project-root resolution, shell-buffer identity, reuse, explicit extra sessions, switching, renaming, and killing.
 3. **Use built-in shell-mode rather than emulate a terminal.** Normal Emacs selection, kill-ring, search, scrolling, and Comint editing are the intended interaction model.
 4. **Preserve the Windows behavior that already works.** Keep Rtools/MSYS2 discovery, PATH mutation, CRLF stripping, UTF-8 process coding, and login-shell semantics unless a focused regression demonstrates a correction is needed.
-5. **Keep project identity in `project.el`.** A project shell is keyed by normalized project root. Outside a project, use the current `default-directory`; do not create another project abstraction.
+5. **Keep project identity in `project.el`.** A project shell is keyed by normalized project root. Outside a project, use the current local `default-directory`; do not create another project abstraction.
 6. **Keep session state ephemeral and minimal.** At most one in-memory mapping is needed to identify the primary shell for a root. Explicit additional shells are ordinary extra buffers, not durable sessions.
 7. **Remove superseded machinery.** If the shared `shell-mode` path meets the contract, remove vterm package ownership, vterm-specific commands/bindings/checks, the vterm-only Bash startup file, and ble.sh bootstrap/integration when no remaining workflow requires them.
 
@@ -32,49 +32,49 @@ No WSL, Git Bash, PowerShell, or new provider abstraction is introduced.
 
 Rename the conceptual surface from vterm-specific commands to shell-oriented project commands.
 
-The workflow layer should provide:
+The workflow layer provides:
 
-- a root resolver that returns the current `project.el` project root or `default-directory`;
+- a root resolver that returns the current `project.el` project root or local `default-directory`;
 - a stable primary shell buffer name derived from root identity;
 - one reusable primary shell per root;
 - an explicit new-session path that creates another shell buffer without replacing the primary mapping;
 - commands to open the primary shell in the current window or another window;
 - commands to switch among live P3 shell buffers, rename a shell, and kill a shell;
-- cleanup of stale primary mappings when buffers die, either lazily when looked up or through a small kill-buffer hook if simpler.
+- lazy cleanup of stale primary mappings when a remembered buffer is no longer live.
 
-The workflow must launch ordinary `shell-mode` buffers and must not depend on vterm APIs.
+The workflow launches ordinary `shell-mode` buffers and does not depend on vterm APIs.
 
 ### Configuration layer: `lisp/p3-config-terminal.el`
 
-This module should become platform-neutral configuration for the project shell workflow.
+This module becomes platform-neutral configuration for the project shell workflow.
 
-It should:
+It will:
 
 - load the project-shell behavior on both supported platforms;
 - call the existing platform shell configuration before creating shells;
 - bind the same command surface on GNU/Linux and Windows;
-- preserve the existing convenient `C-x C-u` entry point, but route it to the project-aware shell command on both platforms;
-- expose the terminal command map on both platforms;
+- preserve the existing convenient `C-x C-u` entry point, but route it to `p3/project-shell` on both platforms;
+- expose the project-shell command map on both platforms through `C-c T`;
 - keep only shell-mode/Comint configuration that is actually required by the shared workflow.
 
-The GNU/Linux-only `use-package vterm` block and vterm keymaps should disappear once the replacement is complete.
+The GNU/Linux-only `use-package vterm` block and vterm keymaps disappear once the replacement is complete.
 
 ## Shell creation semantics
 
-Creating a project shell should be deterministic and small:
+Creating a project shell is deterministic and small:
 
-1. Resolve the root from `project.el`, falling back to `default-directory`.
-2. Resolve the platform-configured Bash executable.
+1. Resolve the root from `project.el`, falling back to local `default-directory`.
+2. Use the platform-configured Bash executable.
 3. If the caller requested the primary shell and a live primary buffer already exists for that root, reuse it.
 4. Otherwise create a shell buffer, set its `default-directory` to the resolved root before starting the process, and start `shell-mode` with the configured Bash.
 5. Record the buffer as the root's primary only for the primary-shell path.
 6. Explicit extra sessions use generated buffer names and remain ordinary shell buffers.
 
-On Windows, shell creation must preserve the project working directory rather than resetting to the MSYS2 home directory. If this requires `CHERE_INVOKING=1` or an equivalent environment binding, apply it only around shell process creation and test the behavior directly.
+Windows shell startup must retain the current Rtools/MSYS2 behavior. The implementation should first prove that setting the shell buffer's `default-directory` to the project root before startup is sufficient. Do not add `CHERE_INVOKING`, profile changes, or other MSYS2-specific environment mutations unless a failing native-Windows regression demonstrates that the existing login-shell path otherwise changes directories.
 
 ## User-facing commands
 
-Use generic names rather than preserving the vterm vocabulary. The final exact names may follow the repository's naming conventions, but the intended surface is:
+The public P3 command surface is:
 
 - `p3/project-shell` — toggle/open the primary shell for the current project/root;
 - `p3/project-shell-new` — create another shell for the current project/root;
@@ -83,7 +83,9 @@ Use generic names rather than preserving the vterm vocabulary. The final exact n
 - `p3/project-shell-rename` — rename the current P3 shell buffer;
 - `p3/project-shell-kill` — kill the current or selected P3 shell buffer.
 
-Avoid compatibility aliases for old `p3/vterm-*` names unless repository search finds a real consumer outside the terminal module/config/tests. The change should prefer removal over indefinite compatibility baggage.
+The command map is `p3/project-shell-command-map`.
+
+Do not retain compatibility aliases for old `p3/vterm-*` names unless repository search finds a real consumer outside the terminal module/config/tests. The change prefers removal over indefinite compatibility baggage.
 
 ## Interaction model
 
@@ -103,20 +105,21 @@ Full-screen TUIs such as `htop`, `vim`, or terminal applications that require a 
 
 - If the platform Bash cannot be resolved, fail with a concise actionable `user-error` rather than silently launching an unrelated shell.
 - If no project exists, use the local `default-directory`.
+- If `default-directory` is remote/TRAMP and no local project root exists, fail clearly rather than starting a local Bash with a remote working directory.
 - If a remembered primary shell buffer is dead, discard the stale mapping and create a new one.
 - A killed extra shell must not disturb the primary mapping unless it is the primary buffer itself.
 - Existing Windows Rtools discovery warnings and fallback behavior remain platform-owned.
-- Remote/TRAMP behavior is outside the scope of this issue unless the existing terminal command already promises it; do not accidentally reinterpret remote `default-directory` as a local shell root.
 
 ## Testing strategy
 
-Tests should protect P3-owned behavior, not Emacs internals.
+Tests protect P3-owned behavior, not Emacs internals.
 
 ### Shared terminal tests
 
 Add or update focused ERT coverage for:
 
-- project-root resolution and `default-directory` fallback;
+- project-root resolution and local `default-directory` fallback;
+- explicit rejection of remote-only roots;
 - stable primary buffer identity per normalized root;
 - primary shell reuse;
 - explicit extra-session creation without replacing the primary;
@@ -147,7 +150,7 @@ Primary files:
 
 - `lisp/p3-terminal.el`
 - `lisp/p3-config-terminal.el`
-- `lisp/p3-platform.el` only if a small reusable Bash resolver or Windows working-directory fix is required
+- `lisp/p3-platform.el` only if a small reusable Bash resolver is required
 - `test/p3-config-terminal-test.el`
 - `test/p3-platform-test.el`
 - Windows/Linux CI loader lists only as needed for the changed test ownership
