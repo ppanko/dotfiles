@@ -7,6 +7,7 @@
 
 ;;; Code:
 
+(require 'p3-platform)
 (require 'p3-project)
 
 (declare-function R "ess-r-mode")
@@ -20,12 +21,37 @@
 (defvar-local p3/ess-project-root-cache nil
   "Cached project root for the current buffer.")
 
+(defun p3/ess--canonical-root (root)
+  "Return stable ESS identity for ROOT without resolving remote paths."
+  (if (file-remote-p root)
+      (file-name-as-directory root)
+    (or (p3/project-normalize-root root)
+        (file-name-as-directory (expand-file-name root)))))
+
 (defun p3/ess-project-root ()
   "Return the current shared project root, caching it buffer-locally."
   (or p3/ess-project-root-cache
       (setq p3/ess-project-root-cache
-            (file-name-as-directory
-             (expand-file-name (or (p3/project-root) default-directory))))))
+            (p3/ess--canonical-root
+             (or (p3/project-root) default-directory)))))
+
+(defun p3/ess-rmarkdown-buffer-p ()
+  "Return non-nil when the current buffer visits an R Markdown file."
+  (and buffer-file-name
+       (string-match-p "\\.[Rr]md\\'" buffer-file-name)))
+
+(defun p3/ess-configure-rmarkdown-compile ()
+  "Configure project-aware R Markdown compilation for the current buffer."
+  (when (p3/ess-rmarkdown-buffer-p)
+    (when-let ((program (p3/r-program)))
+      (setq-local
+       compile-command
+       (format "%s --slave --no-save -e %s --args %s"
+               (shell-quote-argument program)
+               (shell-quote-argument
+                "rmarkdown::render(commandArgs(trailingOnly = TRUE)[1])")
+               (shell-quote-argument
+                (expand-file-name buffer-file-name)))))))
 
 (defun p3/ess-process-live-p (name)
   "Return non-nil if NAME names a live process."
