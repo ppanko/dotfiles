@@ -27,20 +27,19 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
-      - name: Install Emacs, Pandoc, and LibreOffice Impress
+      - name: Install Emacs and Pandoc
         env:
           PANDOC_VERSION: "3.11"
           PANDOC_SHA256: "37edb3bbcf722f921a009941bf5874e2e0c09263226c9b4a2d980788cb062ab6"
         run: |
           sudo apt-get update
-          sudo apt-get install -y emacs-nox libreoffice-impress-nogui
+          sudo apt-get install -y emacs-nox
           curl --fail --location --retry 3 \
             --output /tmp/pandoc.tar.gz \
             "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-linux-amd64.tar.gz"
           echo "${PANDOC_SHA256}  /tmp/pandoc.tar.gz" | sha256sum --check --strict
           sudo tar -xzf /tmp/pandoc.tar.gz -C /usr/local --strip-components=1
           pandoc --version | head -n 1
-          soffice --version
 
       - name: Byte-compile extracted modules
         run: |
