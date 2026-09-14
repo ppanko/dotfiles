@@ -18,6 +18,7 @@
              (expand-file-name "lisp" p3-office-preview-test--config-directory))
 
 (require 'p3-org-export)
+(require 'p3-office-preview)
 
 (defmacro p3-office-preview-test--with-temp-directory (binding &rest body)
   "Bind BINDING to a temporary directory while evaluating BODY."
@@ -43,17 +44,10 @@
        (equal (p3-office--libreoffice-executable)
               p3-office-libreoffice-program)))))
 
-(ert-deftest p3-office-preview-libreoffice-discovers-windows-default ()
-  (let ((p3-office-libreoffice-program nil)
-        (system-type 'windows-nt))
-    (cl-letf (((symbol-function 'executable-find) (lambda (_name) nil))
-              ((symbol-function 'file-executable-p)
-               (lambda (path)
-                 (equal path
-                        "C:/Program Files/LibreOffice/program/soffice.exe"))))
-      (should
-       (equal (p3-office--libreoffice-executable)
-              "C:/Program Files/LibreOffice/program/soffice.exe")))))
+(ert-deftest p3-office-preview-libreoffice-windows-candidates-include-standard-install ()
+  (should
+   (member "C:/Program Files/LibreOffice/program/soffice.exe"
+           (p3-office--libreoffice-platform-candidates 'windows-nt))))
 
 (ert-deftest p3-office-preview-pptx-arguments-render-with-impress-filter ()
   (let ((source "/tmp/slides.pptx")
@@ -68,6 +62,12 @@
             "--convert-to" "pdf:impress_pdf_Export"
             "--outdir" output-directory
             source)))))
+
+(ert-deftest p3-office-preview-pptx-directories-separate-same-named-sources ()
+  (let ((p3-office-preview-directory "/tmp/p3-preview-root"))
+    (should-not
+     (equal (p3-office-preview--pptx-directory "/tmp/a/slides.pptx")
+            (p3-office-preview--pptx-directory "/tmp/b/slides.pptx")))))
 
 (ert-deftest p3-office-preview-pptx-run-preserves-last-good-preview-on-failure ()
   (p3-office-preview-test--with-temp-directory directory
@@ -92,17 +92,55 @@
           (insert-file-contents preview)
           (should (equal (buffer-string) sentinel)))))))
 
+(ert-deftest p3-office-preview-pptx-run-rejects-missing-rendered-pdf ()
+  (p3-office-preview-test--with-temp-directory directory
+    (let* ((source (expand-file-name "slides.pptx" directory))
+           (p3-office-preview-directory
+            (expand-file-name "preview-cache" directory)))
+      (with-temp-file source
+        (insert "placeholder"))
+      (cl-letf (((symbol-function 'p3-office--libreoffice-executable)
+                 (lambda () "soffice"))
+                ((symbol-function 'process-file)
+                 (lambda (&rest _args) 0)))
+        (let ((error
+               (should-error (p3-office-preview-pptx-run source)
+                             :type 'user-error)))
+          (should
+           (string-match-p "did not produce.*PDF"
+                           (error-message-string error))))))))
+
 (ert-deftest p3-office-preview-pptx-command-opens-rendered-pdf ()
   (let (opened)
     (cl-letf (((symbol-function 'p3-office-preview-pptx-run)
                (lambda (source)
                  (should (equal source "/tmp/slides.pptx"))
                  "/tmp/slides.pdf"))
-              ((symbol-function 'find-file-other-window)
+              ((symbol-function 'p3-office-preview--open-pdf)
                (lambda (path)
                  (setq opened path))))
       (p3/office-preview-pptx "/tmp/slides.pptx")
       (should (equal opened "/tmp/slides.pdf")))))
+
+(ert-deftest p3-office-preview-open-pdf-refreshes-an-existing-buffer ()
+  (p3-office-preview-test--with-temp-directory directory
+    (let* ((path (expand-file-name "preview.txt" directory))
+           (buffer nil))
+      (with-temp-file path
+        (insert "old"))
+      (setq buffer (find-file-noselect path))
+      (unwind-protect
+          (progn
+            (with-temp-file path
+              (insert "new"))
+            (cl-letf (((symbol-function 'find-file-other-window)
+                       (lambda (_path) buffer)))
+              (p3-office-preview--open-pdf path))
+            (with-current-buffer buffer
+              (should (equal (buffer-string) "new"))))
+        (when (buffer-live-p buffer)
+          (set-buffer-modified-p nil)
+          (kill-buffer buffer))))))
 
 (ert-deftest p3-org-export-pptx-preview-renders-the-exported-artifact ()
   (let (rendered opened)
@@ -114,7 +152,7 @@
                (lambda (source)
                  (setq rendered source)
                  "/tmp/exported-deck.pdf"))
-              ((symbol-function 'find-file-other-window)
+              ((symbol-function 'p3-office-preview--open-pdf)
                (lambda (path)
                  (setq opened path))))
       (p3/org-export-pptx-preview)
