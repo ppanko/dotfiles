@@ -154,7 +154,8 @@
       ("C-c C-c" . p3/python-send-region-or-paragraph-and-step)
       ("C-<up>" . backward-paragraph)
       ("C-<down>" . forward-paragraph)
-      ("C-c C-z" . p3/python-display-shell))))
+      ("C-c C-z" . p3/python-display-shell)
+      ("C-c l f" . eglot-format))))
   (should
    (equal
     (p3-config-python-test--python-hooks)
@@ -194,7 +195,8 @@
          (define-key python-ts-mode-map (kbd "C-<up>") #'backward-paragraph)
          (define-key python-ts-mode-map (kbd "C-<down>") #'forward-paragraph)
          (define-key python-ts-mode-map (kbd "C-c C-z")
-           #'p3/python-display-shell))))))
+           #'p3/python-display-shell)
+         (define-key python-ts-mode-map (kbd "C-c l f") #'eglot-format))))))
 
 (ert-deftest p3-config-python-mode-wiring-remains-symmetric ()
   (should (equal (p3-config-python-test--ts-hooks)
@@ -202,17 +204,8 @@
   (should (equal (p3-config-python-test--ts-bindings)
                  (p3-config-python-test--python-bindings))))
 
-(ert-deftest p3-config-python-preserves-eglot-bindings ()
-  (let* ((form (p3-config-python-test--use-package-form 'eglot))
-         (bind-section
-          (car (p3-config-python-test--keyword-values form :bind))))
-    (should
-     (equal
-      bind-section
-      '(:map eglot-mode-map
-        ("C-c l r" . eglot-rename)
-        ("C-c l a" . eglot-code-actions)
-        ("C-c l f" . eglot-format))))))
+(ert-deftest p3-config-python-does-not-own-generic-eglot ()
+  (should-not (p3-config-python-test--use-package-form 'eglot)))
 
 (ert-deftest p3-config-python-owns-flake8-executable ()
   (should

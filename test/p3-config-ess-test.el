@@ -1,6 +1,7 @@
 ;;; p3-config-ess-test.el --- ESS configuration boundary tests -*- lexical-binding: t; -*-
 
 (require 'ert)
+(require 'cl-lib)
 (require 'seq)
 
 (defconst p3-config-ess-test--root
@@ -9,12 +10,16 @@
     (file-name-directory (or load-file-name buffer-file-name))))
   "Root of the Emacs configuration under test.")
 
+(add-to-list 'load-path (expand-file-name "lisp" p3-config-ess-test--root))
+(require 'p3-platform)
+(require 'p3-r-language-server)
+
 (defun p3-config-ess-test--path (relative)
   "Return RELATIVE under the repository root."
   (expand-file-name relative p3-config-ess-test--root))
 
 (defun p3-config-ess-test--contents (relative)
-  "Return contents of repository file RELATIVE."
+  "Return contents of RELATIVE under the repository root."
   (with-temp-buffer
     (insert-file-contents (p3-config-ess-test--path relative))
     (buffer-string)))
@@ -191,6 +196,222 @@
                       "')\"")))))
     (should (member '(add-hook 'ess-mode-hook 'compile-rmd) forms))
     (should (member '(add-hook 'markdown-mode-hook 'compile-rmd) forms))))
+
+(ert-deftest p3-r-language-server-api-is-explicit ()
+  (dolist (function '(p3/r-program
+                      p3/r-language-server-library
+                      p3/r-ensure-language-server
+                      p3/r-language-server-command
+                      p3/r-eglot-ensure))
+    (should (fboundp function))))
+
+(ert-deftest p3-r-program-uses-one-platform-authority ()
+  (let ((system-type 'windows-nt))
+    (cl-letf (((symbol-function 'p3/windows-select-r-program)
+               (lambda () "C:/Program Files/R/R-4.5.1/bin/Rterm.exe"))
+              ((symbol-function 'executable-find)
+               (lambda (&rest _)
+                 (ert-fail "Windows R authority must not fall back to PATH"))))
+      (should
+       (equal (p3/r-program)
+              "C:/Program Files/R/R-4.5.1/bin/Rterm.exe"))))
+  (let ((system-type 'gnu/linux)
+        (was-bound (boundp 'inferior-R-program-name))
+        (original (and (boundp 'inferior-R-program-name)
+                       (symbol-value 'inferior-R-program-name))))
+    (unwind-protect
+        (progn
+          (set 'inferior-R-program-name "R-custom")
+          (cl-letf (((symbol-function 'executable-find)
+                     (lambda (program)
+                       (and (equal program "R-custom") "/opt/R/bin/R"))))
+            (should (equal (p3/r-program) "/opt/R/bin/R"))))
+      (if was-bound
+          (set 'inferior-R-program-name original)
+        (makunbound 'inferior-R-program-name)))))
+
+(ert-deftest p3-r-language-server-library-is-versioned-and-platform-local ()
+  (let ((user-emacs-directory "/tmp/p3 emacs/")
+        (system-type 'gnu/linux))
+    (should
+     (equal (p3/r-language-server-library "4.5.2")
+            "/tmp/p3 emacs/r-tools/linux/R-4.5/library/")))
+  (let ((user-emacs-directory "C:/Users/Pavel/.emacs.d/")
+        (system-type 'windows-nt))
+    (should
+     (equal (p3/r-language-server-library "4.6.0")
+            "c:/Users/Pavel/.emacs.d/r-tools/windows/R-4.6/library/"))))
+
+(ert-deftest p3-r-language-server-process-status-is-defensive ()
+  (cl-letf (((symbol-function 'call-process)
+             (lambda (&rest _) "killed")))
+    (should-not (p3/r-version "/opt/R/bin/R"))
+    (should-not
+     (p3/r-language-server-installed-p
+      "/opt/R/bin/R" "/tmp/p3-r-tools/library/"))))
+
+(ert-deftest p3-r-language-server-installed-check-is-managed-only ()
+  (let (expression)
+    (cl-letf (((symbol-function 'call-process)
+               (lambda (_program _input _destination _display &rest args)
+                 (setq expression (car (last args)))
+                 ;; Model languageserver being available only from a global
+                 ;; library: an unconstrained lookup would succeed, while a
+                 ;; managed-library lookup must fail.
+                 (if (string-match-p "lib.loc=" expression) 1 0))))
+      (should-not
+       (p3/r-language-server-installed-p
+        "/opt/R/bin/R" "/tmp/p3-r-tools/library/"))
+      (should (string-match-p "loadNamespace" expression))
+      (should (string-match-p "lib.loc=" expression)))))
+
+(ert-deftest p3-r-language-server-reuses-existing-managed-package ()
+  (let ((p3/r-language-server-bootstrap-failed nil)
+        (p3/r-language-server-ready nil))
+    (cl-letf (((symbol-function 'p3/r-program) (lambda () "/opt/R/bin/R"))
+              ((symbol-function 'p3/r-version) (lambda (&optional _program) "4.5.1"))
+              ((symbol-function 'p3/r-language-server-library)
+               (lambda (_version) "/tmp/p3-r-tools/library/"))
+              ((symbol-function 'p3/r-language-server-installed-p)
+               (lambda (_program _library) t))
+              ((symbol-function 'p3/r-install-language-server)
+               (lambda (&rest _)
+                 (ert-fail "Installed language server should be reused"))))
+      (should
+       (equal (p3/r-ensure-language-server)
+              "/tmp/p3-r-tools/library/")))))
+
+(ert-deftest p3-r-language-server-failed-bootstrap-does-not-loop ()
+  (let ((p3/r-language-server-bootstrap-failed nil)
+        (p3/r-language-server-ready nil)
+        (attempts 0))
+    (cl-letf (((symbol-function 'p3/r-program) (lambda () "/opt/R/bin/R"))
+              ((symbol-function 'p3/r-version) (lambda (&optional _program) "4.5.1"))
+              ((symbol-function 'p3/r-language-server-library)
+               (lambda (_version) "/tmp/p3-r-tools/library/"))
+              ((symbol-function 'p3/r-language-server-installed-p)
+               (lambda (_program _library) nil))
+              ((symbol-function 'p3/r-install-language-server)
+               (lambda (_program _library)
+                 (setq attempts (1+ attempts))
+                 nil)))
+      (should-not (p3/r-ensure-language-server))
+      (should-not (p3/r-ensure-language-server))
+      (should (= attempts 1)))))
+
+(ert-deftest p3-r-language-server-signaled-bootstrap-failure-does-not-loop ()
+  (let ((p3/r-language-server-bootstrap-failed nil)
+        (p3/r-language-server-ready nil)
+        (p3/r-language-server-warning-key nil)
+        (attempts 0)
+        warnings)
+    (cl-letf (((symbol-function 'p3/r-program) (lambda () "/opt/R/bin/R"))
+              ((symbol-function 'p3/r-version) (lambda (&optional _program) "4.5.1"))
+              ((symbol-function 'p3/r-language-server-library)
+               (lambda (_version) "/tmp/p3-r-tools/library/"))
+              ((symbol-function 'p3/r-language-server-installed-p)
+               (lambda (_program _library) nil))
+              ((symbol-function 'p3/r-install-language-server)
+               (lambda (_program _library)
+                 (setq attempts (1+ attempts))
+                 (error "permission denied")))
+              ((symbol-function 'display-warning)
+               (lambda (_type message &optional _level _buffer-name)
+                 (push message warnings))))
+      (should-not (p3/r-ensure-language-server))
+      (should-not (p3/r-ensure-language-server))
+      (should (= attempts 1))
+      (should
+       (equal p3/r-language-server-bootstrap-failed
+              '("/opt/R/bin/R" . "/tmp/p3-r-tools/library/")))
+      (should (= (length warnings) 1))
+      (should (string-match-p "permission denied" (car warnings))))))
+
+(ert-deftest p3-r-language-server-missing-r-warns-once-from-buffer-hook ()
+  (let ((p3/r-language-server-warning-key nil)
+        warnings)
+    (cl-letf (((symbol-function 'p3/r-program) (lambda () nil))
+              ((symbol-function 'eglot-ensure)
+               (lambda () (ert-fail "Eglot must not start without R")))
+              ((symbol-function 'display-warning)
+               (lambda (_type message &optional _level _buffer-name)
+                 (push message warnings))))
+      (should-not (p3/r-eglot-ensure))
+      (should-not (p3/r-eglot-ensure))
+      (should (= (length warnings) 1))
+      (should (string-match-p "No usable R executable" (car warnings)))
+      (should (string-match-p "p3/r-bootstrap-language-server" (car warnings))))))
+
+(ert-deftest p3-r-language-server-command-keeps-project-startup-context ()
+  (cl-letf (((symbol-function 'p3/r-program)
+             (lambda () "C:/Program Files/R/R-4.5.1/bin/Rterm.exe"))
+            ((symbol-function 'p3/r-ensure-language-server)
+             (lambda () "C:/Users/Pavel/r tools/R-4.5/library/")))
+    (let ((command (p3/r-language-server-command)))
+      (should
+       (equal (car command)
+              "C:/Program Files/R/R-4.5.1/bin/Rterm.exe"))
+      (should (member "--slave" command))
+      (should-not (member "--vanilla" command))
+      (should (string-match-p (regexp-quote ".libPaths(c(") (car (last command))))
+      (should (string-match-p (regexp-quote "languageserver::run()")
+                              (car (last command)))))))
+
+(ert-deftest p3-r-eglot-preserves-ownership-and-limits-capabilities ()
+  (require 'eglot)
+  (with-temp-buffer
+    (let ((eglot-stay-out-of '(xref))
+          (eglot-ignored-server-capabilities '(:experimentalProvider))
+          (eglot-server-programs
+           '(((R-mode ess-r-mode) . ("R" "--slave" "-e" "old"))))
+          (flycheck-mode t)
+          called)
+      (cl-letf (((symbol-function 'p3/r-language-server-command)
+                 (lambda () '("managed-R" "--slave" "-e" "managed")))
+                ((symbol-function 'eglot-ensure)
+                 (lambda () (setq called t))))
+        (p3/r-eglot-ensure))
+      (should called)
+      (should (local-variable-p 'eglot-stay-out-of))
+      (should (local-variable-p 'eglot-ignored-server-capabilities))
+      (should (local-variable-p 'eglot-server-programs))
+      (should (member 'flymake eglot-stay-out-of))
+      (should (member "company" eglot-stay-out-of))
+      (should (member 'xref eglot-stay-out-of))
+      (should flycheck-mode)
+      (dolist (capability p3/r-eglot-ignored-capabilities)
+        (should (memq capability eglot-ignored-server-capabilities)))
+      (should (memq :experimentalProvider eglot-ignored-server-capabilities))
+      (dolist (wanted '(:hoverProvider
+                         :completionProvider
+                         :signatureHelpProvider
+                         :definitionProvider
+                         :referencesProvider
+                         :documentHighlightProvider
+                         :documentSymbolProvider
+                         :workspaceSymbolProvider
+                         :codeActionProvider
+                         :renameProvider
+                         :callHierarchyProvider))
+        (should-not (memq wanted eglot-ignored-server-capabilities)))
+      (should
+       (equal
+        (alist-get '(R-mode ess-r-mode) eglot-server-programs nil nil #'equal)
+        '("managed-R" "--slave" "-e" "managed"))))))
+
+(ert-deftest p3-r-eglot-startup-error-degrades-cleanly ()
+  (let ((p3/r-language-server-warning-key nil)
+        warnings)
+    (cl-letf (((symbol-function 'p3/r-language-server-command)
+               (lambda () (error "broken R setup")))
+              ((symbol-function 'display-warning)
+               (lambda (_type message &optional _level _buffer-name)
+                 (push message warnings))))
+      (should-not (p3/r-eglot-ensure))
+      (should-not (p3/r-eglot-ensure))
+      (should (= (length warnings) 1))
+      (should (string-match-p "broken R setup" (car warnings)))
+      (should (string-match-p "ESS/editing remains available" (car warnings))))))
 
 (ert-deftest p3-ess-library-has-no-buffer-configuration-glue ()
   (let ((contents (p3-config-ess-test--contents "lisp/p3-ess.el")))
