@@ -2,6 +2,7 @@
 
 (require 'ert)
 (require 'seq)
+(require 'p3-org-roam)
 
 (defconst p3-config-org-roam-test--root
   (file-name-directory
@@ -104,7 +105,34 @@
        ("C-c n d" . org-roam-dailies-goto-today)
        ("C-c n t" . org-roam-dailies-capture-today)
        ("C-c n C-t" . org-roam-tag-add)
-       ("C-c n a" . p3/org-roam-get-agenda))))))
+       ("C-c n a" . p3/org-roam-get-agenda)
+       ("C-c n p" . p3/org-roam-project-command-map))))))
+
+(ert-deftest p3-config-org-roam-project-command-map-exposes-small-workflow ()
+  (should (boundp 'p3/org-roam-project-command-map))
+  (should (keymapp p3/org-roam-project-command-map))
+  (should (eq (lookup-key p3/org-roam-project-command-map (kbd "h"))
+              #'p3/org-roam-project-note))
+  (should (eq (lookup-key p3/org-roam-project-command-map (kbd "f"))
+              #'p3/org-roam-project-find-note))
+  (should (eq (lookup-key p3/org-roam-project-command-map (kbd "n"))
+              #'p3/org-roam-project-new-note))
+  (should (eq (lookup-key p3/org-roam-project-command-map (kbd "a"))
+              #'p3/org-roam-project-associate))
+  (should (eq (lookup-key p3/org-roam-project-command-map (kbd "t"))
+              #'p3/org-roam-project-todos)))
+
+(ert-deftest p3-config-org-roam-project-root-map-is-restored-by-savehist ()
+  (let ((contents
+         (with-temp-buffer
+           (insert-file-contents
+            (p3-config-org-roam-test--path "lisp/p3-config-completion.el"))
+           (buffer-string))))
+    (should
+     (string-match-p
+      (regexp-quote
+       "(savehist-additional-variables '(p3/org-roam-project-associations))")
+      contents))))
 
 (ert-deftest p3-config-org-roam-preserves-display-and-autosync-config ()
   (should
