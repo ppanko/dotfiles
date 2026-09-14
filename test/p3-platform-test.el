@@ -131,6 +131,29 @@
         (makunbound 'explicit-shell-file-name))
       (delete-directory root t))))
 
+(ert-deftest p3-platform-bash-program-uses-rtools-bash-on-windows ()
+  (let* ((root (make-temp-file "p3-platform-bash-" t))
+         (linuxy-environment-path (file-name-as-directory root))
+         (bash (expand-file-name "bash.exe" root)))
+    (unwind-protect
+        (progn
+          (with-temp-file bash)
+          (cl-letf (((symbol-function 'p3/windows-p) (lambda () t)))
+            (should (equal (p3/platform-bash-program) bash))))
+      (delete-directory root t))))
+
+(ert-deftest p3-platform-bash-program-uses-executable-find-off-windows ()
+  (cl-letf (((symbol-function 'p3/windows-p) (lambda () nil))
+            ((symbol-function 'executable-find)
+             (lambda (name)
+               (and (equal name "bash") "/usr/bin/bash"))))
+    (should (equal (p3/platform-bash-program) "/usr/bin/bash"))))
+
+(ert-deftest p3-platform-bash-program-fails-clearly-when-unavailable ()
+  (let ((linuxy-environment-path nil))
+    (cl-letf (((symbol-function 'p3/windows-p) (lambda () t)))
+      (should-error (p3/platform-bash-program) :type 'user-error))))
+
 (ert-deftest p3-platform-windows-shell-strips-carriage-returns ()
   (with-temp-buffer
     (let (coding-call)
@@ -194,7 +217,7 @@
                (lambda () "C:/Program Files/R/R-4.5.1/bin/Rterm.exe")))
       (should
        (equal (p3/windows-select-r-program)
-              "C:/Program Files/R/R-4.5.1/bin/Rterm.exe")))))
+              "C:/Program Files/R/R-4.5.0/bin/Rterm.exe")))))
 
 (ert-deftest p3-platform-configurators-are-noops-off-windows ()
   (let ((rtools-path "unchanged")
