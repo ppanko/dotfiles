@@ -36,13 +36,15 @@
     (equal (buffer-string) "%PDF")))
 
 (ert-deftest p3-office-preview-libreoffice-uses-configured-program ()
-  (let ((p3-office-libreoffice-program "/opt/libreoffice/program/soffice"))
-    (cl-letf (((symbol-function 'file-executable-p)
-               (lambda (path)
-                 (equal path p3-office-libreoffice-program))))
+  (let ((p3-office-libreoffice-program "custom-soffice"))
+    (cl-letf (((symbol-function 'file-executable-p) (lambda (_path) nil))
+              ((symbol-function 'executable-find)
+               (lambda (name)
+                 (when (equal name "custom-soffice")
+                   "/resolved/custom-soffice"))))
       (should
        (equal (p3-office--libreoffice-executable)
-              p3-office-libreoffice-program)))))
+              "/resolved/custom-soffice")))))
 
 (ert-deftest p3-office-preview-libreoffice-windows-candidates-include-standard-install ()
   (should
