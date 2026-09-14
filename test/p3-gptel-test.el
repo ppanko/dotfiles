@@ -125,6 +125,75 @@
       (delete-directory root-a t)
       (delete-directory root-b t))))
 
+(ert-deftest p3-gptel-add-context-routes-source-region-to-project-chat ()
+  "Source-buffer context should land in the matching project chat only."
+  (let ((root (file-name-as-directory (make-temp-file "p3-gptel-context-" t)))
+        (chat (generate-new-buffer " *p3-gptel-context-chat*"))
+        (source (generate-new-buffer " *p3-gptel-context-source*"))
+        (old-default (default-value 'gptel-context)))
+    (unwind-protect
+        (progn
+          (set-default 'gptel-context '((global-context)))
+          (with-current-buffer chat
+            (setq-local gptel-mode t
+                        gptel-context '((chat-context))
+                        p3/gptel-project-root root
+                        default-directory root))
+          (with-current-buffer source
+            (setq default-directory root)
+            (insert "answer <- 42")
+            (set-mark (point-min))
+            (goto-char (point-max))
+            (setq mark-active t
+                  transient-mark-mode t)
+            (cl-letf (((symbol-function 'project-current)
+                       (lambda (&optional _maybe-prompt) 'project))
+                      ((symbol-function 'project-root)
+                       (lambda (_project) root))
+                      ((symbol-function 'gptel-add)
+                       (lambda (&optional _arg _confirm)
+                         (push (list 'source-region (current-buffer))
+                               gptel-context))))
+              (p3/gptel-add-context)))
+          (with-current-buffer chat
+            (should (equal (car gptel-context)
+                           (list 'source-region source)))
+            (should (equal (cadr gptel-context) '(chat-context))))
+          (should (equal (default-value 'gptel-context) '((global-context)))))
+      (set-default 'gptel-context old-default)
+      (when (buffer-live-p source) (kill-buffer source))
+      (when (buffer-live-p chat) (kill-buffer chat))
+      (delete-directory root t))))
+
+(ert-deftest p3-gptel-add-context-rejects-sensitive-source-buffer ()
+  "P3's routed context helper must retain the path-based safety guard."
+  (let ((root (file-name-as-directory (make-temp-file "p3-gptel-context-secret-" t)))
+        (chat (generate-new-buffer " *p3-gptel-context-secret-chat*"))
+        (source (generate-new-buffer " *p3-gptel-context-secret-source*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer chat
+            (setq-local gptel-mode t
+                        gptel-context nil
+                        p3/gptel-project-root root
+                        default-directory root))
+          (with-current-buffer source
+            (setq default-directory root
+                  buffer-file-name (expand-file-name ".env.local" root))
+            (insert "TOKEN=secret")
+            (set-mark (point-min))
+            (goto-char (point-max))
+            (setq mark-active t
+                  transient-mark-mode t)
+            (cl-letf (((symbol-function 'project-current)
+                       (lambda (&optional _maybe-prompt) 'project))
+                      ((symbol-function 'project-root)
+                       (lambda (_project) root)))
+              (should-error (p3/gptel-add-context) :type 'user-error))))
+      (when (buffer-live-p source) (kill-buffer source))
+      (when (buffer-live-p chat) (kill-buffer chat))
+      (delete-directory root t))))
+
 (ert-deftest p3-gptel-git-diff-snapshot-includes-staged-and-unstaged-only ()
   (should (fboundp 'p3/gptel-git-diff-snapshot))
   (let ((directory (make-temp-file "p3-gptel-git-" t)))
@@ -329,7 +398,7 @@
 (ert-deftest p3-gptel-command-map-exposes-two-mode-workflow ()
   (should (eq (keymap-lookup p3/gptel-command-map "g") #'p3/gptel-project-chat))
   (should (eq (keymap-lookup p3/gptel-command-map "m") 'gptel-menu))
-  (should (eq (keymap-lookup p3/gptel-command-map "a") 'gptel-add))
+  (should (eq (keymap-lookup p3/gptel-command-map "a") #'p3/gptel-add-context))
   (should (eq (keymap-lookup p3/gptel-command-map "f") 'gptel-add-file))
   (should (eq (keymap-lookup p3/gptel-command-map "D") #'p3/gptel-add-git-diff))
   (should (eq (keymap-lookup p3/gptel-command-map "r") #'p3/gptel-refactor-region))
