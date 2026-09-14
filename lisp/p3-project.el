@@ -67,7 +67,8 @@ error navigation, cancellation, and recompile behavior to `project-compile'."
       (user-error "Selected project root is unavailable"))
     (let ((project-current-directory-override root)
           (compile-command
-           (p3/project--root-compile-command root compile-command)))
+           (p3/project--root-compile-command
+            root (default-value 'compile-command))))
       (call-interactively #'project-compile))))
 
 (defun p3/project--tab-root (tab)
