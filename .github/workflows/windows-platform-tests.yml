@@ -2,6 +2,8 @@ name: Windows platform tests
 
 on:
   pull_request:
+    types:
+      - ready_for_review
     paths:
       - "config.org"
       - "lisp/p3-platform.el"
@@ -57,9 +59,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: windows-platform-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   platform:
     runs-on: windows-latest
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
@@ -70,17 +77,12 @@ jobs:
         run: choco install emacs -y --no-progress
 
       - name: Locate Git for Windows MSYS2 root
-        shell: powershell
+        shell: bash
         run: |
-          $gitExe = (Get-Command git).Source
-          $gitRoot = Split-Path (Split-Path $gitExe -Parent) -Parent
-          if (-not (Test-Path (Join-Path $gitRoot "usr/bin/bash.exe"))) {
-            throw "Git for Windows MSYS2 bash not found under $gitRoot"
-          }
-          if (-not (Test-Path (Join-Path $gitRoot "usr/bin/find.exe"))) {
-            throw "Git for Windows MSYS2 find not found under $gitRoot"
-          }
-          "P3_TEST_MSYS2_ROOT=$($gitRoot -replace '\\','/')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          git_root="$(cd "$(git --exec-path)/../../.." && pwd -W)"
+          test -x "$git_root/usr/bin/bash.exe"
+          test -x "$git_root/usr/bin/find.exe"
+          printf 'P3_TEST_MSYS2_ROOT=%s\n' "$git_root" >> "$GITHUB_ENV"
 
       - name: Byte-compile Windows boundary modules
         shell: powershell
