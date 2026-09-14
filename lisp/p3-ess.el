@@ -47,11 +47,11 @@
       (setq-local
        compile-command
        (format "%s --slave --no-save -e %s --args %s"
-               (shell-quote-argument program)
+               (shell-quote-argument program t)
                (shell-quote-argument
-                "rmarkdown::render(commandArgs(trailingOnly = TRUE)[1])")
+                "rmarkdown::render(commandArgs(trailingOnly = TRUE)[1])" t)
                (shell-quote-argument
-                (expand-file-name buffer-file-name)))))))
+                (expand-file-name buffer-file-name) t))))))
 
 (defun p3/ess-process-live-p (name)
   "Return non-nil if NAME names a live process."
