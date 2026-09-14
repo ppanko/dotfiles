@@ -43,6 +43,7 @@ A project can override this variable with directory-local settings."
      :label "PowerPoint (.pptx)"
      :extension "pptx"
      :format "pptx"
+     :arguments ("--fail-if-warnings")
      :reference-variable p3-org-export-reference-pptx))
   "Pandoc output profiles exposed by `p3/org-export'.")
 
