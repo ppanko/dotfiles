@@ -33,6 +33,7 @@
 (declare-function package-refresh-contents "package" (&optional async))
 (declare-function package-list-packages "package" (&optional no-fetch))
 (declare-function p3/windows-shell "p3-commands" ())
+(declare-function p3/state-directory "p3-core" ())
 (declare-function p3/config-visit "p3-core" ())
 (declare-function p3/config-reload "p3-core" ())
 
