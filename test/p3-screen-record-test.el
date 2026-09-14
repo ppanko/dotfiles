@@ -123,6 +123,18 @@
        (should (string-match-p "failed to create display"
                                (error-message-string err)))))))
 
+(ert-deftest p3-screen-record-wayland-output-explains-wlroots-requirement ()
+  (p3-screen-record-test--with-module
+   (cl-letf (((symbol-function 'process-file)
+              (lambda (_program _infile _destination _display &rest _args)
+                (insert "compositor doesn't support wlr-screencopy-unstable-v1")
+                1)))
+     (let ((err (should-error
+                 (p3/screen-record--wayland-output "/usr/bin/wf-recorder")
+                 :type 'user-error)))
+       (should (string-match-p "wlroots-compatible"
+                               (error-message-string err)))))))
+
 (ert-deftest p3-screen-record-unsupported-platform-fails-clearly ()
   (p3-screen-record-test--with-module
    (let ((system-type 'darwin))
