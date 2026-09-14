@@ -14,10 +14,10 @@ The current repository already has the right owners:
 
 - `lisp/p3-project.el` owns filesystem project identity and normalized roots through `p3/project-root` and `p3/project-normalize-root`.
 - `lisp/p3-org-roam.el` owns reusable Org-roam workflow behavior.
-- `lisp/p3-config-org-roam.el` owns package wiring, capture configuration, persistence registration, and keybindings.
-- `savehist` is already enabled for machine-local Emacs state.
+- `lisp/p3-config-org-roam.el` owns Org-roam package wiring, capture configuration, and keybindings.
+- `lisp/p3-config-completion.el` owns the existing `savehist` setup and registration of additional machine-local state.
 
-The implementation must preserve those boundaries. `p3-project.el` does not gain Org-roam knowledge, and Org-roam does not replace `project.el` as the filesystem project authority.
+The implementation must preserve those boundaries. `p3-project.el` does not gain Org-roam knowledge, Org-roam does not replace `project.el` as the filesystem project authority, and the association variable is registered before `savehist-mode` starts so persisted mappings are restored during startup.
 
 ## Identity model
 
@@ -180,7 +180,7 @@ Exact Lisp names and keybindings follow repository naming conventions during imp
 
 ## Persistence
 
-The root-to-hub association variable is registered with the existing `savehist` configuration from the Org-roam configuration boundary so it survives Emacs restarts on the same machine.
+The root-to-hub association variable is registered with the existing `savehist` owner in `p3-config-completion.el` before `savehist-mode` starts. This preserves the existing persistence boundary and ensures mappings are restored during startup rather than only becoming eligible for later saves after Org-roam loads.
 
 Persistence requirements:
 
@@ -228,12 +228,15 @@ The existing dynamic-binding contract in this file is preserved. Long-lived call
 
 ### `lisp/p3-config-org-roam.el`
 
-Owns only declarative wiring:
+Owns only declarative Org-roam wiring:
 
 - command declarations;
 - capture/package integration where required;
-- registration of the association variable with existing `savehist` state;
-- keybindings for the small project-aware surface.
+- keybindings for the small project-aware surface, including the project keymap prefix.
+
+### `lisp/p3-config-completion.el`
+
+Retains ownership of `savehist` setup and registers `p3/org-roam-project-associations` in `savehist-additional-variables` before enabling `savehist-mode`, so the machine-local root map is restored during startup.
 
 ### `lisp/p3-project.el`
 
