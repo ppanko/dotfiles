@@ -79,7 +79,7 @@
     (should
      (equal
       (p3-org-export--arguments 'docx source output reference)
-      (list "--from=org" "--to=docx"
+      (list "--from=org" "--to=docx" "--fail-if-warnings"
             source "-o" output
             "--reference-doc=/tmp/reference.docx")))))
 
@@ -233,6 +233,31 @@
                 (should (file-exists-p output))
                 (should (> (file-attribute-size (file-attributes output)) 0))
                 (should (p3-org-export-test--zip-file-p output))))
+          (set-buffer-modified-p nil)
+          (kill-buffer (current-buffer)))))))
+
+(ert-deftest p3-org-export-docx-warning-fails-without-overwriting-output ()
+  (skip-unless (executable-find "pandoc"))
+  (p3-org-export-test--with-temp-directory directory
+    (let* ((source (expand-file-name "report.org" directory))
+           (output (expand-file-name "report.docx" directory))
+           (sentinel "previous valid output"))
+      (with-temp-file source
+        (insert
+         "#+TITLE: Missing Asset\n\n"
+         "* Figure\n"
+         "#+CAPTION: Missing figure\n"
+         "[[file:figures/does-not-exist.png]]\n"))
+      (with-temp-file output
+        (insert sentinel))
+      (with-current-buffer (find-file-noselect source)
+        (unwind-protect
+            (progn
+              (org-mode)
+              (should-error (p3-org-export-run 'docx nil)
+                            :type 'user-error)
+              (should (equal (p3-org-export-test--contents output)
+                             sentinel)))
           (set-buffer-modified-p nil)
           (kill-buffer (current-buffer)))))))
 
