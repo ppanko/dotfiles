@@ -47,3 +47,13 @@ Pandoc selects layouts from the reference PPTX by their standard names. A custom
 Office export is intentionally strict: any Pandoc warning causes the export to fail. This prevents a missing layout, missing asset, or other warning-driven degradation from being reported as a successful handoff artifact. If Pandoc's warning policy later proves too broad in normal use, narrow it based on a concrete benign warning rather than silently accepting degraded output.
 
 Column widths are controlled by the PowerPoint layout rather than by an Emacs-side positioning system. Precise visual inspection and the render/preview loop are a later part of the Office workflow.
+
+## Incoming DOCX inspection
+
+Use `M-x p3/office-import-docx` when the useful semantic content of a Word file needs to be recovered for inspection or continued editing in Emacs. `report.docx` becomes a sibling `report.org`, with embedded media extracted beside it under `report-media/`.
+
+This is deliberately a content-recovery path, not a preservation path for Word-specific semantics. Custom Word style identities and review metadata such as tracked changes and comments are not retained as reliable Org structure. The generated Org starts with a durable warning that makes those losses explicit and records any Pandoc diagnostics produced during conversion. Keep the original DOCX as the fidelity reference for styling, review history, layout, text boxes, and native Office objects.
+
+The importer refuses to overwrite an existing sibling Org file or media directory. Extracted-media links remain relative so the imported Org, DOCX, and media directory can move together without embedding machine-specific paths.
+
+This is an inspection and editing workflow, not a promise that arbitrary DOCX files can be converted to Org and regenerated identically.
