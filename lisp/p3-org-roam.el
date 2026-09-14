@@ -423,6 +423,14 @@ When REPLACE-ROOT is non-nil, explicitly replace an existing root mapping."
     (p3/org-roam--hub-node hub-id)
     (p3/org-roam--project-todos hub-id)))
 
+(defvar-keymap p3/org-roam-project-command-map
+  :doc "Commands for the current Org-roam literate project."
+  "h" #'p3/org-roam-project-note
+  "f" #'p3/org-roam-project-find-note
+  "n" #'p3/org-roam-project-new-note
+  "a" #'p3/org-roam-project-associate
+  "t" #'p3/org-roam-project-todos)
+
 (provide 'p3-org-roam)
 
 ;;; p3-org-roam.el ends here
