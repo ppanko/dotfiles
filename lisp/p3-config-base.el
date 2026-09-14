@@ -28,7 +28,7 @@
 (declare-function dashboard-setup-startup-hook "dashboard" ())
 (declare-function which-key-mode "which-key" (&optional arg))
 (declare-function which-key-add-key-based-replacements "which-key" (&rest replacements))
-(declare-function dired-async-mode "async" (&optional arg))
+(declare-function dired-async-mode "dired-async" (&optional arg))
 (declare-function async-bytecomp-package-mode "async-bytecomp" (&optional arg))
 (declare-function package-refresh-contents "package" (&optional async))
 (declare-function package-list-packages "package" (&optional no-fetch))
