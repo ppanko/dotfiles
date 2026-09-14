@@ -85,8 +85,8 @@ side-window rule live in =lisp/p3-config-workspace.el=.
 
 ** Completion-related
 
-Vertico, Orderless, Consult, Embark, Company, and their existing helper wiring
-live in =lisp/p3-config-completion.el=.
+Vertico, Orderless, Consult, Embark, Company, shared Eglot wiring, and their
+existing helper configuration live in =lisp/p3-config-completion.el=.
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-completion)
@@ -97,8 +97,9 @@ live in =lisp/p3-config-completion.el=.
 ESS package wiring, R-mode hooks, keybindings, buffer defaults, RMarkdown
 coding/compile defaults, and ESS-specific Company configuration live in
 =lisp/p3-config-ess.el=. Project-aware ESS process/session behavior remains in
-=lisp/p3-ess.el=, while project templates and user-facing R workflow commands
-remain in =lisp/p3-r-tools.el=.
+=lisp/p3-ess.el=; project templates, targets commands, and other user-facing R
+workflow commands remain in =lisp/p3-r-tools.el=. Managed R =languageserver=
+bootstrap and Eglot integration live in =lisp/p3-r-language-server.el=.
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-ess)
@@ -182,10 +183,11 @@ built-in =project.el= command map.
 
 ** Python
 
-Python package wiring, mode hooks, keybindings, Eglot integration, and
-Python-specific diagnostic configuration live in =lisp/p3-config-python.el=.
-Reusable interpreter, language-server, and REPL behavior remains in
-=lisp/p3-python.el=.
+Python package wiring, mode hooks, Python-specific Eglot formatting, and
+diagnostic configuration live in =lisp/p3-config-python.el=. Reusable
+interpreter, language-server, and REPL behavior remains in =lisp/p3-python.el=;
+generic Eglot rename/code-action bindings are owned by the shared
+completion/navigation layer above.
 
 #+BEGIN_SRC emacs-lisp
   (p3/config-load-module 'p3-config-python)

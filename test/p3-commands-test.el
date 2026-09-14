@@ -51,6 +51,22 @@
     (should (equal (cdr (assoc "s-p" (cdr section)))
                    "native project commands"))))
 
+(ert-deftest p3-commands-atlas-surfaces-ess-tracebug-map ()
+  (let ((section (assoc "R / ESS" p3/keybinding-sections)))
+    (should section)
+    (should (equal (cdr (assoc "C-c C-t" (cdr section)))
+                   "ESS Tracebug/debug commands"))))
+
+(ert-deftest p3-commands-atlas-surfaces-shared-language-intelligence ()
+  (let ((section (assoc "Language intelligence" p3/keybinding-sections)))
+    (should section)
+    (dolist (binding '(("M-." . "go to definition")
+                       ("M-?" . "find references")
+                       ("C-c l r" . "rename symbol")
+                       ("C-c l a" . "code actions")))
+      (should (equal (cdr (assoc (car binding) (cdr section)))
+                     (cdr binding))))))
+
 (ert-deftest p3-commands-atlas-describes-reference-prefix ()
   (let ((section (assoc "References" p3/keybinding-sections)))
     (should
