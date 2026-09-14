@@ -14,7 +14,7 @@ The current repository already has the right owners:
 
 - `lisp/p3-project.el` owns filesystem project identity and normalized roots through `p3/project-root` and `p3/project-normalize-root`.
 - `lisp/p3-org-roam.el` owns reusable Org-roam workflow behavior.
-- `lisp/p3-config-org-roam.el` owns package wiring, capture configuration, and keybindings.
+- `lisp/p3-config-org-roam.el` owns package wiring, capture configuration, persistence registration, and keybindings.
 - `savehist` is already enabled for machine-local Emacs state.
 
 The implementation must preserve those boundaries. `p3-project.el` does not gain Org-roam knowledge, and Org-roam does not replace `project.el` as the filesystem project authority.
@@ -46,6 +46,8 @@ A wholly project-scoped Org-roam note stores the same hub ID in its own file-lev
 ```
 
 A heading inside a general-purpose note may instead carry an explicit heading-level `P3_PROJECT` property. File and heading membership are singular in v1.
+
+A node is recognized as a project hub when its file node has an Org `ID` and its file-level `P3_PROJECT` equals that same ID.
 
 Ordinary Org-roam links, backlinks, tags, note titles, filenames, Git remotes, repository names, and directory names are not project-membership truth.
 
@@ -80,33 +82,36 @@ This precedence allows project commands to keep working after the user leaves a 
 
 The primary hub command, conceptually `p3/project-note`, behaves differently depending on context.
 
-When project context already resolves to a hub ID, it opens that hub.
+When project context already resolves to a hub ID, it opens that hub after validating that the ID still resolves to a self-marked hub node.
 
 When invoked from a filesystem project with no root mapping, it offers an explicit first-use association flow:
 
 - select an existing Org-roam file node as the hub; or
 - create a new ordinary Org-roam file node as the hub.
 
-Selecting an existing node is explicit user choice, never title/name inference. The selected hub must have a resolvable Org ID, and its file-level `P3_PROJECT` is set to that same ID if needed. Creating a hub likewise creates a normal Org-roam file node, ensures it has an Org ID, sets `P3_PROJECT` to that ID, and records the normalized root-to-hub association.
+Selecting an existing node is explicit user choice, never title/name inference. An existing node may become a hub only when it is currently unassociated or already self-marked as a hub. A node already associated with a different project is not silently converted into another hub; the user must first explicitly change that membership through the association workflow.
 
-If a stored hub ID no longer resolves to a live Org-roam node, the command reports a stale association and requires explicit repair or reassociation. It must not silently manufacture a replacement hub.
+The selected hub must have a resolvable Org ID. If an unassociated existing node is selected, its file-level `P3_PROJECT` is set to its own ID. Creating a hub likewise creates a normal Org-roam file node, ensures it has an Org ID, sets `P3_PROJECT` to that ID, and records the normalized root-to-hub association.
+
+If a stored hub ID no longer resolves to a live self-marked Org-roam hub, the command reports a stale association and requires explicit repair or reassociation. It must not silently manufacture a replacement hub.
 
 ## Note and heading association
 
-A single small user-facing association workflow supports explicit association, reassociation, and disassociation.
+One user-facing association command supports association, reassociation, and disassociation without requiring manual property editing.
 
-The target is either:
+Target scope is deterministic:
 
-- the current Org heading; or
-- the current Org-roam file node.
+- when point is inside an Org heading, the current heading is the default target;
+- outside a heading, the current Org-roam file node is the target;
+- a universal prefix argument targets the whole file even when point is inside a heading.
 
-The interaction may use point/prefix conventions or a small scope prompt, but it must make the scope unambiguous before mutation.
+When the target has no explicit `P3_PROJECT`, the command associates it with a hub. The current resolved project is offered as the default when available; otherwise the user explicitly selects from self-marked hub nodes.
 
-Association writes `P3_PROJECT=<hub-id>` at the selected scope. Reassociation from a different existing project requires explicit confirmation. Disassociation removes only the selected scope's property.
+When the target already has an explicit `P3_PROJECT`, the command offers explicit change or remove behavior. Changing to a different hub requires confirmation. Removing membership deletes only the selected scope's property.
 
 Disassociating a file node must not remove explicit heading-level project properties inside that file.
 
-If the relevant Org file is already visiting a modified live buffer, the command mutates that buffer or refuses safely. It must never rewrite the file behind the buffer or save unrelated edits implicitly.
+If the relevant Org file is already visiting a modified live buffer, the command mutates that buffer. It must never rewrite the file behind the buffer or save unrelated edits implicitly.
 
 ## Project-aware capture
 
@@ -116,7 +121,7 @@ The resulting note remains an ordinary flat Org-roam node. Its file-level proper
 
 The feature does not create project-specific directories, filenames, tag conventions, or a second capture engine.
 
-If there is no project context, the command fails clearly or routes through the explicit hub association/creation flow. It must not guess a project from names or links.
+If there is no project context, project-new-note fails clearly and directs the user to establish/open the project hub first. It does not guess a project or start an implicit identity-creation flow.
 
 ## Project note discovery
 
@@ -140,15 +145,15 @@ The query must use native Org property matching and Agenda behavior. During gene
 - direct heading-level `P3_PROJECT` overrides file-level membership;
 - temporary agenda/query state is dynamically scoped and restored after generation.
 
-The resulting buffer remains a normal Org Agenda surface, preserving TODO state changes, scheduling/deadlines, priorities, source navigation, and refresh.
+The resulting buffer remains a normal Org Agenda surface, preserving TODO state changes, scheduling/deadlines, priorities, and source navigation.
 
-Agenda refresh must re-establish the same project-scoped query without leaving `org-agenda-files`, `org-use-property-inheritance`, or related global state modified after the operation. A buffer-local redo/reinvoke mechanism is acceptable if needed to preserve native refresh behavior.
+The project Agenda buffer owns a buffer-local redo/reinvoke action that regenerates the same project-scoped view under the same temporary bindings. Refresh therefore remains project-aware without leaving `org-agenda-files`, `org-use-property-inheritance`, or related global state modified between operations.
 
 The existing global/tag-based Org-roam agenda command remains independent and unchanged in semantics.
 
 ## User-facing surface
 
-The feature should remain conceptually limited to five operations:
+The feature remains conceptually limited to five operations:
 
 ```text
 project-note        open/create/repair the current project's hub
@@ -158,11 +163,11 @@ project-associate   associate/reassociate/disassociate a note or heading
 project-todos       show unfinished project TODOs in native Org Agenda
 ```
 
-Exact Lisp names and keybindings may follow repository naming conventions during implementation. No dashboard, project browser, custom task editor, or parallel graph UI is added.
+Exact Lisp names and keybindings follow repository naming conventions during implementation. No dashboard, project browser, custom task editor, or parallel graph UI is added.
 
 ## Persistence
 
-The root-to-hub association variable is registered with the existing `savehist` configuration so it survives Emacs restarts on the same machine.
+The root-to-hub association variable is registered with the existing `savehist` configuration from the Org-roam configuration boundary so it survives Emacs restarts on the same machine.
 
 Persistence requirements:
 
@@ -172,7 +177,7 @@ Persistence requirements:
 - no new state file format or migration system is introduced;
 - stale hub IDs are detected when resolved, not automatically repaired.
 
-The design does not require persistence of derived note lists, TODO results, Org-roam query caches, or duplicated project metadata outside Org itself.
+The design does not persist derived note lists, TODO results, Org-roam query caches, or duplicated project metadata outside Org itself.
 
 ## Failure behavior
 
@@ -180,10 +185,11 @@ The implementation favors visible failure over implicit identity repair.
 
 - Missing filesystem project root: fail clearly.
 - Root already mapped to a different hub: require explicit reassociation.
-- Stored hub ID missing from Org-roam: report stale association and require repair/reassociation.
-- File/heading already associated with another hub: require explicit reassociation.
+- Stored hub ID missing from Org-roam or no longer self-marked: report stale association and require repair/reassociation.
+- File/heading already associated with another hub: require explicit change/reassociation.
+- Existing node proposed as a new hub while associated with another project: reject until membership is explicitly changed.
 - Ordinary link/backlink/tag/title/name similarity: never creates membership.
-- Modified live note buffer: mutate live buffer or refuse; never rewrite behind it.
+- Modified live note buffer: mutate the live buffer; never rewrite behind it or save unrelated edits.
 - Missing Org-roam database/package state: surface an actionable command error without corrupting mappings or note metadata.
 
 ## Code boundaries
@@ -193,7 +199,7 @@ The implementation favors visible failure over implicit identity repair.
 Owns:
 
 - root-to-hub association data and lookup/mutation helpers;
-- hub resolution and stale-association checks;
+- hub recognition, resolution, and stale-association checks;
 - context precedence;
 - file/heading membership helpers;
 - project hub/open workflow;
@@ -201,7 +207,7 @@ Owns:
 - filtered project-node discovery;
 - native Agenda project TODO query.
 
-The existing dynamic-binding contract in this file is preserved unless implementation demonstrates a concrete need to change it.
+The existing dynamic-binding contract in this file is preserved.
 
 ### `lisp/p3-config-org-roam.el`
 
@@ -209,12 +215,12 @@ Owns only declarative wiring:
 
 - command declarations;
 - capture/package integration where required;
-- `savehist` registration if wiring belongs at configuration level;
+- registration of the association variable with existing `savehist` state;
 - keybindings for the small project-aware surface.
 
 ### `lisp/p3-project.el`
 
-Remains unchanged unless a minimal reusable filesystem identity helper is demonstrably missing. Org-roam project association must not be moved into the shared project foundation merely for convenience.
+Remains unchanged. The Org-roam integration reuses its existing root and normalization APIs and does not move literate project state into the shared filesystem-project foundation.
 
 ### Tests
 
@@ -222,20 +228,24 @@ Extend the focused Org-roam test boundary rather than building an integration-te
 
 ## Testing strategy
 
-Implementation proceeds test-first. Behavioral coverage should include:
+Implementation proceeds test-first. Behavioral coverage includes:
 
 - normalized root-to-hub association and lookup;
 - persistence variable registration without introducing a new state store;
 - one root cannot silently map to multiple hubs;
 - one hub may be explicitly mapped from multiple roots;
+- hub recognition requires `ID == P3_PROJECT` at file scope;
 - context precedence: heading, file, filesystem mapping, none;
-- stale hub association detection;
+- stale/non-self-marked hub association detection;
 - explicit existing-node hub selection and new-hub creation semantics;
+- rejection of converting a note already associated with another project into a hub implicitly;
 - file-level association, reassociation, and disassociation;
 - heading-level association and override behavior;
+- deterministic heading/file target scope including prefix behavior;
 - file disassociation preserving explicit heading associations;
 - live modified buffer safety;
 - project-aware capture injecting the correct hub ID;
+- no-context project capture failing without guessing;
 - project node filtering excluding general notes with only associated headings;
 - project TODO query using only `P3_PROJECT` inheritance;
 - Agenda/query globals restored after invocation;
@@ -273,7 +283,7 @@ The implementation is complete when:
 4. whole notes and individual headings can be explicitly associated without hidden inference;
 5. new project notes inherit membership automatically through normal Org-roam capture;
 6. project file nodes can be found through normal Org-roam completion;
-7. unfinished project TODOs aggregate through native Org Agenda with scoped `P3_PROJECT` inheritance;
+7. unfinished project TODOs aggregate through native Org Agenda with scoped `P3_PROJECT` inheritance and project-aware refresh;
 8. global/tag-based Org-roam behavior remains independent;
 9. stale/conflicting identities require explicit repair instead of silent replacement; and
 10. the implementation adds no second project, notes, task, or persistence framework.
