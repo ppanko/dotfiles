@@ -34,6 +34,7 @@ on:
       - "lisp/p3-r-tools.el"
       - "lisp/p3-r-language-server.el"
       - "lisp/p3-r-tidyverse-completion.el"
+      - "templates/r/**"
       - "test/p3-platform-test.el"
       - "test/p3-project-test.el"
       - "test/p3-project-windows-test.el"
@@ -59,6 +60,7 @@ on:
       - "test/p3-reference-adversarial-test.el"
       - "test/p3-ess-test.el"
       - "test/p3-r-tools-test.el"
+      - "test/p3-r-portability-test.el"
       - "test/p3-r-language-server-test.el"
       - "test/p3-r-tidyverse-completion-test.el"
       - "test/p3-commands-test.el"
@@ -121,6 +123,7 @@ jobs:
           lisp/p3-config-editing.el
           lisp/p3-ess.el
           lisp/p3-python.el
+          lisp/p3-r-tools.el
           lisp/p3-r-language-server.el
           lisp/p3-r-tidyverse-completion.el
           lisp/p3-terminal.el
@@ -170,6 +173,7 @@ jobs:
           -l test/p3-reference-test.el
           -l test/p3-reference-reconstruction-test.el
           -l test/p3-reference-adversarial-test.el
+          -l test/p3-r-tools-test.el
           -l test/p3-r-language-server-test.el
           -l test/p3-r-tidyverse-completion-test.el
           -l test/p3-commands-test.el
