@@ -95,6 +95,8 @@
 
 (ert-deftest p3-git-config-keeps-magit-usable-without-forge ()
   (let* ((path (expand-file-name "lisp/p3-config-git.el" p3-git-test--root))
+         (p3/config-lisp-directory
+          (expand-file-name "lisp" p3-git-test--root))
          (global-map (copy-keymap global-map))
          (features (cons 'magit
                          (delq 'forge
