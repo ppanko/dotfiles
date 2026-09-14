@@ -62,7 +62,7 @@
            "-i" ":7.0" "-c:v" "libx264" "-preset" "veryfast"
            "-pix_fmt" "yuv420p" "/tmp/screen.mp4")))))))
 
-(ert-deftest p3-screen-record-wayland-command-uses-wf-recorder-without-audio ()
+(ert-deftest p3-screen-record-wayland-command-selects-output-without-audio ()
   (p3-screen-record-test--with-module
    (let ((system-type 'gnu/linux))
      (cl-letf (((symbol-function 'getenv)
@@ -70,11 +70,58 @@
                   (pcase name
                     ("XDG_SESSION_TYPE" "wayland")
                     ("WAYLAND_DISPLAY" "wayland-1")
-                    (_ nil)))))
+                    (_ nil))))
+               ((symbol-function 'executable-find)
+                (lambda (program)
+                  (when (equal program "wf-recorder") "/usr/bin/wf-recorder")))
+               ((symbol-function 'p3/screen-record--wayland-output)
+                (lambda (_program) "DP-1")))
        (should
         (equal
          (p3/screen-record--command "/tmp/screen.mp4")
-         '("wf-recorder" "-f" "/tmp/screen.mp4")))))))
+         '("wf-recorder" "-o" "DP-1" "-f" "/tmp/screen.mp4")))))))
+
+(ert-deftest p3-screen-record-wayland-output-auto-selects-single-output ()
+  (p3-screen-record-test--with-module
+   (should (fboundp 'p3/screen-record--wayland-output))
+   (cl-letf (((symbol-function 'process-file)
+              (lambda (_program _infile destination _display &rest args)
+                (should (eq destination t))
+                (should (equal args '("-L")))
+                (insert "1. Name: eDP-1 Description: Built-in display\n")
+                0)))
+     (should (equal (p3/screen-record--wayland-output "/usr/bin/wf-recorder")
+                    "eDP-1")))))
+
+(ert-deftest p3-screen-record-wayland-output-prompts-in-emacs-for-multiple-outputs ()
+  (p3-screen-record-test--with-module
+   (should (fboundp 'p3/screen-record--wayland-output))
+   (let (seen-candidates)
+     (cl-letf (((symbol-function 'process-file)
+                (lambda (_program _infile _destination _display &rest _args)
+                  (insert "1. Name: eDP-1 Description: Built-in display\n"
+                          "2. Name: DP-1 Description: External display\n")
+                  0))
+               ((symbol-function 'completing-read)
+                (lambda (_prompt collection &rest _)
+                  (setq seen-candidates collection)
+                  "DP-1")))
+       (should (equal (p3/screen-record--wayland-output "/usr/bin/wf-recorder")
+                      "DP-1"))
+       (should (equal seen-candidates '("eDP-1" "DP-1")))))))
+
+(ert-deftest p3-screen-record-wayland-output-reports-preflight-failure ()
+  (p3-screen-record-test--with-module
+   (should (fboundp 'p3/screen-record--wayland-output))
+   (cl-letf (((symbol-function 'process-file)
+              (lambda (_program _infile _destination _display &rest _args)
+                (insert "failed to create display")
+                1)))
+     (let ((err (should-error
+                 (p3/screen-record--wayland-output "/usr/bin/wf-recorder")
+                 :type 'user-error)))
+       (should (string-match-p "failed to create display"
+                               (error-message-string err)))))))
 
 (ert-deftest p3-screen-record-unsupported-platform-fails-clearly ()
   (p3-screen-record-test--with-module
@@ -93,11 +140,26 @@
   (p3-screen-record-test--with-module
    (let ((p3/screen-record-directory "/tmp/recordings/"))
      (cl-letf (((symbol-function 'format-time-string)
-                (lambda (&rest _) "20260914-101530")))
+                (lambda (&rest _) "20260914-101530"))
+               ((symbol-function 'file-exists-p) (lambda (_path) nil)))
        (should
         (equal
          (p3/screen-record--output-file)
          (expand-file-name "screen-20260914-101530.mp4"
+                           "/tmp/recordings/")))))))
+
+(ert-deftest p3-screen-record-output-file-avoids-existing-timestamp-collision ()
+  (p3-screen-record-test--with-module
+   (let ((p3/screen-record-directory "/tmp/recordings/"))
+     (cl-letf (((symbol-function 'format-time-string)
+                (lambda (&rest _) "20260914-101530"))
+               ((symbol-function 'file-exists-p)
+                (lambda (path)
+                  (string-suffix-p "screen-20260914-101530.mp4" path))))
+       (should
+        (equal
+         (p3/screen-record--output-file)
+         (expand-file-name "screen-20260914-101530-1.mp4"
                            "/tmp/recordings/")))))))
 
 (ert-deftest p3-screen-record-start-prevents-a-second-live-recording ()
@@ -128,6 +190,8 @@
                ((symbol-function 'make-directory)
                 (lambda (directory &rest _)
                   (setq created-directory directory)))
+               ((symbol-function 'file-directory-p) (lambda (_directory) t))
+               ((symbol-function 'file-writable-p) (lambda (_directory) t))
                ((symbol-function 'make-process)
                 (lambda (&rest plist)
                   (setq captured-command (plist-get plist :command)
@@ -159,10 +223,14 @@
                ((symbol-function 'executable-find)
                 (lambda (_program) "/usr/bin/ffmpeg"))
                ((symbol-function 'make-directory) (lambda (&rest _) t))
+               ((symbol-function 'file-directory-p) (lambda (_directory) t))
+               ((symbol-function 'file-writable-p) (lambda (_directory) t))
                ((symbol-function 'make-process)
                 (lambda (&rest _) 'recorder-process))
                ((symbol-function 'process-status)
                 (lambda (_process) 'exit))
+               ((symbol-function 'process-exit-status) (lambda (_process) 1))
+               ((symbol-function 'process-buffer) (lambda (_process) nil))
                ((symbol-function 'force-mode-line-update) (lambda (&rest _) t)))
        (p3/screen-record-start)
        (should-not p3/screen-record--process)
@@ -192,6 +260,15 @@
                 (lambda (&rest _)
                   (signal 'file-error '("Permission denied")))))
        (should-error (p3/screen-record-start) :type 'user-error)))))
+
+(ert-deftest p3-screen-record-start-rejects-existing-unwritable-output-directory ()
+  (p3-screen-record-test--with-module
+   (cl-letf (((symbol-function 'make-directory) (lambda (&rest _) t))
+             ((symbol-function 'file-directory-p) (lambda (_directory) t))
+             ((symbol-function 'file-writable-p) (lambda (_directory) nil)))
+     (should-error
+      (p3/screen-record--ensure-output-directory "/denied/screen.mp4")
+      :type 'user-error))))
 
 (ert-deftest p3-screen-record-stop-asks-ffmpeg-to-finalize-cleanly ()
   (p3-screen-record-test--with-module
@@ -241,6 +318,8 @@
          (p3/screen-record--output-path "/tmp/screen.mp4")
          refreshed)
      (cl-letf (((symbol-function 'process-status) (lambda (_process) 'exit))
+               ((symbol-function 'process-exit-status) (lambda (_process) 0))
+               ((symbol-function 'process-buffer) (lambda (_process) nil))
                ((symbol-function 'force-mode-line-update)
                 (lambda (&rest _) (setq refreshed t))))
        (p3/screen-record--sentinel 'recorder-process "finished\n")
@@ -248,6 +327,30 @@
        (should-not p3/screen-record--backend)
        (should-not p3/screen-record--output-path)
        (should refreshed)))))
+
+(ert-deftest p3-screen-record-sentinel-surfaces-backend-failure-detail ()
+  (p3-screen-record-test--with-module
+   (let ((p3/screen-record--process 'recorder-process)
+         (p3/screen-record--backend 'wf-recorder)
+         (p3/screen-record--output-path "/tmp/screen.mp4")
+         (buffer (generate-new-buffer " *p3-screen-record-test*"))
+         seen-message)
+     (unwind-protect
+         (progn
+           (with-current-buffer buffer
+             (insert "compositor doesn't support wlr-screencopy-unstable-v1\n"))
+           (cl-letf (((symbol-function 'process-status) (lambda (_process) 'exit))
+                     ((symbol-function 'process-exit-status) (lambda (_process) 1))
+                     ((symbol-function 'process-buffer) (lambda (_process) buffer))
+                     ((symbol-function 'force-mode-line-update) (lambda (&rest _) t))
+                     ((symbol-function 'message)
+                      (lambda (format-string &rest args)
+                        (setq seen-message (apply #'format format-string args)))))
+             (p3/screen-record--sentinel 'recorder-process
+                                         "exited abnormally with code 1\n")
+             (should (string-match-p "Screen recording failed" seen-message))
+             (should (string-match-p "wlr-screencopy" seen-message))))
+       (kill-buffer buffer)))))
 
 (ert-deftest p3-screen-record-indicator-reflects-live-process-state ()
   (p3-screen-record-test--with-module
