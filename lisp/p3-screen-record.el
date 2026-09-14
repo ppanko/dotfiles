@@ -2,9 +2,10 @@
 
 ;;; Commentary:
 ;; Keep screen recording deliberately small: one Emacs process/state layer and
-;; narrow platform/session-specific command construction.  Audio capture,
-;; recorder-device management, and post-processing are intentionally out of
-;; scope.
+;; narrow platform/session-specific command construction.  Wayland support is
+;; intentionally limited to wf-recorder on wlroots-compatible compositors.
+;; Audio capture, recorder-device management, and post-processing are
+;; intentionally out of scope.
 
 ;;; Code:
 
@@ -58,10 +59,15 @@ Signal `user-error' when output discovery itself fails."
     (let* ((status (process-file program nil t nil "-L"))
            (detail (string-trim (buffer-string))))
       (unless (and (integerp status) (zerop status))
-        (user-error "Cannot enumerate Wayland outputs with wf-recorder%s"
-                    (if (string-empty-p detail)
-                        ""
-                      (format ": %s" detail))))
+        (if (or (string-match-p "wlr-screencopy" detail)
+                (string-match-p "xdg-output" detail))
+            (user-error
+             "Wayland screen recording requires a wlroots-compatible compositor for wf-recorder: %s"
+             detail)
+          (user-error "Cannot enumerate Wayland outputs with wf-recorder%s"
+                      (if (string-empty-p detail)
+                          ""
+                        (format ": %s" detail)))))
       (goto-char (point-min))
       (let (outputs)
         (while (re-search-forward
