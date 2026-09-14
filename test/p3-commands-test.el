@@ -127,6 +127,31 @@
           (should (equal observed-command "make check")))
       (delete-directory root t))))
 
+(ert-deftest p3-commands-project-compile-ignores-buffer-local-fallback-command ()
+  (let ((root (make-temp-file "p3-project-check-fallback-" t))
+        (saved-default (default-value 'compile-command))
+        observed-command)
+    (unwind-protect
+        (progn
+          (setq-default compile-command "make -k ")
+          (with-temp-buffer
+            (setq default-directory root)
+            (setq-local compile-command "g++ current.cpp")
+            (let ((compilation-read-command t))
+              (cl-letf (((symbol-function 'project-current)
+                         (lambda (&optional _maybe-prompt _directory)
+                           'fake-project))
+                        ((symbol-function 'project-root)
+                         (lambda (_project) root))
+                        ((symbol-function 'compile)
+                         (lambda (&optional _command _comint)
+                           (interactive)
+                           (setq observed-command compile-command))))
+                (p3/project-compile))))
+          (should (equal observed-command "make -k ")))
+      (setq-default compile-command saved-default)
+      (delete-directory root t))))
+
 (ert-deftest p3-commands-atlas-surfaces-ess-tracebug-map ()
   (let ((section (assoc "R / ESS" p3/keybinding-sections)))
     (should section)
