@@ -50,7 +50,7 @@
       (write-region (point-min) (point-max) path nil 'silent))))
 
 (defun p3-org-export-test--python-executable ()
-  "Return a Python executable suitable for DOCX package inspection."
+  "Return a Python executable suitable for Office package inspection."
   (or (executable-find "python3")
       (executable-find "python")))
 
@@ -140,6 +140,67 @@
                        (string-trim (buffer-string)))))))
       (delete-file script))))
 
+(defun p3-org-export-test--customize-reference-pptx (path)
+  "Customize PATH outside Pandoc to simulate a project PowerPoint template."
+  (let ((script (make-temp-file "p3-org-export-pptx-reference-" nil ".py")))
+    (unwind-protect
+        (progn
+          (with-temp-file script
+            (insert
+             "import os, sys, tempfile, zipfile\n"
+             "import xml.etree.ElementTree as ET\n"
+             "path = sys.argv[1]\n"
+             "a = 'http://schemas.openxmlformats.org/drawingml/2006/main'\n"
+             "ET.register_namespace('a', a)\n"
+             "with zipfile.ZipFile(path, 'r') as zin:\n"
+             "    files = {name: zin.read(name) for name in zin.namelist()}\n"
+             "theme = ET.fromstring(files['ppt/theme/theme1.xml'])\n"
+             "for role in ('majorFont', 'minorFont'):\n"
+             "    latin = theme.find('.//{%s}%s/{%s}latin' % (a, role, a))\n"
+             "    if latin is None:\n"
+             "        raise RuntimeError('reference PPTX has no %s latin font' % role)\n"
+             "    latin.set('typeface', 'Courier New')\n"
+             "files['ppt/theme/theme1.xml'] = ET.tostring(theme, encoding='utf-8', xml_declaration=True)\n"
+             "fd, tmp = tempfile.mkstemp(suffix='.pptx')\n"
+             "os.close(fd)\n"
+             "try:\n"
+             "    with zipfile.ZipFile(tmp, 'w', zipfile.ZIP_DEFLATED) as zout:\n"
+             "        for name, data in files.items():\n"
+             "            zout.writestr(name, data)\n"
+             "    os.replace(tmp, path)\n"
+             "finally:\n"
+             "    if os.path.exists(tmp): os.unlink(tmp)\n"))
+          (with-temp-buffer
+            (let ((status
+                   (call-process
+                    (p3-org-export-test--python-executable)
+                    nil (current-buffer) nil script path)))
+              (unless (and (integerp status) (zerop status))
+                (error "Could not customize reference PPTX: %s"
+                       (string-trim (buffer-string)))))))
+      (delete-file script))))
+
+(defun p3-org-export-test--pptx-slide-layout-names (path)
+  "Return the layout name used by each slide in PPTX PATH."
+  (with-temp-buffer
+    (let ((status
+           (call-process
+            (p3-org-export-test--python-executable)
+            nil (current-buffer) nil
+            "-c"
+            (concat
+             "import posixpath,re,sys,zipfile,xml.etree.ElementTree as ET; "
+             "z=zipfile.ZipFile(sys.argv[1]); "
+             "slides=sorted((n for n in z.namelist() if re.fullmatch(r'ppt/slides/slide[0-9]+\\.xml',n)),key=lambda n:int(re.search(r'([0-9]+)\\.xml$',n).group(1))); "
+             "p='http://schemas.openxmlformats.org/presentationml/2006/main'; "
+             "out=[]; "
+             "exec(\"for slide in slides:\\n rels='ppt/slides/_rels/'+posixpath.basename(slide)+'.rels'\\n root=ET.fromstring(z.read(rels))\\n target=next(x.get('Target') for x in root if x.get('Type','').endswith('/slideLayout'))\\n layout=posixpath.normpath(posixpath.join(posixpath.dirname(slide),target))\\n lr=ET.fromstring(z.read(layout))\\n cs=lr.find('{%s}cSld'%p)\\n out.append(cs.get('name',''))\"); "
+             "sys.stdout.write('\\n'.join(out))")
+            path)))
+      (unless (and (integerp status) (zerop status))
+        (error "Could not inspect PPTX slide layouts: %s" (buffer-string)))
+      (split-string (buffer-string) "\n" t))))
+
 (defun p3-org-export-test--zip-file-p (path)
   "Return non-nil when PATH starts with the ZIP file signature."
   (with-temp-buffer
@@ -183,6 +244,17 @@
       (list "--from=org" "--to=docx" "--fail-if-warnings"
             source "-o" output
             "--reference-doc=/tmp/reference.docx")))))
+
+(ert-deftest p3-org-export-pptx-arguments-use-reference-document-strictly ()
+  (let ((source "/tmp/slides.org")
+        (output "/tmp/slides.pptx")
+        (reference "/tmp/reference.pptx"))
+    (should
+     (equal
+      (p3-org-export--arguments 'pptx source output reference)
+      (list "--from=org" "--to=pptx" "--fail-if-warnings"
+            source "-o" output
+            "--reference-doc=/tmp/reference.pptx")))))
 
 (ert-deftest p3-org-export-reference-defaults-are-profile-specific ()
   (let ((p3-org-export-reference-docx "/tmp/reference.docx")
@@ -413,6 +485,140 @@
             (progn
               (org-mode)
               (should-error (p3-org-export-run 'docx nil)
+                            :type 'user-error)
+              (should (equal (p3-org-export-test--contents output)
+                             sentinel)))
+          (set-buffer-modified-p nil)
+          (kill-buffer (current-buffer)))))))
+
+(ert-deftest p3-org-export-pptx-runs-realistic-deck-through-pandoc ()
+  (skip-unless (and (executable-find "pandoc")
+                    (p3-org-export-test--python-executable)))
+  (p3-org-export-test--with-temp-directory directory
+    (let* ((source (expand-file-name "slides.org" directory))
+           (figure-directory (expand-file-name "figures" directory))
+           (figure (expand-file-name "example.png" figure-directory))
+           (reference-source (expand-file-name "reference.md" directory))
+           (reference (expand-file-name "reference.pptx" directory)))
+      (make-directory figure-directory)
+      (p3-org-export-test--write-png figure)
+      (with-temp-file source
+        (insert
+         "#+TITLE: Presentation Export Test\n"
+         "#+AUTHOR: Example Author\n"
+         "#+EXPORT_FILE_NAME: final-deck\n\n"
+         "* Section\n"
+         "** Bullets\n"
+         "- First point\n"
+         "- Second point\n\n"
+         "#+BEGIN_NOTES\n"
+         "Remember this point.\n"
+         "#+END_NOTES\n\n"
+         "** Two columns\n"
+         "#+BEGIN_COLUMNS\n"
+         "#+BEGIN_COLUMN\n"
+         "Left column\n"
+         "#+END_COLUMN\n"
+         "#+BEGIN_COLUMN\n"
+         "Right column\n"
+         "#+END_COLUMN\n"
+         "#+END_COLUMNS\n\n"
+         "** Data\n"
+         "Data summary.\n\n"
+         "| Name | Value |\n"
+         "|------+-------|\n"
+         "| A    |     1 |\n"
+         "| B    |     2 |\n\n"
+         "** Figure\n"
+         "Figure summary.\n\n"
+         "#+CAPTION: Example figure\n"
+         "[[file:figures/example.png]]\n"))
+      (with-temp-file reference-source
+        (insert "# Reference\n\n## Slide\n\nReference content.\n"))
+      (should
+       (zerop
+        (call-process "pandoc" nil nil nil
+                      reference-source "-o" reference)))
+      (p3-org-export-test--customize-reference-pptx reference)
+      (with-current-buffer (find-file-noselect source)
+        (unwind-protect
+            (progn
+              (org-mode)
+              (let* ((output (p3-org-export-run 'pptx reference))
+                     (members (p3-org-export-test--zip-members output))
+                     (slide-members
+                      (seq-filter
+                       (lambda (name)
+                         (string-match-p
+                          "\\`ppt/slides/slide[0-9]+\\.xml\\'" name))
+                       members))
+                     (slides-xml
+                      (mapconcat
+                       (lambda (name)
+                         (p3-org-export-test--zip-member-contents output name))
+                       slide-members "\n"))
+                     (notes-member
+                      (seq-find
+                       (lambda (name)
+                         (string-match-p
+                          "\\`ppt/notesSlides/notesSlide[0-9]+\\.xml\\'" name))
+                       members))
+                     (theme-xml
+                      (p3-org-export-test--zip-member-contents
+                       output "ppt/theme/theme1.xml"))
+                     (layout-names
+                      (p3-org-export-test--pptx-slide-layout-names output)))
+                (should (equal output
+                               (expand-file-name "final-deck.pptx" directory)))
+                (should (p3-org-export-test--zip-file-p output))
+                (should (>= (length slide-members) 6))
+                (dolist (text '("Presentation Export Test"
+                                "Bullets"
+                                "First point"
+                                "Two columns"
+                                "Left column"
+                                "Right column"
+                                "Data summary"
+                                "Figure summary"))
+                  (should (string-match-p (regexp-quote text) slides-xml)))
+                (should (string-match-p "<a:tbl" slides-xml))
+                (should
+                 (seq-some
+                  (lambda (name)
+                    (string-match-p "\\`ppt/media/.*\\.png\\'" name))
+                  members))
+                (should notes-member)
+                (should
+                 (string-match-p
+                  "Remember this point"
+                  (p3-org-export-test--zip-member-contents
+                   output notes-member)))
+                (should (string-match-p "Courier New" theme-xml))
+                (should (member "Title Slide" layout-names))
+                (should (member "Section Header" layout-names))
+                (should (member "Two Content" layout-names))
+                (should (member "Content with Caption" layout-names))))
+          (set-buffer-modified-p nil)
+          (kill-buffer (current-buffer)))))))
+
+(ert-deftest p3-org-export-pptx-warning-fails-without-overwriting-output ()
+  (skip-unless (executable-find "pandoc"))
+  (p3-org-export-test--with-temp-directory directory
+    (let* ((source (expand-file-name "slides.org" directory))
+           (output (expand-file-name "slides.pptx" directory))
+           (sentinel "previous valid output"))
+      (with-temp-file source
+        (insert
+         "#+TITLE: Missing Asset\n\n"
+         "* Figure\n"
+         "[[file:figures/does-not-exist.png]]\n"))
+      (with-temp-file output
+        (insert sentinel))
+      (with-current-buffer (find-file-noselect source)
+        (unwind-protect
+            (progn
+              (org-mode)
+              (should-error (p3-org-export-run 'pptx nil)
                             :type 'user-error)
               (should (equal (p3-org-export-test--contents output)
                              sentinel)))
