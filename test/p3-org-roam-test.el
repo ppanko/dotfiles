@@ -488,6 +488,54 @@
         (should (string-match-p "P3_PROJECT: hub" head))
         (should-not (plist-get plist :immediate-finish))))))
 
+(ert-deftest p3-org-roam-project-todos-scopes-agenda-state ()
+  (let ((org-agenda-files '("global.org"))
+        (org-use-property-inheritance '("GLOBAL"))
+        seen-files seen-inheritance seen-match seen-todo-only)
+    (cl-letf (((symbol-function 'p3/org-roam-list-notes)
+               (lambda () '("a.org" "a.org" "b.org")))
+              ((symbol-function 'org-tags-view)
+               (lambda (todo-only match)
+                 (setq seen-files org-agenda-files
+                       seen-inheritance org-use-property-inheritance
+                       seen-match match
+                       seen-todo-only todo-only)
+                 (get-buffer-create "*p3-project-agenda-test*"))))
+      (unwind-protect
+          (progn
+            (p3/org-roam--project-todos "hub")
+            (should (equal seen-files '("a.org" "b.org")))
+            (should (equal seen-inheritance '("P3_PROJECT")))
+            (should (equal seen-match "P3_PROJECT=\"hub\""))
+            (should seen-todo-only)
+            (should (equal org-agenda-files '("global.org")))
+            (should (equal org-use-property-inheritance '("GLOBAL"))))
+        (when-let ((buffer (get-buffer "*p3-project-agenda-test*")))
+          (kill-buffer buffer))))))
+
+(ert-deftest p3-org-roam-project-agenda-buffer-stores-explicit-refresh-state ()
+  (let ((buffer (get-buffer-create "*p3-project-agenda-state-test*")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'p3/org-roam-list-notes)
+                   (lambda () '("a.org")))
+                  ((symbol-function 'org-tags-view)
+                   (lambda (&rest _) buffer)))
+          (p3/org-roam--project-todos "hub")
+          (with-current-buffer buffer
+            (should (equal p3/org-roam-project-agenda-hub-id "hub"))
+            (should (equal org-agenda-redo-command
+                           '(p3/org-roam-project-agenda-redo)))))
+      (kill-buffer buffer))))
+
+(ert-deftest p3-org-roam-project-agenda-redo-uses-buffer-local-hub-id ()
+  (with-temp-buffer
+    (setq-local p3/org-roam-project-agenda-hub-id "hub-a")
+    (let (seen)
+      (cl-letf (((symbol-function 'p3/org-roam--project-todos)
+                 (lambda (hub-id) (setq seen hub-id))))
+        (p3/org-roam-project-agenda-redo)
+        (should (equal seen "hub-a"))))))
+
 (provide 'p3-org-roam-test)
 
 ;;; p3-org-roam-test.el ends here
