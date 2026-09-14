@@ -56,7 +56,7 @@ Use `M-x p3/office-preview-pptx` to render and inspect an existing PPTX without 
 
 LibreOffice is an optional runtime dependency for preview only. The command first looks for `soffice` or `libreoffice` on `exec-path`; native Windows also checks the standard LibreOffice installation directories. Set `p3-office-libreoffice-program` when a machine needs an explicit executable override.
 
-Rendered PDFs live under `p3-office-preview-directory`, which defaults to a disposable temporary cache. Rendering happens in a fresh staging directory and replaces the cached preview only after LibreOffice succeeds and produces a non-empty PDF. Repeated previews therefore preserve the last successful render if a later conversion fails, and an already open Emacs preview buffer is refreshed after a successful render.
+Rendered PDFs live under `p3-office-preview-directory`, which defaults to a disposable temporary cache. Each render also uses a fresh temporary LibreOffice user profile, so preview does not depend on or contend with an already-running desktop LibreOffice session. Rendering happens in a fresh staging directory and replaces the cached preview only after LibreOffice succeeds and produces a non-empty PDF. Repeated previews therefore preserve the last successful render if a later conversion fails, and an already open Emacs preview buffer is refreshed after a successful render.
 
 The PDF is only a preview artifact. Org remains the editable source and the generated PPTX remains the presentation deliverable. The preview path deliberately uses LibreOffice's PPTX renderer rather than an HTML/reveal.js approximation, and it does not introduce an Emacs-side slide-layout engine.
 
