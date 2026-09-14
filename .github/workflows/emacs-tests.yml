@@ -27,19 +27,20 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v5
 
-      - name: Install Emacs and Pandoc
+      - name: Install Emacs, Pandoc, and LibreOffice Impress
         env:
           PANDOC_VERSION: "3.11"
           PANDOC_SHA256: "37edb3bbcf722f921a009941bf5874e2e0c09263226c9b4a2d980788cb062ab6"
         run: |
           sudo apt-get update
-          sudo apt-get install -y emacs-nox
+          sudo apt-get install -y emacs-nox libreoffice-impress-nogui
           curl --fail --location --retry 3 \
             --output /tmp/pandoc.tar.gz \
             "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-linux-amd64.tar.gz"
           echo "${PANDOC_SHA256}  /tmp/pandoc.tar.gz" | sha256sum --check --strict
           sudo tar -xzf /tmp/pandoc.tar.gz -C /usr/local --strip-components=1
           pandoc --version | head -n 1
+          soffice --version
 
       - name: Byte-compile extracted modules
         run: |
@@ -77,6 +78,7 @@ jobs:
             lisp/p3-config-gptel.el \
             lisp/p3-org.el \
             lisp/p3-config-org.el \
+            lisp/p3-office-preview.el \
             lisp/p3-org-roam.el \
             lisp/p3-config-org-roam.el \
             lisp/p3-org-present.el \
@@ -153,7 +155,7 @@ jobs:
             --eval '(setq use-package-ensure-function (lambda (&rest _) t))' \
             -l lisp/p3-config-loader.el \
             -l lisp/p3-config-org.el \
-            --eval '(unless (and (featurep (quote p3-config-org)) (featurep (quote p3-org)) (eq org-startup-folded (quote content)) (eq org-confirm-babel-evaluate t) (featurep (quote p3-org-export))) (kill-emacs 1))'
+            --eval '(unless (and (featurep (quote p3-config-org)) (featurep (quote p3-org)) (eq org-startup-folded (quote content)) (eq org-confirm-babel-evaluate t) (featurep (quote p3-org-export)) (featurep (quote p3-office-preview))) (kill-emacs 1))'
 
       - name: Smoke-load Org-roam configuration boundary
         run: |
