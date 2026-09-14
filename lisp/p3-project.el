@@ -60,7 +60,7 @@ when invoked from a non-file project buffer, then delegate execution, prompting,
 error navigation, cancellation, and recompile behavior to `project-compile'."
   (interactive)
   (require 'compile)
-  (let* ((project (project-current t))
+  (let* ((project (project-current nil))
          (root (and project
                     (p3/project-normalize-root (project-root project)))))
     (unless root
