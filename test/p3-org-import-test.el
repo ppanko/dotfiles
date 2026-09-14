@@ -67,6 +67,27 @@
     (should (string-match-p "potentially lossy" notice))
     (should (string-match-p "original DOCX" notice))))
 
+(ert-deftest p3-office-import-docx-retains-pandoc-stderr-diagnostics ()
+  (p3-org-import-test--with-temp-directory directory
+    (let ((source (expand-file-name "incoming.docx" directory)))
+      (with-temp-file source
+        (insert "placeholder"))
+      (cl-letf (((symbol-function 'p3-org-export--pandoc-executable)
+                 (lambda () "pandoc"))
+                ((symbol-function 'process-file)
+                 (lambda (_program _infile destination _display &rest args)
+                   (let ((output (cadr (member "-o" args))))
+                     (with-temp-file output
+                       (insert "* Converted\n"))
+                     (when (and (consp destination)
+                                (stringp (cadr destination)))
+                       (with-temp-file (cadr destination)
+                         (insert "synthetic import warning\n"))))
+                   0)))
+        (let* ((output (p3-office-import-docx-run source))
+               (contents (p3-org-import-test--contents output)))
+          (should (string-match-p "synthetic import warning" contents)))))))
+
 (ert-deftest p3-office-import-docx-rejects-non-docx-input ()
   (should-error
    (p3-office-import-docx-run "/tmp/not-word.txt")
