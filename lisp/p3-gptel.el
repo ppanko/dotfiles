@@ -161,6 +161,66 @@ silently carrying project material across roots."
                   p3/gptel-project-root directory))
     chat))
 
+(defun p3/gptel--current-project-root ()
+  "Return the current `project.el' root as a directory name, or nil."
+  (when-let ((project (project-current nil)))
+    (file-name-as-directory (project-root project))))
+
+(defun p3/gptel--project-chats (root)
+  "Return live P3-started GPTel chats associated with ROOT."
+  (seq-filter
+   (lambda (buffer)
+     (and (buffer-live-p buffer)
+          (buffer-local-value 'gptel-mode buffer)
+          (equal (buffer-local-value 'p3/gptel-project-root buffer) root)))
+   (buffer-list)))
+
+(defun p3/gptel--choose-project-chat (root)
+  "Return a P3 GPTel chat for ROOT, prompting only when ambiguous."
+  (let ((chats (p3/gptel--project-chats root)))
+    (cond
+     ((null chats)
+      (user-error "No project GPTel chat; start one with C-c g g"))
+     ((null (cdr chats))
+      (car chats))
+     (t
+      (get-buffer
+       (completing-read
+        "GPTel project chat: "
+        (mapcar #'buffer-name chats) nil t))))))
+
+(defun p3/gptel-add-context (&optional arg)
+  "Add or remove GPTel context for the relevant project chat.
+
+Inside a GPTel chat, delegate directly to native `gptel-add'.  From an ordinary
+project buffer, run native `gptel-add' in the source buffer while binding its
+context to a matching P3 project chat, then save the resulting context back to
+that chat.  This preserves GPTel's native region/buffer semantics without
+mutating the process-wide default context or introducing a separate context
+store.  Outside a project, retain native GPTel behavior.
+
+P3's path-based safety guard applies when adding context from the current
+source buffer.  Native GPTel commands remain available as an explicit escape
+hatch."
+  (interactive "P")
+  (let ((root (p3/gptel--current-project-root)))
+    (cond
+     ((bound-and-true-p gptel-mode)
+      (gptel-add arg t))
+     ((null root)
+      (gptel-add arg t))
+     (t
+      (when (and (not (and arg (< (prefix-numeric-value arg) 0)))
+                 (p3/gptel-sensitive-buffer-p))
+        (user-error "Refusing to add content from a sensitive-looking file"))
+      (let* ((chat (p3/gptel--choose-project-chat root))
+             (gptel-context
+              (copy-tree (buffer-local-value 'gptel-context chat))))
+        (gptel-add arg t)
+        (with-current-buffer chat
+          (setq-local gptel-context gptel-context))
+        (message "GPTel context updated for %s" (buffer-name chat)))))))
+
 (defun p3/gptel-git-root (&optional directory)
   "Return the Git root containing DIRECTORY or `default-directory'."
   (file-name-as-directory
@@ -253,7 +313,7 @@ repository.  Existing snapshots are never rewritten in place."
       (let ((map (make-sparse-keymap)))
         (define-key map (kbd "g") #'p3/gptel-project-chat)
         (define-key map (kbd "m") #'gptel-menu)
-        (define-key map (kbd "a") #'gptel-add)
+        (define-key map (kbd "a") #'p3/gptel-add-context)
         (define-key map (kbd "f") #'gptel-add-file)
         (define-key map (kbd "D") #'p3/gptel-add-git-diff)
         (define-key map (kbd "r") #'p3/gptel-refactor-region)
