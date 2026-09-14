@@ -93,6 +93,19 @@
      (should (equal (p3/screen-record--wayland-output "/usr/bin/wf-recorder")
                     "eDP-1")))))
 
+(ert-deftest p3-screen-record-wayland-preflight-stays-local-from-remote-buffer ()
+  (p3-screen-record-test--with-module
+   (let ((default-directory "/ssh:example:/tmp/")
+         seen-directory)
+     (cl-letf (((symbol-function 'process-file)
+                (lambda (_program _infile _destination _display &rest _args)
+                  (setq seen-directory default-directory)
+                  (insert "1. Name: eDP-1 Description: Built-in display\n")
+                  0)))
+       (should (equal (p3/screen-record--wayland-output "/usr/bin/wf-recorder")
+                      "eDP-1"))
+       (should (equal seen-directory temporary-file-directory))))))
+
 (ert-deftest p3-screen-record-wayland-output-prompts-in-emacs-for-multiple-outputs ()
   (p3-screen-record-test--with-module
    (should (fboundp 'p3/screen-record--wayland-output))
