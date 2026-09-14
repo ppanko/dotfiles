@@ -42,7 +42,7 @@
      (should
       (equal
        (p3/screen-record--command "C:/Users/test/Videos/screen.mp4")
-       '("ffmpeg" "-y" "-f" "gdigrab" "-framerate" "30"
+       '("ffmpeg" "-n" "-f" "gdigrab" "-framerate" "30"
          "-i" "desktop" "-c:v" "libx264" "-preset" "veryfast"
          "-pix_fmt" "yuv420p" "C:/Users/test/Videos/screen.mp4"))))))
 
@@ -58,7 +58,7 @@
        (should
         (equal
          (p3/screen-record--command "/tmp/screen.mp4")
-         '("ffmpeg" "-y" "-f" "x11grab" "-framerate" "30"
+         '("ffmpeg" "-n" "-f" "x11grab" "-framerate" "30"
            "-i" ":7.0" "-c:v" "libx264" "-preset" "veryfast"
            "-pix_fmt" "yuv420p" "/tmp/screen.mp4")))))))
 
@@ -114,6 +114,7 @@
    (let ((p3/screen-record--process nil)
          (p3/screen-record--backend nil)
          (captured-command nil)
+         (captured-noquery 'unset)
          (created-directory nil)
          (mode-line-refreshed nil))
      (cl-letf (((symbol-function 'p3/screen-record--output-file)
@@ -129,8 +130,11 @@
                   (setq created-directory directory)))
                ((symbol-function 'make-process)
                 (lambda (&rest plist)
-                  (setq captured-command (plist-get plist :command))
+                  (setq captured-command (plist-get plist :command)
+                        captured-noquery (plist-get plist :noquery))
                   'recorder-process))
+               ((symbol-function 'process-status)
+                (lambda (_process) 'run))
                ((symbol-function 'force-mode-line-update)
                 (lambda (&rest _) (setq mode-line-refreshed t))))
        (p3/screen-record-start)
@@ -140,7 +144,30 @@
        (should (equal captured-command
                       '("/usr/bin/ffmpeg" "-f" "x11grab" "-i" ":0"
                         "/tmp/screen.mp4")))
+       (should-not captured-noquery)
        (should mode-line-refreshed)))))
+
+(ert-deftest p3-screen-record-start-clears-state-if-recorder-exits-immediately ()
+  (p3-screen-record-test--with-module
+   (let ((p3/screen-record--process nil)
+         (p3/screen-record--backend nil)
+         (p3/screen-record--output-path nil))
+     (cl-letf (((symbol-function 'p3/screen-record--output-file)
+                (lambda () "/tmp/screen.mp4"))
+               ((symbol-function 'p3/screen-record--command)
+                (lambda (_output) '("ffmpeg" "/tmp/screen.mp4")))
+               ((symbol-function 'executable-find)
+                (lambda (_program) "/usr/bin/ffmpeg"))
+               ((symbol-function 'make-directory) (lambda (&rest _) t))
+               ((symbol-function 'make-process)
+                (lambda (&rest _) 'recorder-process))
+               ((symbol-function 'process-status)
+                (lambda (_process) 'exit))
+               ((symbol-function 'force-mode-line-update) (lambda (&rest _) t)))
+       (p3/screen-record-start)
+       (should-not p3/screen-record--process)
+       (should-not p3/screen-record--backend)
+       (should-not p3/screen-record--output-path)))))
 
 (ert-deftest p3-screen-record-start-reports-missing-recorder ()
   (p3-screen-record-test--with-module
@@ -150,6 +177,20 @@
                ((symbol-function 'p3/screen-record--command)
                 (lambda (_output) '("wf-recorder" "-f" "/tmp/screen.mp4")))
                ((symbol-function 'executable-find) (lambda (_program) nil)))
+       (should-error (p3/screen-record-start) :type 'user-error)))))
+
+(ert-deftest p3-screen-record-start-reports-output-directory-errors ()
+  (p3-screen-record-test--with-module
+   (let ((p3/screen-record--process nil))
+     (cl-letf (((symbol-function 'p3/screen-record--output-file)
+                (lambda () "/denied/screen.mp4"))
+               ((symbol-function 'p3/screen-record--command)
+                (lambda (_output) '("ffmpeg" "/denied/screen.mp4")))
+               ((symbol-function 'executable-find)
+                (lambda (_program) "/usr/bin/ffmpeg"))
+               ((symbol-function 'make-directory)
+                (lambda (&rest _)
+                  (signal 'file-error '("Permission denied")))))
        (should-error (p3/screen-record-start) :type 'user-error)))))
 
 (ert-deftest p3-screen-record-stop-asks-ffmpeg-to-finalize-cleanly ()
