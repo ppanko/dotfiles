@@ -21,6 +21,7 @@
 (declare-function org-roam-node-level "org-roam-node" (node))
 (declare-function org-roam-node-list "org-roam-node" ())
 (declare-function org-roam-node-properties "org-roam-node" (node))
+(declare-function org-roam-node-read "org-roam-node" (&optional initial-input filter-fn sort-fn require-match prompt))
 (declare-function org-roam-node-tags "org-roam-node" (node))
 
 (defun org-roam-generate-tagged-header ()
@@ -146,6 +147,93 @@ Signal `user-error' when the stored identity is stale or invalid."
       (p3/org-roam--file-project-id-live)
       (when-let ((root (p3/project-root)))
         (p3/org-roam-project-hub-id-for-root root))))
+
+(defun p3/org-roam--read-hub-node ()
+  "Read an existing self-marked project hub node."
+  (org-roam-node-read nil #'p3/org-roam-project-hub-p nil t "Project hub: "))
+
+(defun p3/org-roam--heading-project-id-explicit ()
+  "Return the explicit P3_PROJECT value on the current heading, or nil."
+  (when (and (derived-mode-p 'org-mode)
+             (not (org-before-first-heading-p)))
+    (save-excursion
+      (org-back-to-heading t)
+      (org-entry-get (point) "P3_PROJECT" nil))))
+
+(defun p3/org-roam--set-heading-project-id (hub-id)
+  "Set explicit heading-level P3_PROJECT to HUB-ID in the live buffer."
+  (unless (and (derived-mode-p 'org-mode)
+               (not (org-before-first-heading-p)))
+    (user-error "Point is not on an Org heading"))
+  (save-excursion
+    (org-back-to-heading t)
+    (org-entry-put (point) "P3_PROJECT" hub-id)))
+
+(defun p3/org-roam--remove-heading-project-id ()
+  "Remove explicit heading-level P3_PROJECT from the current heading."
+  (unless (and (derived-mode-p 'org-mode)
+               (not (org-before-first-heading-p)))
+    (user-error "Point is not on an Org heading"))
+  (save-excursion
+    (org-back-to-heading t)
+    (org-entry-delete (point) "P3_PROJECT")))
+
+(defun p3/org-roam--set-file-project-id (hub-id)
+  "Set file-level P3_PROJECT to HUB-ID in the current live Org buffer."
+  (unless (derived-mode-p 'org-mode)
+    (user-error "Current buffer is not an Org buffer"))
+  (save-excursion
+    (goto-char (point-min))
+    (org-entry-put (point) "P3_PROJECT" hub-id)))
+
+(defun p3/org-roam--remove-file-project-id ()
+  "Remove file-level P3_PROJECT from the current live Org buffer."
+  (unless (derived-mode-p 'org-mode)
+    (user-error "Current buffer is not an Org buffer"))
+  (save-excursion
+    (goto-char (point-min))
+    (org-entry-delete (point) "P3_PROJECT")))
+
+(defun p3/org-roam--association-hub-node ()
+  "Return a valid hub node for an association operation."
+  (or (when-let ((hub-id (p3/org-roam-project-context)))
+        (condition-case nil
+            (p3/org-roam--hub-node hub-id)
+          (user-error nil)))
+      (p3/org-roam--read-hub-node)))
+
+(defun p3/org-roam-project-associate (&optional whole-file)
+  "Associate, change, or remove project membership at point.
+By default target the current Org heading.  When WHOLE-FILE is non-nil,
+or point is before the first heading, target the file-level property."
+  (interactive "P")
+  (unless (derived-mode-p 'org-mode)
+    (user-error "Current buffer is not an Org buffer"))
+  (let* ((file-scope (or whole-file (org-before-first-heading-p)))
+         (current-id (if file-scope
+                         (p3/org-roam--file-project-id-live)
+                       (p3/org-roam--heading-project-id-explicit)))
+         (setter (if file-scope
+                     #'p3/org-roam--set-file-project-id
+                   #'p3/org-roam--set-heading-project-id))
+         (remover (if file-scope
+                      #'p3/org-roam--remove-file-project-id
+                    #'p3/org-roam--remove-heading-project-id)))
+    (if (not current-id)
+        (funcall setter
+                 (org-roam-node-id (p3/org-roam--association-hub-node)))
+      (pcase (completing-read "Project association: "
+                              '("change" "remove") nil t)
+        ("remove"
+         (funcall remover))
+        ("change"
+         (let* ((node (p3/org-roam--read-hub-node))
+                (new-id (org-roam-node-id node)))
+           (when (and (not (equal current-id new-id))
+                      (yes-or-no-p
+                       (format "Change project association from %s to %s? "
+                               current-id new-id)))
+             (funcall setter new-id))))))))
 
 (provide 'p3-org-roam)
 
