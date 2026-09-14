@@ -75,7 +75,8 @@
 
 (use-package p3-office-preview
   :ensure nil
-  :demand t)
+  :commands (p3/office-preview-pptx
+             p3/org-export-pptx-preview))
 
 (when (eq system-type 'gnu/linux)
   (add-to-list 'org-file-apps '("pdf" . "evince %s")))
