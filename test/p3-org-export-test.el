@@ -640,6 +640,7 @@
                    output notes-member)))
                 (should (string-match-p "Courier New" theme-xml))
                 (should (member "Title Slide" layout-names))
+                (should (member "Title and Content" layout-names))
                 (should (member "Section Header" layout-names))
                 (should (member "Two Content" layout-names))
                 (should (member "Content with Caption" layout-names))))
