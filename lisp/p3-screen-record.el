@@ -56,7 +56,8 @@
   "Return Wayland output names reported by wf-recorder PROGRAM.
 Signal `user-error' when output discovery itself fails."
   (with-temp-buffer
-    (let* ((status (process-file program nil t nil "-L"))
+    (let* ((default-directory temporary-file-directory)
+           (status (process-file program nil t nil "-L"))
            (detail (string-trim (buffer-string))))
       (unless (and (integerp status) (zerop status))
         (if (or (string-match-p "wlr-screencopy" detail)
