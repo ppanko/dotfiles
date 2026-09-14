@@ -1,12 +1,11 @@
 ;;; p3-gptel.el --- Thin GPTel project and task workflow -*- lexical-binding: t; -*-
 
-(require 'project)
 (require 'seq)
 (require 'subr-x)
 (require 'p3-git)
 
-(defvar gptel-context)
-(defvar gptel-use-context)
+(defvar gptel-context nil)
+(defvar gptel-use-context nil)
 
 (declare-function gptel "gptel" (&optional name initial major-mode directory))
 (declare-function gptel-menu "gptel-transient" ())
@@ -14,8 +13,12 @@
 (declare-function gptel-add-file "gptel-context" (path))
 (declare-function gptel-make-ollama "gptel-ollama" (name &rest args))
 (declare-function gptel-request "gptel" (prompt &rest args))
-(declare-function gptel--suffix-rewrite "gptel-rewrite" (&optional rewrite-message dry-run))
 (declare-function diff-mode "diff-mode" ())
+
+;; GPTel autoloads the public rewrite command, but P3 deliberately calls the
+;; native rewrite suffix directly so fixed cut-out tasks need no extra prompt.
+;; Install the same lazy-load boundary for that entry point explicitly.
+(autoload 'gptel--suffix-rewrite "gptel-rewrite" nil nil)
 
 (defconst p3/gptel-task-prompts
   '((refactor . "Refactor the selected code while preserving its behavior. Return only the final replacement code.")
@@ -134,16 +137,17 @@ optional backend rather than guessing which local models are installed."
 (defun p3/gptel-git-diff-snapshot (&optional directory)
   "Return tracked staged and unstaged changes against HEAD in DIRECTORY.
 
-Untracked files are excluded by Git's normal `diff HEAD --' semantics."
+Untracked files are excluded.  Rename detection is disabled so both old and
+new paths remain explicit for the sensitive-path guard."
   (let ((root (p3/gptel-git-root directory)))
-    (p3/git-run root "diff" "HEAD" "--")))
+    (p3/git-run root "diff" "--no-renames" "HEAD" "--")))
 
 (defun p3/gptel--git-diff-sensitive-paths (directory)
   "Return sensitive-looking tracked paths changed in DIRECTORY."
   (seq-filter
    #'p3/gptel-sensitive-path-p
    (split-string
-    (p3/git-run directory "diff" "--name-only" "HEAD" "--")
+    (p3/git-run directory "diff" "--no-renames" "--name-only" "HEAD" "--")
     "\n" t)))
 
 (defun p3/gptel-add-git-diff ()
