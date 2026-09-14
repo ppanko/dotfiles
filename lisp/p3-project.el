@@ -5,6 +5,7 @@
 (require 'tab-bar)
 
 (declare-function consult-project-buffer "consult" ())
+(defvar compile-command)
 
 (unless (boundp 'project-vc-extra-root-markers)
   (error "P3 project support requires Emacs 29 or newer"))
@@ -32,6 +33,43 @@ Return nil when ROOT does not name an existing directory."
   (when (and root (file-directory-p root))
     (file-name-as-directory
      (file-truename (expand-file-name root)))))
+
+(defun p3/project-compilation-buffer-name (mode)
+  "Return a stable, collision-resistant project buffer name for MODE."
+  (let* ((root (or (p3/project-normalize-root default-directory)
+                   (file-name-as-directory
+                    (expand-file-name default-directory))))
+         (name (file-name-nondirectory (directory-file-name root)))
+         (suffix (substring (secure-hash 'sha1 root) 0 6)))
+    (format "*%s-%s:%s*" name (downcase mode) suffix)))
+
+(defun p3/project--root-compile-command (root fallback)
+  "Return ROOT's directory-local `compile-command', or FALLBACK."
+  (with-temp-buffer
+    (setq default-directory root)
+    (hack-dir-local-variables-non-file-buffer)
+    (if (local-variable-p 'compile-command)
+        compile-command
+      fallback)))
+
+(defun p3/project-compile ()
+  "Run the current project's repository-level check from its root.
+
+Resolve a project-level `compile-command' from directory-local variables even
+when invoked from a non-file project buffer, then delegate execution, prompting,
+error navigation, cancellation, and recompile behavior to `project-compile'."
+  (interactive)
+  (require 'compile)
+  (let* ((project (project-current nil))
+         (root (and project
+                    (p3/project-normalize-root (project-root project)))))
+    (unless root
+      (user-error "Selected project root is unavailable"))
+    (let ((project-current-directory-override root)
+          (compile-command
+           (p3/project--root-compile-command
+            root (default-value 'compile-command))))
+      (call-interactively #'project-compile))))
 
 (defun p3/project--tab-root (tab)
   "Return the normalized project root recorded in TAB, if any."
