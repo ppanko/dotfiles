@@ -105,7 +105,7 @@
                                "(defun p3/windows-latest-r-program"
                                "(defun p3/project-root"
                                "(defun p3/python-project-interpreter"
-                               "(defun p3/vterm-buffer"
+                               "(defun p3/project-shell-buffer"
                                "(defun p3/ess-project-root"
                                "(defun p3/ess-ensure-project-process"
                                "(defun p3/gptel-send-task"))
@@ -146,7 +146,7 @@
          (shell (p3-config-test--position
                  "(p3/windows-configure-shell)" terminal-config))
          (shell-binding (p3-config-test--position
-                         "(global-set-key (kbd \"C-x C-u\") #'shell)"
+                         "(global-set-key (kbd \"C-x C-u\") #'p3/project-shell)"
                          terminal-config)))
     (should-not (string-match-p "(p3/platform-setup)" contents))
     (should (< rtools ess))
