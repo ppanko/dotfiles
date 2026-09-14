@@ -51,13 +51,16 @@
    (member "C:/Program Files/LibreOffice/program/soffice.exe"
            (p3-office--libreoffice-platform-candidates 'windows-nt))))
 
-(ert-deftest p3-office-preview-pptx-arguments-render-with-impress-filter ()
+(ert-deftest p3-office-preview-pptx-arguments-render-with-isolated-impress-profile ()
   (let ((source "/tmp/slides.pptx")
-        (output-directory "/tmp/render"))
+        (output-directory "/tmp/render")
+        (profile-url "file:///isolated-profile"))
     (should
      (equal
-      (p3-office-preview--pptx-arguments source output-directory)
-      (list "--headless"
+      (p3-office-preview--pptx-arguments
+       source output-directory profile-url)
+      (list "-env:UserInstallation=file:///isolated-profile"
+            "--headless"
             "--nologo"
             "--nodefault"
             "--norestore"
