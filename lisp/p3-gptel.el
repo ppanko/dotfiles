@@ -4,6 +4,7 @@
 (require 'seq)
 (require 'subr-x)
 (require 'p3-git)
+(require 'p3-project)
 
 (defvar gptel-context nil)
 (defvar gptel-mode nil)
@@ -135,6 +136,13 @@ optional backend rather than guessing which local models are installed."
   (interactive)
   (p3/gptel--request-region-task 'review))
 
+(defun p3/gptel--canonical-directory (directory)
+  "Return stable local identity for DIRECTORY, preserving remote paths."
+  (if (file-remote-p directory)
+      (file-name-as-directory directory)
+    (or (p3/project-normalize-root directory)
+        (file-name-as-directory (expand-file-name directory)))))
+
 (defun p3/gptel-project-chat ()
   "Start or select a GPTel chat scoped to the current project directory.
 
@@ -144,9 +152,9 @@ and ensures the selected chat has its own explicit context list.  Reusing a
 P3-started chat from another project clears its attached context rather than
 silently carrying project material across roots."
   (interactive)
-  (let* ((project (project-current nil))
-         (directory (file-name-as-directory
-                     (if project (project-root project) default-directory)))
+  (let* ((directory
+          (p3/gptel--canonical-directory
+           (or (p3/project-root) default-directory)))
          (chat (call-interactively #'gptel)))
     (unless (buffer-live-p chat)
       (user-error "GPTel did not return a live chat buffer"))
@@ -162,9 +170,9 @@ silently carrying project material across roots."
     chat))
 
 (defun p3/gptel--current-project-root ()
-  "Return the current `project.el' root as a directory name, or nil."
-  (when-let ((project (project-current nil)))
-    (file-name-as-directory (project-root project))))
+  "Return the canonical current `project.el' root, or nil."
+  (when-let ((root (p3/project-root)))
+    (p3/gptel--canonical-directory root)))
 
 (defun p3/gptel--project-chats (root)
   "Return live P3-started GPTel chats associated with ROOT."
