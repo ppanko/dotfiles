@@ -22,6 +22,7 @@ machine-specific model in the repository.")
 (declare-function gptel-api-key-from-auth-source "gptel" ())
 (declare-function p3/gptel-register-ollama "p3-gptel" (models &optional host))
 (declare-function p3/gptel-setup "p3-gptel" ())
+(declare-function which-key-add-key-based-replacements "which-key" (&rest replacements))
 
 (use-package gptel
   :config
@@ -33,7 +34,19 @@ machine-specific model in the repository.")
 (with-eval-after-load 'gptel
   (p3/config-load-module 'p3-gptel)
   (p3/gptel-register-ollama p3/gptel-ollama-models p3/gptel-ollama-host)
-  (p3/gptel-setup))
+  (p3/gptel-setup)
+  (when (fboundp 'which-key-add-key-based-replacements)
+    (which-key-add-key-based-replacements
+     "C-c g g" "project chat"
+     "C-c g m" "GPTel menu"
+     "C-c g a" "add/remove context"
+     "C-c g f" "add file context"
+     "C-c g D" "add/refresh Git diff"
+     "C-c g r" "refactor region"
+     "C-c g d" "document region"
+     "C-c g t" "write tests"
+     "C-c g e" "explain region"
+     "C-c g v" "review region")))
 
 (provide 'p3-config-gptel)
 
