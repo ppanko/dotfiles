@@ -51,6 +51,40 @@
         "-pix_fmt" "yuv420p"
         output))
 
+(defun p3/screen-record--wayland-outputs (program)
+  "Return Wayland output names reported by wf-recorder PROGRAM.
+Signal `user-error' when output discovery itself fails."
+  (with-temp-buffer
+    (let* ((status (process-file program nil t nil "-L"))
+           (detail (string-trim (buffer-string))))
+      (unless (and (integerp status) (zerop status))
+        (user-error "Cannot enumerate Wayland outputs with wf-recorder%s"
+                    (if (string-empty-p detail)
+                        ""
+                      (format ": %s" detail))))
+      (goto-char (point-min))
+      (let (outputs)
+        (while (re-search-forward
+                "^[[:space:]]*[0-9]+\\. Name: \\([^[:space:]]+\\) Description:"
+                nil t)
+          (push (match-string-no-properties 1) outputs))
+        (setq outputs (nreverse (delete-dups outputs)))
+        (unless outputs
+          (user-error "wf-recorder found no usable Wayland outputs%s"
+                      (if (string-empty-p detail)
+                          ""
+                        (format ": %s" detail))))
+        outputs))))
+
+(defun p3/screen-record--wayland-output (program)
+  "Choose one Wayland output reported by wf-recorder PROGRAM.
+A single output is selected automatically; multiple outputs use the minibuffer."
+  (let ((outputs (p3/screen-record--wayland-outputs program)))
+    (if (null (cdr outputs))
+        (car outputs)
+      (completing-read "Wayland output to record: " outputs nil t nil nil
+                       (car outputs)))))
+
 (defun p3/screen-record--command (output)
   "Return the recorder command for OUTPUT on the current platform/session."
   (pcase system-type
@@ -58,7 +92,12 @@
      (p3/screen-record--ffmpeg-command "gdigrab" "desktop" output))
     ('gnu/linux
      (if (p3/screen-record--wayland-p)
-         (list "wf-recorder" "-f" output)
+         (let ((program (executable-find "wf-recorder")))
+           (unless program
+             (user-error "Required screen recorder not found: wf-recorder"))
+           (list "wf-recorder" "-o"
+                 (p3/screen-record--wayland-output program)
+                 "-f" output))
        (let ((display (getenv "DISPLAY")))
          (unless (and display (not (string-empty-p display)))
            (user-error "Cannot record X11 screen: DISPLAY is not set"))
@@ -67,10 +106,22 @@
      (user-error "Screen recording is unsupported on %s" system-type))))
 
 (defun p3/screen-record--output-file ()
-  "Return a timestamped output file below `p3/screen-record-directory'."
-  (expand-file-name
-   (format "screen-%s.mp4" (format-time-string "%Y%m%d-%H%M%S"))
-   (file-name-as-directory (expand-file-name p3/screen-record-directory))))
+  "Return a unique timestamped file below `p3/screen-record-directory'."
+  (let* ((directory
+          (file-name-as-directory (expand-file-name p3/screen-record-directory)))
+         (stem (format "screen-%s" (format-time-string "%Y%m%d-%H%M%S")))
+         (index 0)
+         candidate)
+    (while
+        (progn
+          (setq candidate
+                (expand-file-name
+                 (format "%s%s.mp4" stem
+                         (if (zerop index) "" (format "-%d" index)))
+                 directory))
+          (setq index (1+ index))
+          (file-exists-p candidate)))
+    candidate))
 
 (defun p3/screen-record--backend-for-command (command)
   "Return the backend symbol represented by COMMAND."
@@ -83,31 +134,59 @@
   (memq status '(exit signal failed closed)))
 
 (defun p3/screen-record--ensure-output-directory (output)
-  "Ensure the parent directory for OUTPUT exists or signal `user-error'."
+  "Ensure the parent directory for OUTPUT exists and is writable."
   (let ((directory (file-name-directory output)))
     (condition-case err
         (make-directory directory t)
       (file-error
        (user-error "Cannot prepare screen-recording directory %s: %s"
-                   directory (error-message-string err))))))
+                   directory (error-message-string err))))
+    (unless (file-directory-p directory)
+      (user-error "Screen-recording output parent is not a directory: %s"
+                  directory))
+    (unless (file-writable-p directory)
+      (user-error "Screen-recording directory is not writable: %s" directory))))
+
+(defun p3/screen-record--process-detail (process)
+  "Return a concise final diagnostic line from PROCESS, or nil."
+  (when-let ((buffer (process-buffer process)))
+    (when (buffer-live-p buffer)
+      (with-current-buffer buffer
+        (car (last (split-string (string-trim (buffer-string)) "\n" t
+                                 "[[:space:]]+")))))))
+
+(defun p3/screen-record--failed-process-p (process status)
+  "Return non-nil when PROCESS terminated unsuccessfully with STATUS."
+  (or (eq status 'failed)
+      (and (memq status '(exit signal))
+           (/= (process-exit-status process) 0))))
 
 (defun p3/screen-record--sentinel (process event)
   "Clear recording state when PROCESS exits or is signaled.
 EVENT is the process sentinel event string."
-  (when (and (eq process p3/screen-record--process)
-             (p3/screen-record--terminal-status-p (process-status process)))
-    (let ((output p3/screen-record--output-path))
-      (setq p3/screen-record--process nil
-            p3/screen-record--backend nil
-            p3/screen-record--output-path nil)
-      (force-mode-line-update t)
-      (message "%s%s"
-               (if output
-                   (format "Screen recording finished: %s" output)
-                 "Screen recording finished")
-               (if (string-empty-p (string-trim event))
-                   ""
-                 (format " (%s)" (string-trim event)))))))
+  (let ((status (process-status process)))
+    (when (and (eq process p3/screen-record--process)
+               (p3/screen-record--terminal-status-p status))
+      (let* ((output p3/screen-record--output-path)
+             (failed (p3/screen-record--failed-process-p process status))
+             (detail (and failed (p3/screen-record--process-detail process)))
+             (event-text (string-trim event)))
+        (setq p3/screen-record--process nil
+              p3/screen-record--backend nil
+              p3/screen-record--output-path nil)
+        (force-mode-line-update t)
+        (message "%s%s"
+                 (if failed
+                     (if output
+                         (format "Screen recording failed: %s" output)
+                       "Screen recording failed")
+                   (if output
+                       (format "Screen recording finished: %s" output)
+                     "Screen recording finished"))
+                 (cond
+                  (detail (format ": %s" detail))
+                  ((string-empty-p event-text) "")
+                  (t (format " (%s)" event-text))))))))
 
 (defun p3/screen-record-start ()
   "Start a full-screen video recording for the current platform/session."
@@ -122,25 +201,28 @@ EVENT is the process sentinel event string."
     (p3/screen-record--ensure-output-directory output)
     (let* ((resolved-command (cons program (cdr command)))
            (backend (p3/screen-record--backend-for-command command))
-           (process
-            (make-process
-             :name "p3-screen-record"
-             :buffer (get-buffer-create "*p3-screen-record*")
-             :command resolved-command
-             :connection-type 'pipe
-             :sentinel #'p3/screen-record--sentinel)))
-      (setq p3/screen-record--process process
-            p3/screen-record--backend backend
-            p3/screen-record--output-path output)
-      ;; A very fast backend failure can occur before the sentinel sees the
-      ;; process as current. Reconcile that race immediately after ownership.
-      (if (p3/screen-record--terminal-status-p (process-status process))
-          (progn
-            (p3/screen-record--sentinel process "exited during startup")
-            nil)
-        (force-mode-line-update t)
-        (message "Screen recording started: %s" output)
-        process))))
+           (buffer (get-buffer-create "*p3-screen-record*")))
+      (with-current-buffer buffer
+        (erase-buffer))
+      (let ((process
+             (make-process
+              :name "p3-screen-record"
+              :buffer buffer
+              :command resolved-command
+              :connection-type 'pipe
+              :sentinel #'p3/screen-record--sentinel)))
+        (setq p3/screen-record--process process
+              p3/screen-record--backend backend
+              p3/screen-record--output-path output)
+        ;; A very fast backend failure can occur before the sentinel sees the
+        ;; process as current. Reconcile that race immediately after ownership.
+        (if (p3/screen-record--terminal-status-p (process-status process))
+            (progn
+              (p3/screen-record--sentinel process "exited during startup")
+              nil)
+          (force-mode-line-update t)
+          (message "Screen recording started: %s" output)
+          process)))))
 
 (defun p3/screen-record-stop ()
   "Ask the active screen recorder to finalize and stop cleanly."
