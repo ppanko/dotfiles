@@ -229,11 +229,14 @@ argument prompts for a one-off reference document."
 
 (defun p3-office-import--docx-arguments (source output media-directory)
   "Build Pandoc arguments for importing DOCX SOURCE into Org OUTPUT."
-  (list "--from=docx+styles"
-        "--to=org"
-        "--track-changes=all"
-        (concat "--extract-media=" media-directory)
-        source "-o" output))
+  (let ((media-path
+         (file-relative-name media-directory
+                             (file-name-directory (expand-file-name source)))))
+    (list "--from=docx+styles"
+          "--to=org"
+          "--track-changes=all"
+          (concat "--extract-media=" media-path)
+          source "-o" output)))
 
 (defun p3-office-import--docx-notice (source diagnostics)
   "Return the durable import notice for SOURCE and Pandoc DIAGNOSTICS."
