@@ -257,10 +257,29 @@ When DIRECTORY-P is non-nil, require a directory; otherwise require a file."
       (expand-file-name p3/windows-r-program-override)
     (p3/windows-latest-r-program)))
 
+(defun p3/r-program ()
+  "Return the R executable shared by ESS and editor tooling.
+
+On Windows, delegate to the existing override/discovery authority instead of
+consulting PATH.  Elsewhere, honor the active `inferior-R-program-name' when it
+resolves and otherwise use the R executable available on PATH."
+  (if (p3/windows-p)
+      (p3/windows-select-r-program)
+    (let ((configured
+           (and (boundp 'inferior-R-program-name)
+                inferior-R-program-name)))
+      (or
+       (and (stringp configured)
+            (if (file-name-absolute-p configured)
+                (and (file-executable-p configured)
+                     (expand-file-name configured))
+              (executable-find configured)))
+       (executable-find "R")))))
+
 (defun p3/windows-configure-r-program ()
   "Configure ESS to use the selected Windows R executable."
   (when (p3/windows-p)
-    (if-let ((program (p3/windows-select-r-program)))
+    (if-let ((program (p3/r-program)))
         (setq-default inferior-R-program-name program)
       (display-warning
        'p3/windows
