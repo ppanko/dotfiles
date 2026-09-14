@@ -220,25 +220,51 @@ argument prompts for a one-off reference document."
     (user-error "Unsupported Office output format: %s" output-format))
   (p3-org-export-run output-format template-file))
 
-(defun p3-office-import--docx-paths (source)
-  "Return predictable import paths for DOCX SOURCE."
+(defun p3-office-import--paths (source)
+  "Return predictable sibling Org and media paths for Office SOURCE."
   (let* ((source (expand-file-name source))
          (base (file-name-sans-extension source)))
     (list :output (concat base ".org")
           :media-directory (concat base "-media"))))
 
-(defun p3-office-import--docx-arguments (source output media-directory)
-  "Build Pandoc arguments for recovering DOCX SOURCE content into Org OUTPUT."
+(defun p3-office-import--docx-paths (source)
+  "Return predictable import paths for DOCX SOURCE."
+  (p3-office-import--paths source))
+
+(defun p3-office-import--pptx-paths (source)
+  "Return predictable import paths for PPTX SOURCE."
+  (p3-office-import--paths source))
+
+(defun p3-office-import--arguments (input-format source output media-directory)
+  "Build Pandoc content-recovery arguments for INPUT-FORMAT SOURCE."
   (let ((media-path
          (file-relative-name media-directory
                              (file-name-directory (expand-file-name source)))))
-    (list "--from=docx"
+    (list (concat "--from=" input-format)
           "--to=org"
           (concat "--extract-media=" media-path)
           source "-o" output)))
 
+(defun p3-office-import--docx-arguments (source output media-directory)
+  "Build Pandoc arguments for recovering DOCX SOURCE content into Org OUTPUT."
+  (p3-office-import--arguments "docx" source output media-directory))
+
+(defun p3-office-import--pptx-arguments (source output media-directory)
+  "Build Pandoc arguments for recovering PPTX SOURCE content into Org OUTPUT."
+  (p3-office-import--arguments "pptx" source output media-directory))
+
+(defun p3-office-import--diagnostic-notice (diagnostics)
+  "Return commented Pandoc DIAGNOSTICS for an imported Org file."
+  (unless (string-empty-p diagnostics)
+    (concat
+     "# Pandoc diagnostics reported during conversion:\n"
+     (mapconcat (lambda (line) (concat "# " line))
+                (split-string diagnostics "\n" t)
+                "\n")
+     "\n")))
+
 (defun p3-office-import--docx-notice (source diagnostics)
-  "Return the durable content-recovery notice for SOURCE and DIAGNOSTICS."
+  "Return the durable DOCX content-recovery notice for SOURCE and DIAGNOSTICS."
   (concat
    "# P3 Office import: " (file-name-nondirectory source) "\n"
    "# This DOCX -> Org conversion recovers document content and is potentially "
@@ -246,34 +272,58 @@ argument prompts for a one-off reference document."
    "# Custom Word styles and review metadata (tracked changes/comments) are not "
    "retained as reliable Org semantics; consult the original DOCX for them, "
    "layout, and native Word objects.\n"
-   (unless (string-empty-p diagnostics)
-     (concat
-      "# Pandoc diagnostics reported during conversion:\n"
-      (mapconcat (lambda (line) (concat "# " line))
-                 (split-string diagnostics "\n" t)
-                 "\n")
-      "\n"))
+   (p3-office-import--diagnostic-notice diagnostics)
    "\n"))
+
+(defun p3-office-import--pptx-notice (source diagnostics)
+  "Return the durable PPTX content-recovery notice for SOURCE and DIAGNOSTICS."
+  (concat
+   "# P3 Office import: " (file-name-nondirectory source) "\n"
+   "# This PPTX -> Org conversion recovers slide content and is potentially "
+   "lossy. Keep the original PPTX as the fidelity reference.\n"
+   "# Slide geometry, themes, speaker notes, charts, animations, and native "
+   "PowerPoint objects are not retained as reliable Org semantics.\n"
+   (p3-office-import--diagnostic-notice diagnostics)
+   "\n"))
+
+(defun p3-office-import--validate-source (source extension label)
+  "Return absolute SOURCE after validating EXTENSION and readability for LABEL."
+  (let ((source (expand-file-name source)))
+    (unless (string-equal (downcase (or (file-name-extension source) ""))
+                          extension)
+      (user-error "Incoming Office import expects a %s file" label))
+    (unless (file-readable-p source)
+      (user-error "%s file is not readable: %s" label source))
+    source))
 
 (defun p3-office-import--validate-docx-source (source)
   "Return absolute DOCX SOURCE after validating it."
-  (let ((source (expand-file-name source)))
-    (unless (string-equal (downcase (or (file-name-extension source) ""))
-                          "docx")
-      (user-error "Incoming Office import currently supports DOCX files only"))
-    (unless (file-readable-p source)
-      (user-error "DOCX file is not readable: %s" source))
-    source))
+  (p3-office-import--validate-source source "docx" "DOCX"))
 
-(defun p3-office-import-docx-run (source)
-  "Recover incoming DOCX SOURCE content into a sibling Org file.
+(defun p3-office-import--validate-pptx-source (source)
+  "Return absolute PPTX SOURCE after validating it."
+  (p3-office-import--validate-source source "pptx" "PPTX"))
 
-Embedded media is extracted to a sibling `-media' directory. Existing output
-or media paths are never silently overwritten. Custom Word styles and review
-metadata are not treated as preserved Org semantics; the generated notice keeps
-that loss explicit. Pandoc diagnostics are also retained in the generated Org."
-  (let* ((source (p3-office-import--validate-docx-source source))
-         (paths (p3-office-import--docx-paths source))
+(defun p3-office-import--pandoc-input-formats ()
+  "Return the input formats advertised by Pandoc.
+Signal `user-error' when the capability query itself fails."
+  (let ((pandoc (p3-org-export--pandoc-executable)))
+    (with-temp-buffer
+      (let ((status
+             (process-file pandoc nil (current-buffer) nil
+                           "--list-input-formats")))
+        (unless (and (integerp status) (zerop status))
+          (user-error "Could not query Pandoc input formats (status %s)" status))
+        (split-string (buffer-string) "[\r\n]+" t "[[:space:]]+")))))
+
+(defun p3-office-import--pandoc-supports-input-format-p (input-format)
+  "Return non-nil when Pandoc advertises INPUT-FORMAT as an exact reader name."
+  (member input-format (p3-office-import--pandoc-input-formats)))
+
+(defun p3-office-import--run-content-recovery
+    (source input-format notice-function)
+  "Recover SOURCE INPUT-FORMAT content into Org using NOTICE-FUNCTION."
+  (let* ((paths (p3-office-import--paths source))
          (output (plist-get paths :output))
          (media-directory (plist-get paths :media-directory))
          (output-directory (file-name-directory output))
@@ -285,16 +335,19 @@ that loss explicit. Pandoc diagnostics are also retained in the generated Org."
                   media-directory))
     (let ((temporary-output
            (make-temp-file
-            (expand-file-name ".p3-docx-import-" output-directory)
+            (expand-file-name
+             (format ".p3-%s-import-" input-format)
+             output-directory)
             nil ".org"))
-          (stderr-file (make-temp-file "p3-docx-import-stderr-"))
+          (stderr-file
+           (make-temp-file (format "p3-%s-import-stderr-" input-format)))
           (completed nil))
       (unwind-protect
           (with-temp-buffer
             (let* ((default-directory (file-name-directory source))
                    (arguments
-                    (p3-office-import--docx-arguments
-                     source temporary-output media-directory))
+                    (p3-office-import--arguments
+                     input-format source temporary-output media-directory))
                    (status
                     (apply #'process-file
                            pandoc nil (list (current-buffer) stderr-file)
@@ -310,14 +363,14 @@ that loss explicit. Pandoc diagnostics are also retained in the generated Org."
                              (unless (string-empty-p stderr) "\n")
                              stdout))))
               (unless (and (integerp status) (zerop status))
-                (user-error "Pandoc DOCX import failed (status %s): %s"
-                            status diagnostics))
+                (user-error "Pandoc %s import failed (status %s): %s"
+                            (upcase input-format) status diagnostics))
               (let ((converted
                      (with-temp-buffer
                        (insert-file-contents temporary-output)
                        (buffer-string))))
                 (with-temp-file temporary-output
-                  (insert (p3-office-import--docx-notice source diagnostics))
+                  (insert (funcall notice-function source diagnostics))
                   (insert converted)))
               (rename-file temporary-output output)
               (setq completed t)))
@@ -331,6 +384,30 @@ that loss explicit. Pandoc diagnostics are also retained in the generated Org."
       (message "Imported %s to %s" source output)
       output)))
 
+(defun p3-office-import-docx-run (source)
+  "Recover incoming DOCX SOURCE content into a sibling Org file.
+
+Embedded media is extracted to a sibling `-media' directory. Existing output
+or media paths are never silently overwritten. Custom Word styles and review
+metadata are not treated as preserved Org semantics; the generated notice keeps
+that loss explicit. Pandoc diagnostics are also retained in the generated Org."
+  (setq source (p3-office-import--validate-docx-source source))
+  (p3-office-import--run-content-recovery
+   source "docx" #'p3-office-import--docx-notice))
+
+(defun p3-office-import-pptx-run (source)
+  "Recover supported incoming PPTX SOURCE content into a sibling Org file.
+
+Pandoc PPTX input is required. Slide geometry, themes, speaker notes, charts,
+animations, and native PowerPoint objects remain authoritative in the original
+PPTX rather than being treated as preserved Org semantics."
+  (setq source (p3-office-import--validate-pptx-source source))
+  (unless (p3-office-import--pandoc-supports-input-format-p "pptx")
+    (user-error
+     "Pandoc does not support PPTX input; install Pandoc 3.8.3 or newer"))
+  (p3-office-import--run-content-recovery
+   source "pptx" #'p3-office-import--pptx-notice))
+
 (defun p3/office-import-docx (source)
   "Recover incoming DOCX SOURCE content to a sibling Org file and open it.
 
@@ -339,6 +416,14 @@ original DOCX remains authoritative for Word-specific styling, review metadata,
 layout, and native objects."
   (interactive (list (read-file-name "Import DOCX: " nil nil t)))
   (find-file (p3-office-import-docx-run source)))
+
+(defun p3/office-import-pptx (source)
+  "Recover supported incoming PPTX SOURCE content to sibling Org and open it.
+
+This is a content-recovery convenience, not a lossless round-trip. The
+original PPTX remains authoritative for presentation-specific visual semantics."
+  (interactive (list (read-file-name "Import PPTX: " nil nil t)))
+  (find-file (p3-office-import-pptx-run source)))
 
 (defun p3-org-export-setup ()
   "Install the Org export command and restore standard Org link opening."

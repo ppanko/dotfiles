@@ -57,3 +57,13 @@ This is deliberately a content-recovery path, not a preservation path for Word-s
 The importer refuses to overwrite an existing sibling Org file or media directory. Extracted-media links remain relative so the imported Org, DOCX, and media directory can move together without embedding machine-specific paths.
 
 This is an inspection and editing workflow, not a promise that arbitrary DOCX files can be converted to Org and regenerated identically.
+
+## Incoming PPTX inspection
+
+Use `M-x p3/office-import-pptx` to recover supported semantic content from an incoming PowerPoint deck. `slides.pptx` becomes a sibling `slides.org`, with recoverable embedded media extracted under `slides-media/` and linked relatively from the Org file.
+
+PPTX input requires a Pandoc build that advertises the `pptx` reader. Pandoc added PPTX input in 3.8.3; older installations remain usable for this configuration's normal DOCX/PPTX export workflows, but the incoming-PPTX command stops with an actionable upgrade message rather than attempting an unsupported conversion.
+
+This path is deliberately lossy. Pandoc can recover useful slide text, lists, images, simple tables, and some other semantic content, but the original PPTX remains authoritative for slide geometry, themes, speaker notes, charts, animations, and native PowerPoint objects. The generated Org begins with a durable warning describing that boundary and retains any Pandoc diagnostics from the conversion.
+
+As with DOCX import, the command refuses to overwrite an existing sibling Org file or media directory and cleans partial artifacts after a failed conversion. It is an inspection/content-recovery convenience, not a PPTX -> Org -> PPTX round-trip guarantee.
