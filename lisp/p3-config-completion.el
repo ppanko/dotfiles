@@ -20,6 +20,7 @@
   :ensure nil
   :custom
   (history-length 100)
+  (savehist-additional-variables '(p3/org-roam-project-associations))
   :init
   (savehist-mode 1))
 

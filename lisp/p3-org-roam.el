@@ -1,18 +1,39 @@
 ;;; p3-org-roam.el --- Org-roam workflow helpers
 
+(require 'org)
+(require 'org-id)
+(require 'p3-project)
 (require 'seq)
 (require 'subr-x)
 
 (defvar org-agenda-files)
+(defvar org-agenda-redo-command)
 (defvar org-roam-capture-templates)
 (defvar org-roam-directory)
+(defvar org-use-property-inheritance)
+
+(defvar p3/org-roam-project-associations nil
+  "Machine-local normalized project-root to Org-roam hub-ID mappings.")
+
+(defvar-local p3/org-roam-project-agenda-hub-id nil
+  "Hub ID represented by the current project Agenda buffer.")
 
 (declare-function consult-ripgrep "consult" (dir &optional initial))
 (declare-function org-agenda "org-agenda" (&optional arg keys restriction))
+(declare-function org-tags-view "org-agenda" (&optional todo-only match))
+(declare-function org-roam-capture- "org-roam-capture" (&rest args))
+(declare-function org-roam-db-update-file "org-roam-db" (&optional file-path))
+(declare-function org-roam-node-create "org-roam-node" (&rest args))
 (declare-function org-roam-node-file "org-roam-node" (node))
+(declare-function org-roam-node-from-id "org-roam-node" (id))
+(declare-function org-roam-node-id "org-roam-node" (node))
 (declare-function org-roam-node-insert "org-roam-node" (&optional arg &rest args))
+(declare-function org-roam-node-level "org-roam-node" (node))
 (declare-function org-roam-node-list "org-roam-node" ())
+(declare-function org-roam-node-properties "org-roam-node" (node))
+(declare-function org-roam-node-read "org-roam-node" (&optional initial-input filter-fn sort-fn require-match))
 (declare-function org-roam-node-tags "org-roam-node" (node))
+(declare-function org-roam-node-visit "org-roam-node" (node &optional other-window force))
 
 (defun org-roam-generate-tagged-header ()
   (let ((tag (read-string "Enter tag: ")))
@@ -62,6 +83,356 @@
         (setq org-agenda-files (p3/org-roam-list-notes))
       (setq org-agenda-files (p3/org-roam-list-notes-by-tag tag))))
   (org-agenda))
+
+(defun p3/org-roam-project-hub-id-for-root (root)
+  "Return the Org-roam hub ID associated with local project ROOT."
+  (when-let ((normalized (p3/project-normalize-root root)))
+    (cdr (assoc normalized p3/org-roam-project-associations))))
+
+(defun p3/org-roam-project-associate-root (root hub-id &optional replace)
+  "Associate local project ROOT with HUB-ID.
+When REPLACE is non-nil, replace an existing different mapping explicitly."
+  (let ((normalized (p3/project-normalize-root root)))
+    (unless normalized
+      (user-error "Project root does not exist: %s" root))
+    (unless (and (stringp hub-id) (not (string-empty-p hub-id)))
+      (user-error "Project hub ID is unavailable"))
+    (let ((existing (assoc normalized p3/org-roam-project-associations)))
+      (cond
+       ((not existing)
+        (push (cons normalized hub-id) p3/org-roam-project-associations))
+       ((equal (cdr existing) hub-id))
+       (replace
+        (setcdr existing hub-id))
+       (t
+        (user-error "Project root is already associated with another hub"))))
+    hub-id))
+
+(defun p3/org-roam--node-file-project-id (node)
+  "Return NODE's file-level P3_PROJECT value, or nil."
+  (when (and node (zerop (or (org-roam-node-level node) 0)))
+    (cdr (assoc-string "P3_PROJECT" (org-roam-node-properties node)))))
+
+(defun p3/org-roam-project-hub-p (node)
+  "Return non-nil when NODE is a self-marked project hub file node."
+  (when node
+    (let ((id (org-roam-node-id node)))
+      (and (zerop (or (org-roam-node-level node) 0))
+           (stringp id)
+           (not (string-empty-p id))
+           (equal id (p3/org-roam--node-file-project-id node))))))
+
+(defun p3/org-roam--hub-node (hub-id)
+  "Return the live self-marked Org-roam hub node for HUB-ID.
+Signal `user-error' when the stored identity is stale or invalid."
+  (let ((node (and hub-id (org-roam-node-from-id hub-id))))
+    (unless (p3/org-roam-project-hub-p node)
+      (user-error "Org-roam project hub is missing or no longer self-marked: %s"
+                  hub-id))
+    node))
+
+(defun p3/org-roam--nearest-heading-project-id ()
+  "Return nearest explicit heading P3_PROJECT at point or an ancestor."
+  (when (derived-mode-p 'org-mode)
+    (save-excursion
+      (unless (org-before-first-heading-p)
+        (org-back-to-heading t)
+        (catch 'project
+          (while t
+            (when-let ((project-id
+                        (org-entry-get (point) "P3_PROJECT" nil)))
+              (throw 'project project-id))
+            (unless (org-up-heading-safe)
+              (throw 'project nil))))))))
+
+(defun p3/org-roam--file-project-id-live ()
+  "Return the current Org buffer's explicit file-level P3_PROJECT value."
+  (when (derived-mode-p 'org-mode)
+    (save-excursion
+      (goto-char (point-min))
+      (org-entry-get (point) "P3_PROJECT" nil))))
+
+(defun p3/org-roam-project-context ()
+  "Return the current durable literate-project hub ID, or nil."
+  (or (p3/org-roam--nearest-heading-project-id)
+      (p3/org-roam--file-project-id-live)
+      (when-let ((root (p3/project-root)))
+        (p3/org-roam-project-hub-id-for-root root))))
+
+(defun p3/org-roam--read-hub-node ()
+  "Read an existing self-marked project hub node."
+  (org-roam-node-read nil #'p3/org-roam-project-hub-p nil t))
+
+(defun p3/org-roam--heading-project-id-explicit ()
+  "Return the explicit P3_PROJECT value on the current heading, or nil."
+  (when (and (derived-mode-p 'org-mode)
+             (not (org-before-first-heading-p)))
+    (save-excursion
+      (org-back-to-heading t)
+      (org-entry-get (point) "P3_PROJECT" nil))))
+
+(defun p3/org-roam--set-heading-project-id (hub-id)
+  "Set explicit heading-level P3_PROJECT to HUB-ID in the live buffer."
+  (unless (and (derived-mode-p 'org-mode)
+               (not (org-before-first-heading-p)))
+    (user-error "Point is not on an Org heading"))
+  (save-excursion
+    (org-back-to-heading t)
+    (org-entry-put (point) "P3_PROJECT" hub-id)))
+
+(defun p3/org-roam--remove-heading-project-id ()
+  "Remove explicit heading-level P3_PROJECT from the current heading."
+  (unless (and (derived-mode-p 'org-mode)
+               (not (org-before-first-heading-p)))
+    (user-error "Point is not on an Org heading"))
+  (save-excursion
+    (org-back-to-heading t)
+    (org-entry-delete (point) "P3_PROJECT")))
+
+(defun p3/org-roam--set-file-project-id (hub-id)
+  "Set file-level P3_PROJECT to HUB-ID in the current live Org buffer."
+  (unless (derived-mode-p 'org-mode)
+    (user-error "Current buffer is not an Org buffer"))
+  (save-excursion
+    (goto-char (point-min))
+    (org-entry-put (point) "P3_PROJECT" hub-id)))
+
+(defun p3/org-roam--remove-file-project-id ()
+  "Remove file-level P3_PROJECT from the current live Org buffer."
+  (unless (derived-mode-p 'org-mode)
+    (user-error "Current buffer is not an Org buffer"))
+  (save-excursion
+    (goto-char (point-min))
+    (org-entry-delete (point) "P3_PROJECT")))
+
+(defun p3/org-roam--association-hub-node ()
+  "Return a valid hub node for an association operation."
+  (if-let ((hub-id (p3/org-roam-project-context)))
+      (p3/org-roam--hub-node hub-id)
+    (p3/org-roam--read-hub-node)))
+
+(defun p3/org-roam-project-associate (&optional whole-file)
+  "Associate, change, or remove project membership at point.
+By default target the current Org heading.  When WHOLE-FILE is non-nil,
+or point is before the first heading, target the file-level property."
+  (interactive "P")
+  (unless (derived-mode-p 'org-mode)
+    (user-error "Current buffer is not an Org buffer"))
+  (let* ((file-scope (or whole-file (org-before-first-heading-p)))
+         (current-id (if file-scope
+                         (p3/org-roam--file-project-id-live)
+                       (p3/org-roam--heading-project-id-explicit)))
+         (setter (if file-scope
+                     #'p3/org-roam--set-file-project-id
+                   #'p3/org-roam--set-heading-project-id))
+         (remover (if file-scope
+                      #'p3/org-roam--remove-file-project-id
+                    #'p3/org-roam--remove-heading-project-id)))
+    (if (not current-id)
+        (funcall setter
+                 (org-roam-node-id (p3/org-roam--association-hub-node)))
+      (pcase (completing-read "Project association: "
+                              '("change" "remove") nil t)
+        ("remove"
+         (funcall remover))
+        ("change"
+         (let* ((node (p3/org-roam--read-hub-node))
+                (new-id (org-roam-node-id node)))
+           (when (and (not (equal current-id new-id))
+                      (yes-or-no-p
+                       (format "Change project association from %s to %s? "
+                               current-id new-id)))
+             (funcall setter new-id))))))))
+
+(defun p3/org-roam--project-template (hub-id &optional immediate-finish)
+  "Return a flat Org-roam file capture template associated with HUB-ID."
+  (append
+   (list "p" "project" 'plain "%?"
+         :if-new
+         (list 'file+head
+               "%<%Y%m%d%H%M%S>-${slug}.org"
+               (format
+                (concat ":PROPERTIES:\n"
+                        ":P3_PROJECT: %s\n"
+                        ":END:\n"
+                        "#+title: ${title}\n"
+                        "#+category:${title}\n"
+                        "#+created: %%U\n"
+                        "#+last_modified: %%U\n")
+                hub-id))
+         :unnarrowed t)
+   (when immediate-finish '(:immediate-finish t))))
+
+(defun p3/org-roam--promote-node-to-hub (node root &optional replace-root)
+  "Promote NODE to a project hub, then associate ROOT with its ID.
+When REPLACE-ROOT is non-nil, explicitly replace an existing root mapping."
+  (let ((hub-id (org-roam-node-id node)))
+    (unless (and (stringp hub-id) (not (string-empty-p hub-id)))
+      (user-error "Selected Org-roam node has no durable ID"))
+    (if (p3/org-roam-project-hub-p node)
+        (p3/org-roam-project-associate-root root hub-id replace-root)
+      (when-let ((existing (p3/org-roam--node-file-project-id node)))
+        (user-error "Selected note already belongs to project %s" existing))
+      (let ((file (org-roam-node-file node)))
+        (unless file
+          (user-error "Selected Org-roam node has no file"))
+        (let ((buffer (find-file-noselect file)))
+          (with-current-buffer buffer
+            (when (buffer-modified-p)
+              (user-error
+               "Save or resolve existing edits before promoting this note"))
+            (p3/org-roam--set-file-project-id hub-id)
+            (save-buffer)
+            (org-roam-db-update-file file)))
+        (p3/org-roam-project-associate-root root hub-id replace-root)))))
+
+(defun p3/org-roam--hub-candidate-p (node)
+  "Return non-nil when NODE may be selected or promoted as a hub."
+  (when (and node
+             (zerop (or (org-roam-node-level node) 0))
+             (org-roam-node-file node))
+    (let ((project-id (p3/org-roam--node-file-project-id node))
+          (node-id (org-roam-node-id node)))
+      (and (stringp node-id)
+           (not (string-empty-p node-id))
+           (or (not project-id)
+               (equal project-id node-id))))))
+
+(defun p3/org-roam--create-hub (root &optional replace-root)
+  "Create a self-marked project hub, then associate ROOT with it."
+  (let* ((title (read-string "Project hub title: "))
+         (hub-id (org-id-new))
+         (node (org-roam-node-create :id hub-id :title title))
+         (template (p3/org-roam--project-template hub-id t)))
+    (org-roam-capture- :node node
+                       :templates (list template)
+                       :props '(:finalize find-file))
+    (unless buffer-file-name
+      (user-error "Project hub capture did not produce a file"))
+    (org-roam-db-update-file buffer-file-name)
+    (p3/org-roam--hub-node hub-id)
+    (p3/org-roam-project-associate-root root hub-id replace-root)
+    hub-id))
+
+(defun p3/org-roam--establish-hub-for-root (root &optional replace-root)
+  "Explicitly select or create a hub for local project ROOT."
+  (pcase (read-char-choice "Project hub: [e]xisting or [n]ew? " '(?e ?n))
+    (?e
+     (p3/org-roam--promote-node-to-hub
+      (org-roam-node-read nil #'p3/org-roam--hub-candidate-p nil t)
+      root replace-root))
+    (?n
+     (p3/org-roam--create-hub root replace-root))))
+
+(defun p3/org-roam-project-note ()
+  "Open, establish, or explicitly repair the current project's hub note."
+  (interactive)
+  (let* ((root (p3/project-root))
+         (context (p3/org-roam-project-context))
+         (mapped-id (and root
+                         (p3/org-roam-project-hub-id-for-root root)))
+         hub-id
+         node)
+    (cond
+     (context
+      (condition-case err
+          (setq hub-id context
+                node (p3/org-roam--hub-node hub-id))
+        (user-error
+         (if (and root
+                  mapped-id
+                  (equal context mapped-id)
+                  (yes-or-no-p
+                   "Stored project hub is stale. Reassociate this root? "))
+             (setq hub-id (p3/org-roam--establish-hub-for-root root t)
+                   node (p3/org-roam--hub-node hub-id))
+           (signal (car err) (cdr err))))))
+     (root
+      (setq hub-id (p3/org-roam--establish-hub-for-root root nil)
+            node (p3/org-roam--hub-node hub-id)))
+     (t
+      (user-error "No Org-roam project context or filesystem project")))
+    (org-roam-node-visit node)))
+
+(defun p3/org-roam--project-node-p (node hub-id)
+  "Return non-nil when file NODE is explicitly associated with HUB-ID."
+  (and node
+       (zerop (or (org-roam-node-level node) 0))
+       (equal (p3/org-roam--node-file-project-id node) hub-id)))
+
+(defun p3/org-roam-project-find-note ()
+  "Find an Org-roam file node explicitly associated with the current project."
+  (interactive)
+  (let ((hub-id (p3/org-roam-project-context)))
+    (unless hub-id
+      (user-error "No project context; establish a project hub first"))
+    (p3/org-roam--hub-node hub-id)
+    (let ((node
+           (org-roam-node-read
+            nil
+            (lambda (candidate)
+              (p3/org-roam--project-node-p candidate hub-id))
+            nil t)))
+      (org-roam-node-visit node))))
+
+(defun p3/org-roam-project-new-note ()
+  "Capture a new Org-roam file node associated with the current project."
+  (interactive)
+  (let ((hub-id (p3/org-roam-project-context)))
+    (unless hub-id
+      (user-error
+       "No project context; run p3/org-roam-project-note first"))
+    (p3/org-roam--hub-node hub-id)
+    (let* ((title (read-string "Project note title: "))
+           (node (org-roam-node-create :title title))
+           (template (p3/org-roam--project-template hub-id nil)))
+      (org-roam-capture- :node node
+                         :templates (list template)
+                         :props '(:finalize find-file)))))
+
+(defun p3/org-roam--project-todos (hub-id)
+  "Generate the native Org Agenda TODO view for HUB-ID."
+  (let ((org-agenda-files
+         (delete-dups (copy-sequence (p3/org-roam-list-notes))))
+        (org-use-property-inheritance '("P3_PROJECT")))
+    (let ((buffer
+           (or (org-tags-view t (format "P3_PROJECT=\"%s\"" hub-id))
+               (current-buffer))))
+      (when (buffer-live-p buffer)
+        (with-current-buffer buffer
+          (setq-local p3/org-roam-project-agenda-hub-id hub-id)
+          (setq-local org-agenda-redo-command
+                      '(p3/org-roam-project-agenda-redo))
+          (let ((inhibit-read-only t))
+            (add-text-properties
+             (point-min) (point-max)
+             (list 'org-redo-cmd
+                   '(p3/org-roam-project-agenda-redo))))))
+      buffer)))
+
+(defun p3/org-roam-project-agenda-redo ()
+  "Regenerate the current project Agenda from its stored hub ID."
+  (interactive)
+  (unless p3/org-roam-project-agenda-hub-id
+    (user-error "This buffer has no project Agenda context"))
+  (p3/org-roam--project-todos p3/org-roam-project-agenda-hub-id))
+
+(defun p3/org-roam-project-todos ()
+  "Show unfinished TODOs for the current literate project."
+  (interactive)
+  (let ((hub-id (p3/org-roam-project-context)))
+    (unless hub-id
+      (user-error "No project context; establish a project hub first"))
+    (p3/org-roam--hub-node hub-id)
+    (p3/org-roam--project-todos hub-id)))
+
+(defvar-keymap p3/org-roam-project-command-map
+  :doc "Commands for the current Org-roam literate project."
+  "h" #'p3/org-roam-project-note
+  "f" #'p3/org-roam-project-find-note
+  "n" #'p3/org-roam-project-new-note
+  "a" #'p3/org-roam-project-associate
+  "t" #'p3/org-roam-project-todos)
 
 (provide 'p3-org-roam)
 
