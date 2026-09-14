@@ -110,12 +110,13 @@
                  (if (eq feature 'forge)
                      (signal 'file-missing
                              '("Cannot open load file" "forge"))
-                   (apply original-require feature arguments)))))
+                   (apply original-require feature arguments))))
+              ((symbol-function 'global-git-gutter+-mode)
+               (lambda (&optional _arg) t)))
       (load path nil t))
     (should (featurep 'p3-config-git))
     (should (keymapp p3/magit-command-map))
-    (should (eq (lookup-key global-map (kbd "C-c m"))
-                p3/magit-command-map))
+    (should (eq (key-binding (kbd "C-c m g")) #'magit-status))
     (should (fboundp 'p3/git-run))
     (should-not (featurep 'forge))))
 
