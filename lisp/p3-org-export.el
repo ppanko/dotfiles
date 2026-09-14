@@ -220,6 +220,111 @@ argument prompts for a one-off reference document."
     (user-error "Unsupported Office output format: %s" output-format))
   (p3-org-export-run output-format template-file))
 
+(defun p3-office-import--docx-paths (source)
+  "Return predictable import paths for DOCX SOURCE."
+  (let* ((source (expand-file-name source))
+         (base (file-name-sans-extension source)))
+    (list :output (concat base ".org")
+          :media-directory (concat base "-media"))))
+
+(defun p3-office-import--docx-arguments (source output media-directory)
+  "Build Pandoc arguments for importing DOCX SOURCE into Org OUTPUT."
+  (list "--from=docx+styles"
+        "--to=org"
+        "--track-changes=all"
+        (concat "--extract-media=" media-directory)
+        source "-o" output))
+
+(defun p3-office-import--docx-notice (source diagnostics)
+  "Return the durable import notice for SOURCE and Pandoc DIAGNOSTICS."
+  (concat
+   "# P3 Office import: " (file-name-nondirectory source) "\n"
+   "# This DOCX -> Org conversion is potentially lossy. Keep the original DOCX "
+   "for review of layout, tracked changes/comments, and native Word objects.\n"
+   (unless (string-empty-p diagnostics)
+     (concat
+      "# Pandoc diagnostics reported during conversion:\n"
+      (mapconcat (lambda (line) (concat "# " line))
+                 (split-string diagnostics "\n" t)
+                 "\n")
+      "\n"))
+   "\n"))
+
+(defun p3-office-import--validate-docx-source (source)
+  "Return absolute DOCX SOURCE after validating it."
+  (let ((source (expand-file-name source)))
+    (unless (string-equal (downcase (or (file-name-extension source) ""))
+                          "docx")
+      (user-error "Incoming Office import currently supports DOCX files only"))
+    (unless (file-readable-p source)
+      (user-error "DOCX file is not readable: %s" source))
+    source))
+
+(defun p3-office-import-docx-run (source &optional output)
+  "Convert incoming DOCX SOURCE to Org and return the output path.
+
+The default OUTPUT is a sibling `.org' file. Embedded media is extracted to a
+sibling `-media' directory. Existing output or media paths are never silently
+overwritten. Pandoc diagnostics are retained in the generated Org notice so
+conversion warnings remain visible."
+  (let* ((source (p3-office-import--validate-docx-source source))
+         (paths (p3-office-import--docx-paths source))
+         (output (expand-file-name (or output (plist-get paths :output))))
+         (media-directory (plist-get paths :media-directory))
+         (output-directory (file-name-directory output))
+         (pandoc (p3-org-export--pandoc-executable)))
+    (unless (file-directory-p output-directory)
+      (user-error "Import output directory does not exist: %s"
+                  output-directory))
+    (when (file-exists-p output)
+      (user-error "Refusing to overwrite existing Org import: %s" output))
+    (when (file-exists-p media-directory)
+      (user-error "Refusing to overwrite existing media directory: %s"
+                  media-directory))
+    (let ((temporary-output
+           (make-temp-file
+            (expand-file-name ".p3-docx-import-" output-directory)
+            nil ".org"))
+          (completed nil))
+      (unwind-protect
+          (with-temp-buffer
+            (let* ((default-directory (file-name-directory source))
+                   (arguments
+                    (p3-office-import--docx-arguments
+                     source temporary-output media-directory))
+                   (status
+                    (apply #'process-file
+                           pandoc nil (current-buffer) nil arguments))
+                   (diagnostics (string-trim (buffer-string))))
+              (unless (and (integerp status) (zerop status))
+                (user-error "Pandoc DOCX import failed (status %s): %s"
+                            status diagnostics))
+              (let ((converted
+                     (with-temp-buffer
+                       (insert-file-contents temporary-output)
+                       (buffer-string))))
+                (with-temp-file temporary-output
+                  (insert (p3-office-import--docx-notice source diagnostics))
+                  (insert converted)))
+              (rename-file temporary-output output)
+              (setq completed t)))
+        (unless completed
+          (when (file-exists-p temporary-output)
+            (delete-file temporary-output))
+          (when (file-directory-p media-directory)
+            (delete-directory media-directory t))))
+      (message "Imported %s to %s" source output)
+      output)))
+
+(defun p3/office-import-docx (source)
+  "Convert incoming DOCX SOURCE to a sibling Org file and open it.
+
+This is an inspection/editing convenience, not a lossless round-trip. The
+original DOCX remains the reference for Word-specific layout and native
+objects."
+  (interactive (list (read-file-name "Import DOCX: " nil nil t)))
+  (find-file (p3-office-import-docx-run source)))
+
 (defun p3-org-export-setup ()
   "Install the Org export command and restore standard Org link opening."
   (define-key org-mode-map (kbd "C-c C-o") #'org-open-at-point)
