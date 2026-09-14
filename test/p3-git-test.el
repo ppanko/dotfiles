@@ -98,10 +98,11 @@
          (p3/config-lisp-directory
           (expand-file-name "lisp" p3-git-test--root))
          (global-map (copy-keymap global-map))
-         (features (cons 'magit
-                         (delq 'forge
-                               (delq 'p3-config-git
-                                     (copy-sequence features)))))
+         (features (cons 'git-gutter-fringe+
+                         (cons 'magit
+                               (delq 'forge
+                                     (delq 'p3-config-git
+                                           (copy-sequence features))))))
          (after-load-alist (copy-tree after-load-alist))
          (use-package-always-ensure nil)
          (original-require (symbol-function 'require)))
@@ -116,7 +117,10 @@
       (load path nil t))
     (should (featurep 'p3-config-git))
     (should (keymapp p3/magit-command-map))
-    (should (eq (key-binding (kbd "C-c m g")) #'magit-status))
+    (should (eq (lookup-key global-map (kbd "C-c m"))
+                'p3/magit-command-map))
+    (should (eq (lookup-key p3/magit-command-map (kbd "g"))
+                #'magit-status))
     (should (fboundp 'p3/git-run))
     (should-not (featurep 'forge))))
 
