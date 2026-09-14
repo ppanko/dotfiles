@@ -55,7 +55,7 @@
     '("--from=docx+styles"
       "--to=org"
       "--track-changes=all"
-      "--extract-media=/tmp/example-media"
+      "--extract-media=example-media"
       "/tmp/example.docx"
       "-o"
       "/tmp/example.org"))))
@@ -116,6 +116,8 @@
         (should (string-match-p "\\* Incoming report" contents))
         (should (string-match-p "First item" contents))
         (should (string-match-p "| Name" contents))
+        (should (string-match-p "incoming-media" contents))
+        (should-not (string-match-p (regexp-quote directory) contents))
         (should (file-directory-p media-directory))
         (should (directory-files-recursively media-directory "\\.png\\'"))))))
 
