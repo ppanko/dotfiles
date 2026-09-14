@@ -2,10 +2,12 @@
 
 (require 'use-package)
 (require 'p3-commands)
+(require 'p3-core)
 
 (defvar cua-auto-tabify-rectangles)
 (defvar undo-tree-visualizer-timestamps)
 (defvar undo-tree-visualizer-diff)
+(defvar undo-tree-auto-save-history)
 (defvar undo-tree-history-directory-alist)
 (defvar super-save-auto-save-when-idle)
 (defvar synosaurus-choose-method)
@@ -64,11 +66,13 @@
 (use-package undo-tree
   :diminish undo-tree-mode
   :config
-  (progn
-    (global-undo-tree-mode)
-    (setq undo-tree-visualizer-timestamps t)
-    (setq undo-tree-visualizer-diff t)
-    (setq undo-tree-history-directory-alist '(("." . "~/.emacs.d/undo")))))
+  (let ((undo-dir (expand-file-name "undo/" (p3/state-directory))))
+    (make-directory undo-dir t)
+    (setq undo-tree-auto-save-history t
+          undo-tree-history-directory-alist `(("." . ,undo-dir))
+          undo-tree-visualizer-timestamps t
+          undo-tree-visualizer-diff t)
+    (global-undo-tree-mode)))
 
 (use-package super-save
   :defer 1
