@@ -1,6 +1,7 @@
 ;;; p3-gptel.el --- Thin GPTel project and task workflow -*- lexical-binding: t; -*-
 
 (require 'project)
+(require 'seq)
 (require 'subr-x)
 (require 'p3-git)
 
