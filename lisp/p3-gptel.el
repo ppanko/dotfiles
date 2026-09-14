@@ -30,6 +30,9 @@
     (review . "Review the selected code critically. Identify correctness, maintainability, and robustness issues without modifying the source."))
   "Instructions for P3's small set of GPTel cut-out tasks.")
 
+(defvar-local p3/gptel-project-root nil
+  "Project root currently associated with this P3-started GPTel chat.")
+
 (defvar-local p3/gptel-git-diff-root nil
   "Repository root captured by this P3 Git-diff snapshot buffer.")
 
@@ -137,7 +140,9 @@ optional backend rather than guessing which local models are installed."
 
 GPTel continues to own chat naming, persistence, backend/model state, and
 conversation resumption.  P3 only records the caller's `project.el' directory
-and ensures the selected chat has its own explicit context list."
+and ensures the selected chat has its own explicit context list.  Reusing a
+P3-started chat from another project clears its attached context rather than
+silently carrying project material across roots."
   (interactive)
   (let* ((project (project-current nil))
          (directory (file-name-as-directory
@@ -146,12 +151,14 @@ and ensures the selected chat has its own explicit context list."
     (unless (buffer-live-p chat)
       (user-error "GPTel did not return a live chat buffer"))
     (with-current-buffer chat
-      (setq-local default-directory directory)
-      ;; A project chat should never inherit the process-wide context merely
-      ;; because another buffer used GPTel.  Existing chat-local context is
-      ;; preserved when an already-isolated GPTel buffer is selected again.
-      (unless (local-variable-p 'gptel-context)
-        (setq-local gptel-context nil)))
+      ;; A project chat should never inherit process-wide context merely because
+      ;; another buffer used GPTel.  Preserve context only when returning to a
+      ;; chat already associated with the same project root.
+      (unless (and (local-variable-p 'gptel-context)
+                   (equal p3/gptel-project-root directory))
+        (setq-local gptel-context nil))
+      (setq-local default-directory directory
+                  p3/gptel-project-root directory))
     chat))
 
 (defun p3/gptel-git-root (&optional directory)
