@@ -106,7 +106,7 @@
         (should (< magit-position forge-position))
         (should
          (string-match-p
-          (regexp-quote "(use-package forge\n  :after magit\n  :defer t)")
+          (regexp-quote "(use-package forge\n  :after magit)")
           contents))))))
 
 (provide 'p3-git-test)
