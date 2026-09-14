@@ -13,6 +13,9 @@
 
 (require 'p3-core)
 
+(load-file
+ (expand-file-name "test/p3-recovery-state-test.el" p3-core-test--root))
+
 (ert-deftest p3-core-config-commands-remain-commands ()
   (should (commandp #'p3/config-visit))
   (should (commandp #'p3/config-reload)))
