@@ -2,16 +2,24 @@ name: Emacs tests
 
 on:
   pull_request:
-  push:
-    branches:
-      - master
+    types:
+      - ready_for_review
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: emacs-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
