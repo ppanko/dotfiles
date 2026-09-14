@@ -46,10 +46,28 @@
        (equal (p3-office--libreoffice-executable)
               "/resolved/custom-soffice")))))
 
-(ert-deftest p3-office-preview-libreoffice-windows-candidates-include-standard-install ()
-  (should
-   (member "C:/Program Files/LibreOffice/program/soffice.exe"
-           (p3-office--libreoffice-platform-candidates 'windows-nt))))
+(ert-deftest p3-office-preview-libreoffice-windows-candidates-prefer-console-launcher ()
+  (let ((candidates (p3-office--libreoffice-platform-candidates 'windows-nt)))
+    (should
+     (equal (car candidates)
+            "C:/Program Files/LibreOffice/program/soffice.com"))
+    (should
+     (member "C:/Program Files/LibreOffice/program/soffice.exe" candidates))))
+
+(ert-deftest p3-office-preview-libreoffice-windows-path-prefers-console-launcher ()
+  (let ((p3-office-libreoffice-program nil))
+    (cl-letf (((symbol-function 'executable-find)
+               (lambda (name)
+                 (cond
+                  ((equal name "soffice.com") "C:/tools/soffice.com")
+                  ((equal name "soffice.exe") "C:/tools/soffice.exe")
+                  (t nil))))
+              ((symbol-function 'file-executable-p) (lambda (_path) nil))
+              ((symbol-function 'p3-office--libreoffice-platform-candidates)
+               (lambda (&optional _platform) nil)))
+      (should
+       (equal (p3-office--libreoffice-executable)
+              "C:/tools/soffice.com")))))
 
 (ert-deftest p3-office-preview-pptx-arguments-render-with-isolated-impress-profile ()
   (let ((source "/tmp/slides.pptx")
