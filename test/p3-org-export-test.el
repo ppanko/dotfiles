@@ -113,7 +113,12 @@
              "fonts.set('{%s}hAnsi' % w, 'Courier New')\n"
              "files['word/styles.xml'] = ET.tostring(styles, encoding='utf-8', xml_declaration=True)\n"
              "document = ET.fromstring(files['word/document.xml'])\n"
-             "margin = document.find('.//{%s}sectPr/{%s}pgMar' % (w, w))\n"
+             "section = document.find('.//{%s}sectPr' % w)\n"
+             "if section is None:\n"
+             "    raise RuntimeError('reference DOCX has no section properties')\n"
+             "margin = section.find('{%s}pgMar' % w)\n"
+             "if margin is None:\n"
+             "    margin = ET.SubElement(section, '{%s}pgMar' % w)\n"
              "margin.set('{%s}top' % w, '1008')\n"
              "files['word/document.xml'] = ET.tostring(document, encoding='utf-8', xml_declaration=True)\n"
              "fd, tmp = tempfile.mkstemp(suffix='.docx')\n"
@@ -125,12 +130,14 @@
              "    os.replace(tmp, path)\n"
              "finally:\n"
              "    if os.path.exists(tmp): os.unlink(tmp)\n"))
-          (let ((status
-                 (call-process
-                  (p3-org-export-test--python-executable)
-                  nil nil nil script path)))
-            (unless (and (integerp status) (zerop status))
-              (error "Could not customize reference DOCX"))))
+          (with-temp-buffer
+            (let ((status
+                   (call-process
+                    (p3-org-export-test--python-executable)
+                    nil (current-buffer) nil script path)))
+              (unless (and (integerp status) (zerop status))
+                (error "Could not customize reference DOCX: %s"
+                       (string-trim (buffer-string)))))))
       (delete-file script))))
 
 (defun p3-org-export-test--zip-file-p (path)
