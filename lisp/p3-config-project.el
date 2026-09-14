@@ -3,7 +3,8 @@
 (require 'project)
 (require 'p3-project)
 
-(setq project-switch-commands 'p3/project-resume)
+(setq project-switch-commands 'p3/project-resume
+      project-compilation-buffer-name-function #'project-prefixed-buffer-name)
 
 ;; Route only file visits that are about to be displayed.  Background
 ;; `find-file-noselect' reads and reverts must not change workspaces.
