@@ -113,6 +113,96 @@
         (should (equal (plist-get (nthcdr 4 template) :unnarrowed)
                        t))))))
 
+(ert-deftest p3-org-roam-project-root-association-normalizes-and-rejects-conflict ()
+  (let ((p3/org-roam-project-associations nil))
+    (cl-letf (((symbol-function 'p3/project-normalize-root)
+               (lambda (_root) "/tmp/repo/")))
+      (should (equal (p3/org-roam-project-associate-root "/tmp/repo" "hub-a")
+                     "hub-a"))
+      (should (equal (p3/org-roam-project-hub-id-for-root "/tmp/repo/")
+                     "hub-a"))
+      (should-error
+       (p3/org-roam-project-associate-root "/tmp/repo" "hub-b")
+       :type 'user-error))))
+
+(ert-deftest p3-org-roam-project-root-association-can-replace-explicitly ()
+  (let ((p3/org-roam-project-associations '(("/tmp/repo/" . "hub-a"))))
+    (cl-letf (((symbol-function 'p3/project-normalize-root)
+               (lambda (_root) "/tmp/repo/")))
+      (should (equal (p3/org-roam-project-associate-root
+                      "/tmp/repo" "hub-b" t)
+                     "hub-b"))
+      (should (equal p3/org-roam-project-associations
+                     '(("/tmp/repo/" . "hub-b")))))))
+
+(ert-deftest p3-org-roam-project-one-hub-may-own-multiple-roots ()
+  (let ((p3/org-roam-project-associations nil))
+    (cl-letf (((symbol-function 'p3/project-normalize-root)
+               (lambda (root) (file-name-as-directory root))))
+      (p3/org-roam-project-associate-root "/tmp/a" "hub")
+      (p3/org-roam-project-associate-root "/tmp/b" "hub")
+      (should (= (length p3/org-roam-project-associations) 2)))))
+
+(ert-deftest p3-org-roam-project-hub-requires-self-marked-file-node ()
+  (cl-letf (((symbol-function 'org-roam-node-id)
+             (lambda (node) (plist-get node :id)))
+            ((symbol-function 'org-roam-node-level)
+             (lambda (node) (plist-get node :level)))
+            ((symbol-function 'org-roam-node-properties)
+             (lambda (node) (plist-get node :properties))))
+    (should (p3/org-roam-project-hub-p
+             '(:id "hub" :level 0 :properties (("P3_PROJECT" . "hub")))))
+    (should-not
+     (p3/org-roam-project-hub-p
+      '(:id "hub" :level 0 :properties (("P3_PROJECT" . "other")))))
+    (should-not
+     (p3/org-roam-project-hub-p
+      '(:id "hub" :level 1 :properties (("P3_PROJECT" . "hub")))))))
+
+(ert-deftest p3-org-roam-project-context-prefers-nearest-heading ()
+  (with-temp-buffer
+    (org-mode)
+    (insert ":PROPERTIES:\n:P3_PROJECT: file-project\n:END:\n"
+            "* Parent\n:PROPERTIES:\n:P3_PROJECT: parent-project\n:END:\n"
+            "** Child\n:PROPERTIES:\n:P3_PROJECT: child-project\n:END:\n"
+            "*** TODO Work\n")
+    (goto-char (point-max))
+    (cl-letf (((symbol-function 'p3/project-root) (lambda () nil)))
+      (should (equal (p3/org-roam-project-context) "child-project")))))
+
+(ert-deftest p3-org-roam-project-context-inherits-nearest-ancestor-before-file ()
+  (with-temp-buffer
+    (org-mode)
+    (insert ":PROPERTIES:\n:P3_PROJECT: file-project\n:END:\n"
+            "* Parent\n:PROPERTIES:\n:P3_PROJECT: parent-project\n:END:\n"
+            "** TODO Work\n")
+    (goto-char (point-max))
+    (cl-letf (((symbol-function 'p3/project-root) (lambda () nil)))
+      (should (equal (p3/org-roam-project-context) "parent-project")))))
+
+(ert-deftest p3-org-roam-project-context-falls-back-to-file-property ()
+  (with-temp-buffer
+    (org-mode)
+    (insert ":PROPERTIES:\n:P3_PROJECT: file-project\n:END:\n* TODO Work\n")
+    (goto-char (point-max))
+    (cl-letf (((symbol-function 'p3/project-root) (lambda () nil)))
+      (should (equal (p3/org-roam-project-context) "file-project")))))
+
+(ert-deftest p3-org-roam-project-context-falls-back-to-root-map ()
+  (let ((p3/org-roam-project-associations '(("/tmp/repo/" . "root-project"))))
+    (with-temp-buffer
+      (cl-letf (((symbol-function 'p3/project-root)
+                 (lambda () "/tmp/repo/"))
+                ((symbol-function 'p3/project-normalize-root)
+                 (lambda (_root) "/tmp/repo/")))
+        (should (equal (p3/org-roam-project-context) "root-project"))))))
+
+(ert-deftest p3-org-roam-project-context-is-nil-without-any-source ()
+  (let ((p3/org-roam-project-associations nil))
+    (with-temp-buffer
+      (cl-letf (((symbol-function 'p3/project-root) (lambda () nil)))
+        (should-not (p3/org-roam-project-context))))))
+
 (provide 'p3-org-roam-test)
 
 ;;; p3-org-roam-test.el ends here
