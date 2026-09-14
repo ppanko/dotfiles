@@ -210,6 +210,7 @@ jobs:
             -l test/p3-gptel-test.el \
             -l test/p3-config-gptel-test.el \
             -l test/p3-r-tools-test.el \
+            -l test/p3-r-tidyverse-completion-test.el \
             -l test/p3-org-test.el \
             -l test/p3-config-org-test.el \
             -l test/p3-org-roam-test.el \
