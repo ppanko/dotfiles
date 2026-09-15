@@ -46,7 +46,9 @@
          (explicit-bash.exe-args '("--login"))
          (old-path (getenv "PATH"))
          (old-shell (getenv "SHELL"))
-         (old-inferior (default-value 'inferior-R-program-name)))
+         (inferior-was-bound (boundp 'inferior-R-program-name))
+         (old-inferior (and inferior-was-bound
+                            (default-value 'inferior-R-program-name))))
     (unwind-protect
         (progn
           (setenv "PATH" "C:/rtools45/usr/bin;C:/Windows/System32")
@@ -73,7 +75,9 @@
           (should-not (default-value 'inferior-R-program-name)))
       (setenv "PATH" old-path)
       (setenv "SHELL" old-shell)
-      (setq-default inferior-R-program-name old-inferior))))
+      (if inferior-was-bound
+          (setq-default inferior-R-program-name old-inferior)
+        (makunbound 'inferior-R-program-name)))))
 
 (ert-deftest p3-performance-profile-file-visit-profiles-full-display-path ()
   (require 'profiler)
