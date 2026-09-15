@@ -6,6 +6,7 @@
 (require 'p3-config-appearance-test)
 
 (defvar ess-local-process-name)
+(defvar flycheck-current-errors)
 (defvar mode-line-process)
 (defvar overwrite-mode)
 (defvar vc-mode)
