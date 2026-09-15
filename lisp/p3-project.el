@@ -204,11 +204,13 @@ Extra arguments are ignored so callers may use this as the routing primitive."
           nil)))))
 
 (defun p3/project-with-file-routing (function filename &rest args)
-  "Route FILENAME once, then call FUNCTION with FILENAME and ARGS.
-The resolved root remains dynamically available to project-aware file hooks for
-the duration of the visit, so they do not repeat project discovery."
-  (let ((p3/project--visit-root (p3/project-route-file filename)))
-    (apply function filename args)))
+  "Route FILENAME once, then call FUNCTION with the resolved file and ARGS.
+Resolve relative filenames before workspace switching so routing cannot change
+the target.  The project root remains dynamically available to project-aware
+file hooks for the duration of the visit."
+  (let* ((file (and filename (expand-file-name filename)))
+         (p3/project--visit-root (p3/project-route-file file)))
+    (apply function file args)))
 
 (defun p3/project--restore-buffer-preview-window-configuration ()
   "Restore the workspace layout saved before Consult buffer preview."
