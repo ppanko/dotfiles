@@ -55,6 +55,9 @@ Set this in secrets.el when a machine should not use auto-detection.")
 (defvar p3/windows-hunspell-dictionary-directory nil
   "Hunspell dictionary directory found in the selected Rtools installation.")
 
+(defvar p3/windows-tool-refresh-hook nil
+  "Hook run after explicit Windows R/Rtools rediscovery is reapplied.")
+
 (defun p3/windows-p ()
   "Return non-nil when Emacs is running natively on Windows."
   (eq system-type 'windows-nt))
@@ -177,6 +180,7 @@ When DIRECTORY-P is non-nil, require a directory; otherwise require a file."
 
 (defun p3/windows-clear-rtools-configuration ()
   "Clear state previously derived from the selected Rtools installation."
+  (remove-hook 'shell-mode-hook #'p3/windows-shell-mode-setup)
   (let ((old-bin linuxy-environment-path))
     (when old-bin
       (p3/windows-path-remove old-bin)
@@ -373,7 +377,8 @@ resolves and otherwise use the R executable available on PATH."
   (when (p3/windows-p)
     (p3/windows-configure-rtools)
     (p3/windows-configure-r-program)
-    (p3/windows-configure-shell))
+    (p3/windows-configure-shell)
+    (run-hooks 'p3/windows-tool-refresh-hook))
   (message "Windows R/Rtools discovery refreshed"))
 
 (provide 'p3-platform)
