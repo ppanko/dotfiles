@@ -20,6 +20,7 @@
 (defvar flycheck-last-status-change)
 (defvar flycheck-current-errors)
 (defvar vc-mode)
+(defvar overwrite-mode)
 (defvar doom-modeline-mode)
 (defvar mode-line-right-align-edge)
 (defvar all-the-icons-dired-mode)
@@ -36,6 +37,7 @@
 (declare-function flycheck-count-errors "flycheck" (errors))
 (declare-function doom-modeline-mode "doom-modeline" (&optional arg))
 (declare-function p3/screen-record-indicator "p3-screen-record" ())
+(declare-function p3/ess-current-process-busy-p "p3-ess" ())
 
 (defconst p3/appearance-accent-color "#FFD700"
   "Shared accent color for high-value current-context UI.")
@@ -284,12 +286,23 @@
   "Return the current buffer's remote host without remote I/O."
   (file-remote-p (or buffer-file-name default-directory) 'host))
 
-(defun p3/appearance--buffer-state ()
-  "Return compact modified/read-only buffer state text."
+(defun p3/appearance--overwrite-state ()
+  "Return compact overwrite-mode state text."
   (cond
-   (buffer-read-only (propertize "RO" 'face 'shadow))
-   ((buffer-modified-p) (propertize "●" 'face 'warning))
+   ((eq overwrite-mode 'overwrite-mode-binary)
+    (propertize "BIN" 'face 'warning))
+   (overwrite-mode
+    (propertize "OVR" 'face 'warning))
    (t nil)))
+
+(defun p3/appearance--buffer-state ()
+  "Return compact modified/read-only and overwrite buffer state text."
+  (p3/appearance--join
+   (cond
+    (buffer-read-only (propertize "RO" 'face 'shadow))
+    ((buffer-modified-p) (propertize "●" 'face 'warning))
+    (t nil))
+   (p3/appearance--overwrite-state)))
 
 (defun p3/appearance--project-name ()
   "Return the cached local project name, or nil."
@@ -353,12 +366,22 @@
     (unless (p3/appearance--redundant-mode-name-p text)
       text)))
 
+(defun p3/appearance--ess-busy-segment ()
+  "Return R activity state through the ESS runtime owner."
+  (when (and (fboundp 'p3/ess-current-process-busy-p)
+             (p3/ess-current-process-busy-p))
+    (propertize "R ↻" 'face 'warning)))
+
 (defun p3/appearance--process-segment ()
-  "Return existing mode-provided process state on sufficiently wide windows."
-  (when (and (>= (window-total-width) 100) mode-line-process)
-    (let ((text (string-trim
-                 (p3/appearance--format-construct mode-line-process))))
-      (unless (string-empty-p text) text))))
+  "Return active ESS state plus existing mode-provided process state."
+  (let* ((ess-busy (p3/appearance--ess-busy-segment))
+         (generic
+          (when (and (>= (window-total-width) 100) mode-line-process)
+            (let ((text (string-trim
+                         (p3/appearance--format-construct mode-line-process))))
+              (unless (string-empty-p text) text)))))
+    (when (or ess-busy generic)
+      (p3/appearance--join ess-busy generic))))
 
 (defun p3/appearance--recording-segment ()
   "Return visible screen-recording state when capture is active."
@@ -381,18 +404,35 @@
        #'nerd-icons-octicon "nf-oct-git_branch" :height 0.95)
       "Git"))
 
+(defun p3/appearance--vc-state-marker (state)
+  "Return a compact presentation marker for current-file VC STATE punctuation."
+  (pcase state
+    (":" (propertize "●" 'face 'warning))
+    ("@" (propertize "+" 'face 'warning))
+    ("!" (propertize "!" 'face 'error))
+    ("?" (propertize "?" 'face 'warning))
+    (_ nil)))
+
 (defun p3/appearance--vc-segment ()
-  "Return bounded presentation of existing VC state."
+  "Return bounded presentation of existing current-file VC state."
   (when vc-mode
     (let* ((raw (string-trim (p3/appearance--format-construct vc-mode)))
-           (git-p (string-match-p "\\`Git\\(?:[-:]\\|\\'\\)" raw))
-           (payload (if git-p
-                        (replace-regexp-in-string "\\`Git[-:]?" "" raw)
-                      raw))
-           (text (truncate-string-to-width payload 12 nil nil "…")))
+           (git-p (string-match "\\`Git\\(?:\\([-:@!?]\\)\\(.*\\)\\)?\\'" raw))
+           (state (and git-p (match-string 1 raw)))
+           (payload (if git-p (or (match-string 2 raw) "") raw))
+           (marker (and git-p (p3/appearance--vc-state-marker state))))
       (if git-p
-          (format "%s %s" (p3/appearance--git-icon) text)
-        text))))
+          (let* ((identity (p3/appearance--git-icon))
+                 (marker-width (if marker (1+ (string-width marker)) 0))
+                 (payload-width
+                  (max 1 (- 16 (string-width identity) 1 marker-width)))
+                 (text (truncate-string-to-width
+                        payload payload-width nil nil "…")))
+            (string-join
+             (cl-remove-if #'string-empty-p
+                           (delq nil (list identity text marker)))
+             " "))
+        (truncate-string-to-width raw 12 nil nil "…")))))
 
 (defun p3/appearance--flycheck-finished-segment (&optional compact)
   "Return finished Flycheck state, reducing detail when COMPACT is non-nil."
@@ -401,8 +441,7 @@
          (warnings (or (cdr (assq 'warning counts)) 0))
          (infos (or (cdr (assq 'info counts)) 0)))
     (cond
-     ((and (zerop errors) (zerop warnings) (zerop infos))
-      (propertize "✓" 'face 'success))
+     ((and (zerop errors) (zerop warnings) (zerop infos)) nil)
      (compact
       (cond
        ((> errors 0) (propertize (format "×%d" errors) 'face 'error))

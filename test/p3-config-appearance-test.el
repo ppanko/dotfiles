@@ -9,6 +9,8 @@
 (defvar flycheck-last-status-change)
 (defvar flycheck-current-errors)
 (defvar vc-mode)
+(defvar mode-line-process)
+(defvar overwrite-mode)
 (defvar all-the-icons-dired-mode)
 (defvar nerd-icons-dired-mode)
 (defvar dashboard-icon-type)
@@ -270,6 +272,16 @@
     (setq buffer-read-only t)
     (should (string-match-p "RO" (p3/appearance--buffer-state)))))
 
+(ert-deftest p3-appearance-overwrite-state-is-visible ()
+  (p3-config-appearance-test--load-appearance)
+  (with-temp-buffer
+    (let ((overwrite-mode t))
+      (should (string-match-p "OVR"
+                              (p3/appearance--buffer-state))))
+    (let ((overwrite-mode 'overwrite-mode-binary))
+      (should (string-match-p "BIN"
+                              (p3/appearance--buffer-state))))))
+
 (ert-deftest p3-appearance-remote-host-is-textual ()
   (p3-config-appearance-test--load-appearance)
   (with-temp-buffer
@@ -292,6 +304,28 @@
           buffer-file-name nil
           p3/appearance--icons-available nil)
     (should-not (p3/appearance--mode-segment))))
+
+(ert-deftest p3-appearance-r-busy-state-is-visible-through-ess-owner ()
+  (p3-config-appearance-test--load-appearance)
+  (with-temp-buffer
+    (let ((mode-line-process nil))
+      (cl-letf (((symbol-function 'window-total-width)
+                 (lambda (&optional _) 80))
+                ((symbol-function 'p3/ess-current-process-busy-p)
+                 (lambda () t)))
+        (should (equal "R ↻"
+                       (substring-no-properties
+                        (p3/appearance--process-segment))))))))
+
+(ert-deftest p3-appearance-r-idle-state-stays-quiet ()
+  (p3-config-appearance-test--load-appearance)
+  (with-temp-buffer
+    (let ((mode-line-process nil))
+      (cl-letf (((symbol-function 'window-total-width)
+                 (lambda (&optional _) 140))
+                ((symbol-function 'p3/ess-current-process-busy-p)
+                 (lambda () nil)))
+        (should-not (p3/appearance--process-segment))))))
 
 (ert-deftest p3-appearance-selects-native-and-fallback-alignment ()
   (p3-config-appearance-test--load-appearance)
@@ -318,6 +352,20 @@
           (p3/appearance--icons-available nil))
       (should (equal "Git main" (p3/appearance--vc-segment))))))
 
+(ert-deftest p3-appearance-git-segment-preserves-current-file-vc-state ()
+  (p3-config-appearance-test--load-appearance)
+  (with-temp-buffer
+    (let ((p3/appearance--icons-available nil))
+      (dolist (case '((" Git-main" . "Git main")
+                      (" Git:main" . "Git main ●")
+                      (" Git@main" . "Git main +")
+                      (" Git!main" . "Git main !")
+                      (" Git?main" . "Git main ?")))
+        (let ((vc-mode (car case)))
+          (should (equal (cdr case)
+                         (substring-no-properties
+                          (p3/appearance--vc-segment)))))))))
+
 (ert-deftest p3-appearance-flycheck-state-mapping-is-explicit ()
   (p3-config-appearance-test--load-appearance)
   (let ((features (cons 'flycheck features))
@@ -338,6 +386,13 @@
       (dolist (state '(no-checker not-checked))
         (let ((flycheck-last-status-change state))
           (should-not (p3/appearance--flycheck-segment)))))))
+
+(ert-deftest p3-appearance-flycheck-success-is-silent ()
+  (p3-config-appearance-test--load-appearance)
+  (let ((flycheck-current-errors nil))
+    (cl-letf (((symbol-function 'flycheck-count-errors)
+               (lambda (_) nil)))
+      (should-not (p3/appearance--flycheck-finished-segment)))))
 
 (ert-deftest p3-appearance-coding-segment-is-concise ()
   (p3-config-appearance-test--load-appearance)
