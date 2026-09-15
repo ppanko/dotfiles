@@ -112,13 +112,14 @@ Only whitespace immediately before `<-' or `=' is changed.  Blank lines,
 comments, incompatible statements, operator changes, and syntax-scope changes
 terminate an alignment group."
   (interactive)
-  (save-excursion
-    (save-restriction
-      (widen)
-      (let ((groups (p3-r--alignment-groups)))
-        (atomic-change-group
-          (dolist (group (reverse groups))
-            (p3-r--align-assignment-group group)))))))
+  (save-match-data
+    (save-excursion
+      (save-restriction
+        (widen)
+        (let ((groups (p3-r--alignment-groups)))
+          (atomic-change-group
+            (dolist (group (reverse groups))
+              (p3-r--align-assignment-group group))))))))
 
 (defun p3-r-align-before-save ()
   "Align assignments before save when `p3-r-align-on-save' is non-nil."
