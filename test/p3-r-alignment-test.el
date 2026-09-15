@@ -14,6 +14,12 @@
   (require 'p3-r-alignment nil t)
   "Non-nil when the R alignment behavior module is available.")
 
+(defun p3-r-alignment-test--contents (relative)
+  "Return contents of RELATIVE under the repository root."
+  (with-temp-buffer
+    (insert-file-contents (expand-file-name relative p3-r-alignment-test--root))
+    (buffer-string)))
+
 (defun p3-r-alignment-test--syntax-table ()
   "Return the R syntax subset needed by alignment tests."
   (let ((table (make-syntax-table)))
@@ -135,6 +141,15 @@
   (let ((ess-r-mode-hook nil))
     (p3-r-alignment-setup)
     (should (equal ess-r-mode-hook '(p3-r-enable-alignment-on-save)))))
+
+(ert-deftest p3-r-alignment-ess-config-enables-module ()
+  (let ((config (p3-r-alignment-test--contents "lisp/p3-config-ess.el")))
+    (should
+     (string-match-p
+      (regexp-quote "(p3/config-load-module 'p3-r-alignment)") config))
+    (should
+     (string-match-p
+      (regexp-quote "(p3-r-alignment-setup)") config))))
 
 (provide 'p3-r-alignment-test)
 
