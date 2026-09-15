@@ -280,6 +280,19 @@
        "/tmp/p3-project/file.R")
       (should (= project-current-calls 1)))))
 
+(ert-deftest p3-integration-routed-relative-file-keeps-original-target ()
+  (let ((default-directory "/tmp/origin/")
+        observed)
+    (cl-letf (((symbol-function 'p3/project-route-file)
+               (lambda (_file)
+                 (setq default-directory "/tmp/other/")
+                 nil)))
+      (p3/project-with-file-routing
+       (lambda (filename &rest _args)
+         (setq observed filename))
+       "relative.R")
+      (should (equal observed "/tmp/origin/relative.R")))))
+
 (ert-deftest p3-integration-appearance-uses-shared-project-root ()
   (let ((appearance
          (p3-integration-cleanup-test--contents "lisp/p3-config-appearance.el")))
