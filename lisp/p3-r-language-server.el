@@ -16,6 +16,11 @@
 (defvar eglot-server-programs)
 (defvar eglot-stay-out-of)
 
+(declare-function eglot-hover-eldoc-function "eglot" (callback &rest ignored))
+(declare-function eglot-managed-p "eglot" ())
+(declare-function eglot-signature-eldoc-function "eglot" (callback &rest ignored))
+(declare-function ess-r-eldoc-function "ess-r-completion" (&rest ignored))
+
 (defconst p3/r-eglot-ignored-capabilities
   '(:documentFormattingProvider
     :documentRangeFormattingProvider
@@ -43,6 +48,12 @@
 
 (defvar p3/r-language-server-warning-key nil
   "Last R language-server setup problem already reported this session.")
+
+(defvar-local p3/r-eglot-eldoc-owned-p nil
+  "Non-nil when this buffer has switched R Eldoc ownership to Eglot.")
+
+(defvar-local p3/r-eglot-ess-eldoc-was-present nil
+  "Non-nil when ESS Eldoc was present before Eglot took R Eldoc ownership.")
 
 (defun p3/r-language-server-warn-once (key message)
   "Report MESSAGE once for language-server problem KEY."
@@ -373,11 +384,35 @@ Return non-nil only when the installed package can subsequently be loaded."
       "M-x p3/r-bootstrap-language-server to retry."))
     nil))
 
+(defun p3/r-eglot-sync-eldoc-ownership ()
+  "Keep Eglot hover as the sole R documentation provider while managed.
+Leave ESS Eldoc untouched when Eglot is configured to stay out of Eldoc, and
+restore the exact pre-Eglot ESS provider state when Eglot stops managing the
+buffer."
+  (if (eglot-managed-p)
+      (when (memq #'eglot-hover-eldoc-function eldoc-documentation-functions)
+        (unless p3/r-eglot-eldoc-owned-p
+          (setq p3/r-eglot-ess-eldoc-was-present
+                (and (memq #'ess-r-eldoc-function
+                           eldoc-documentation-functions)
+                     t)
+                p3/r-eglot-eldoc-owned-p t))
+        (remove-hook 'eldoc-documentation-functions #'ess-r-eldoc-function t)
+        (remove-hook 'eldoc-documentation-functions
+                     #'eglot-signature-eldoc-function t))
+    (when p3/r-eglot-eldoc-owned-p
+      (when p3/r-eglot-ess-eldoc-was-present
+        (add-hook 'eldoc-documentation-functions #'ess-r-eldoc-function nil t))
+      (setq p3/r-eglot-ess-eldoc-was-present nil
+            p3/r-eglot-eldoc-owned-p nil))))
+
 (defun p3/r-eglot-ensure ()
   "Start R Eglot with only the semantic capabilities owned by this workflow."
   (condition-case err
       (when-let ((command (p3/r-language-server-command)))
         (require 'eglot)
+        (add-hook 'eglot-managed-mode-hook
+                  #'p3/r-eglot-sync-eldoc-ownership nil t)
         (setq-local
          eglot-stay-out-of
          (cl-remove-duplicates
@@ -393,7 +428,9 @@ Return non-nil only when the installed package can subsequently be loaded."
         (setf (alist-get '(R-mode ess-r-mode)
                          eglot-server-programs nil nil #'equal)
               command)
-        (eglot-ensure))
+        (eglot-ensure)
+        (when (eglot-managed-p)
+          (p3/r-eglot-sync-eldoc-ownership)))
     (error
      (let ((message (error-message-string err)))
        (p3/r-language-server-warn-once
