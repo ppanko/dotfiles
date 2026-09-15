@@ -2,12 +2,10 @@
 ;; Establish this before package.el can persist any Custom/package state.
 (setq custom-file (expand-file-name "custom.el" user-emacs-directory))
 
-;; Make the lightweight startup profiler available before package setup so the
-;; package/bootstrap boundary is included in the same report as later modules.
-(defconst p3/lisp-directory
-  (expand-file-name "lisp" user-emacs-directory))
-(add-to-list 'load-path p3/lisp-directory)
-(require 'p3-startup-profile)
+;; Load the dependency-free startup profiler by exact tracked source path so
+;; package initialization can be measured without changing `load-path' order.
+(load (expand-file-name "lisp/p3-startup-profile.el" user-emacs-directory)
+      nil 'nomessage)
 
 ;; Configure package.el.  Missing packages are bootstrapped automatically;
 ;; upgrades are deliberately handled through the package menu.
@@ -78,6 +76,10 @@
 
 (setq use-package-ensure-function #'p3/use-package-ensure
       use-package-always-ensure t)
+
+(defconst p3/lisp-directory
+  (expand-file-name "lisp" user-emacs-directory))
+(add-to-list 'load-path p3/lisp-directory)
 
 ;; Local .elc files are machine-local and may lag tracked source after an update.
 ;; Prefer newer source before requiring any local startup library.
