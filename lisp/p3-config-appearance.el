@@ -20,7 +20,6 @@
 (defvar flycheck-last-status-change)
 (defvar flycheck-current-errors)
 (defvar vc-mode)
-(defvar ess-local-process-name)
 (defvar overwrite-mode)
 (defvar doom-modeline-mode)
 (defvar mode-line-right-align-edge)
@@ -38,6 +37,7 @@
 (declare-function flycheck-count-errors "flycheck" (errors))
 (declare-function doom-modeline-mode "doom-modeline" (&optional arg))
 (declare-function p3/screen-record-indicator "p3-screen-record" ())
+(declare-function p3/ess-current-process-busy-p "p3-ess" ())
 
 (defconst p3/appearance-accent-color "#FFD700"
   "Shared accent color for high-value current-context UI.")
@@ -367,13 +367,10 @@
       text)))
 
 (defun p3/appearance--ess-busy-segment ()
-  "Return R activity state for the current buffer without probing ESS."
-  (when (and (boundp 'ess-local-process-name)
-             ess-local-process-name)
-    (when-let ((process (get-process ess-local-process-name)))
-      (when (and (process-live-p process)
-                 (process-get process 'busy))
-        (propertize "R ↻" 'face 'warning)))))
+  "Return R activity state through the ESS runtime owner."
+  (when (and (fboundp 'p3/ess-current-process-busy-p)
+             (p3/ess-current-process-busy-p))
+    (propertize "R ↻" 'face 'warning)))
 
 (defun p3/appearance--process-segment ()
   "Return active ESS state plus existing mode-provided process state."
@@ -408,7 +405,7 @@
       "Git"))
 
 (defun p3/appearance--vc-state-marker (state)
-  "Return a compact presentation marker for VC STATE punctuation."
+  "Return a compact presentation marker for current-file VC STATE punctuation."
   (pcase state
     (":" (propertize "●" 'face 'warning))
     ("@" (propertize "+" 'face 'warning))
@@ -417,7 +414,7 @@
     (_ nil)))
 
 (defun p3/appearance--vc-segment ()
-  "Return bounded presentation of existing VC state."
+  "Return bounded presentation of existing current-file VC state."
   (when vc-mode
     (let* ((raw (string-trim (p3/appearance--format-construct vc-mode)))
            (git-p (string-match "\\`Git\\(?:\\([-:@!?]\\)\\(.*\\)\\)?\\'" raw))

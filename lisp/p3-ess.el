@@ -35,6 +35,10 @@
             (p3/ess--canonical-root
              (or (p3/project-root) default-directory)))))
 
+(defun p3/ess-cache-project-root ()
+  "Cache shared project identity for the current ESS source buffer."
+  (p3/ess-project-root))
+
 (defun p3/ess-rmarkdown-buffer-p ()
   "Return non-nil when the current buffer visits an R Markdown file."
   (and buffer-file-name
@@ -57,6 +61,21 @@
   "Return non-nil if NAME names a live process."
   (when-let ((process (get-process name)))
     (process-live-p process)))
+
+(defun p3/ess--cached-process-name ()
+  "Return the ESS process already associated with this buffer or project.
+Do not perform project discovery here."
+  (or ess-local-process-name
+      (and p3/ess-project-root-cache
+           (gethash p3/ess-project-root-cache p3/ess-project-processes))))
+
+(defun p3/ess-current-process-busy-p ()
+  "Return non-nil when the cached current ESS process is busy.
+This is safe for mode-line redisplay and performs no project discovery."
+  (when-let* ((name (p3/ess--cached-process-name))
+              (process (get-process name)))
+    (and (process-live-p process)
+         (process-get process 'busy))))
 
 (defun p3/ess-project-process ()
   "Return the live ESS process name for the current project, or nil."
@@ -105,6 +124,7 @@
 
 (defun p3/ess-setup ()
   "Install project-aware ESS hooks and process-selection advice."
+  (add-hook 'ess-mode-hook #'p3/ess-cache-project-root)
   (add-hook 'inferior-ess-mode-hook #'p3/ess-register-current-process)
   (if (featurep 'ess-inf)
       (p3/ess-install-process-advice)
