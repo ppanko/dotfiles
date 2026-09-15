@@ -15,6 +15,12 @@
      (expand-file-name "config.org" p3-config-retirement-test--root))
     (buffer-string)))
 
+(defun p3-config-retirement-test--file-contents (path)
+  "Return repository-relative PATH as a string."
+  (with-temp-buffer
+    (insert-file-contents (expand-file-name path p3-config-retirement-test--root))
+    (buffer-string)))
+
 (ert-deftest p3-config-workgroups2-remains-retired ()
   (let ((contents (p3-config-retirement-test--config)))
     (dolist (forbidden '("(use-package workgroups2"
@@ -79,6 +85,53 @@
       (should (string-match-p (regexp-quote (symbol-name system-type)) text))
       (should (string-match-p "Total init: 1\\.500 s" text))
       (should (string-match-p "use-package-ensure.*4 calls" text)))))
+
+(ert-deftest p3-startup-profile-init-package-boundaries-exist-temporary ()
+  (let ((contents (p3-config-retirement-test--file-contents "init.el")))
+    (dolist (needle '("p3/with-startup-profile-phase \"package-initialize\""
+                      "p3/with-startup-profile-phase \"use-package-bootstrap\""
+                      "p3/with-startup-profile-phase \"use-package-ensure\""))
+      (should (string-match-p (regexp-quote needle) contents)))))
+
+(ert-deftest p3-startup-profile-local-module-boundary-records-temporary ()
+  (require 'p3-config-loader)
+  (let* ((directory (make-temp-file "p3-profiled-module-" t))
+         (p3/config-lisp-directory directory)
+         (source (expand-file-name "p3-profiled-module.el" directory))
+         (p3/startup-profile-active t)
+         (p3/startup-profile-phases nil))
+    (unwind-protect
+        (progn
+          (with-temp-file source
+            (insert "(provide 'p3-profiled-module)\n"))
+          (p3/config-load-module 'p3-profiled-module)
+          (should (assoc-string "module:p3-profiled-module"
+                                p3/startup-profile-phases)))
+      (setq features (delq 'p3-profiled-module features))
+      (delete-directory directory t))))
+
+(ert-deftest p3-startup-profile-current-cache-boundaries-record-temporary ()
+  (require 'p3-config-loader)
+  (let ((p3/startup-profile-active t)
+        (p3/startup-profile-phases nil))
+    (cl-letf (((symbol-function 'p3/config-cache-stale-p) (lambda () nil))
+              ((symbol-function 'p3/config-load-generated) (lambda () t)))
+      (p3/config-load))
+    (should (assoc-string "config-cache-validate" p3/startup-profile-phases))
+    (should (assoc-string "config-cache-load" p3/startup-profile-phases))
+    (should-not (assoc-string "config-cache-build" p3/startup-profile-phases))))
+
+(ert-deftest p3-startup-profile-stale-cache-build-boundary-records-temporary ()
+  (require 'p3-config-loader)
+  (let ((p3/startup-profile-active t)
+        (p3/startup-profile-phases nil))
+    (cl-letf (((symbol-function 'p3/config-cache-stale-p) (lambda () t))
+              ((symbol-function 'p3/config-build) (lambda () t))
+              ((symbol-function 'p3/config-load-generated) (lambda () t)))
+      (p3/config-load))
+    (should (assoc-string "config-cache-validate" p3/startup-profile-phases))
+    (should (assoc-string "config-cache-build" p3/startup-profile-phases))
+    (should (assoc-string "config-cache-load" p3/startup-profile-phases))))
 
 (provide 'p3-config-retirement-test)
 
