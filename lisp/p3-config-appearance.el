@@ -420,17 +420,21 @@
   "Return bounded presentation of existing VC state."
   (when vc-mode
     (let* ((raw (string-trim (p3/appearance--format-construct vc-mode)))
-           (git-p (string-match "\\`Git\\([-:@!?]\\)?\\(.*\\)\\'" raw))
+           (git-p (string-match "\\`Git\\(?:\\([-:@!?]\\)\\(.*\\)\\)?\\'" raw))
            (state (and git-p (match-string 1 raw)))
-           (payload (if git-p (match-string 2 raw) raw))
-           (marker (and git-p (p3/appearance--vc-state-marker state)))
-           (text (truncate-string-to-width
-                  payload (if marker 10 12) nil nil "…")))
+           (payload (if git-p (or (match-string 2 raw) "") raw))
+           (marker (and git-p (p3/appearance--vc-state-marker state))))
       (if git-p
-          (p3/appearance--join
-           (p3/appearance--git-icon)
-           text
-           marker)
+          (let* ((identity (p3/appearance--git-icon))
+                 (marker-width (if marker (1+ (string-width marker)) 0))
+                 (payload-width
+                  (max 1 (- 16 (string-width identity) 1 marker-width)))
+                 (text (truncate-string-to-width
+                        payload payload-width nil nil "…")))
+            (string-join
+             (cl-remove-if #'string-empty-p
+                           (delq nil (list identity text marker)))
+             " "))
         (truncate-string-to-width raw 12 nil nil "…")))))
 
 (defun p3/appearance--flycheck-finished-segment (&optional compact)
