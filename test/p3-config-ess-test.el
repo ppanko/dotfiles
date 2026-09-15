@@ -197,6 +197,8 @@
   (dolist (function '(p3/r-program
                       p3/r-language-server-library
                       p3/r-ensure-language-server
+                      p3/r-language-server-ready-state
+                      p3/r-bootstrap-language-server
                       p3/r-language-server-command
                       p3/r-eglot-ensure))
     (should (fboundp function))))
@@ -270,6 +272,9 @@
                (lambda (_version) "/tmp/p3-r-tools/library/"))
               ((symbol-function 'p3/r-language-server-installed-p)
                (lambda (_program _library) t))
+              ((symbol-function 'p3/r-language-server-write-state)
+               (lambda (&rest _)
+                 (ert-fail "Validation helper must not persist readiness")))
               ((symbol-function 'p3/r-install-language-server)
                (lambda (&rest _)
                  (ert-fail "Installed language server should be reused"))))
@@ -323,6 +328,24 @@
       (should (= (length warnings) 1))
       (should (string-match-p "permission denied" (car warnings))))))
 
+(ert-deftest p3-r-language-server-explicit-bootstrap-persists-readiness ()
+  (let ((p3/r-language-server-bootstrap-failed nil)
+        (p3/r-language-server-warning-key nil)
+        written)
+    (cl-letf (((symbol-function 'p3/r-language-server-clear-state)
+               (lambda () nil))
+              ((symbol-function 'p3/r-ensure-language-server)
+               (lambda () "/tmp/p3-r-tools/library/"))
+              ((symbol-function 'p3/r-program)
+               (lambda () "/opt/R/bin/R"))
+              ((symbol-function 'p3/r-language-server-write-state)
+               (lambda (program library)
+                 (setq written (cons program library)))))
+      (p3/r-bootstrap-language-server)
+      (should
+       (equal written
+              '("/opt/R/bin/R" . "/tmp/p3-r-tools/library/"))))))
+
 (ert-deftest p3-r-language-server-missing-r-warns-once-from-buffer-hook ()
   (let ((p3/r-language-server-warning-key nil)
         warnings)
@@ -341,8 +364,10 @@
 (ert-deftest p3-r-language-server-command-keeps-project-startup-context ()
   (cl-letf (((symbol-function 'p3/r-program)
              (lambda () "C:/Program Files/R/R-4.5.1/bin/Rterm.exe"))
-            ((symbol-function 'p3/r-ensure-language-server)
-             (lambda () "C:/Users/Pavel/r tools/R-4.5/library/")))
+            ((symbol-function 'p3/r-language-server-ready-state)
+             (lambda ()
+               '("C:/Program Files/R/R-4.5.1/bin/Rterm.exe"
+                 . "C:/Users/Pavel/r tools/R-4.5/library/"))))
     (let ((command (p3/r-language-server-command)))
       (should
        (equal (car command)
