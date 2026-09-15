@@ -206,10 +206,13 @@ Extra arguments are ignored so callers may use this as the routing primitive."
 (defun p3/project-with-file-routing (function filename &rest args)
   "Route FILENAME once, then call FUNCTION with the resolved file and ARGS.
 Resolve relative filenames before workspace switching so routing cannot change
-the target.  The project root remains dynamically available to project-aware
-file hooks for the duration of the visit."
+the target.  Local project identity remains dynamically available to downstream
+hooks; remote visits retain normal `project.el' discovery semantics."
   (let* ((file (and filename (expand-file-name filename)))
-         (p3/project--visit-root (p3/project-route-file file)))
+         (remote (and file (file-remote-p file)))
+         (routed-root (p3/project-route-file file))
+         (p3/project--visit-root
+          (if (or (null file) remote) :unresolved routed-root)))
     (apply function file args)))
 
 (defun p3/project--restore-buffer-preview-window-configuration ()
