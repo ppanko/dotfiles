@@ -121,6 +121,74 @@
           (kill-buffer buffer)))
       (delete-directory raw-root t))))
 
+(ert-deftest p3-terminal-start-enables-shared-rich-input-ux ()
+  (let* ((root (file-name-as-directory
+                (expand-file-name "p3-rich-shell" temporary-file-directory)))
+         (name "*p3-rich-shell-test*")
+         captured-fontify
+         captured-undef
+         captured-prompt
+         captured-bash-args
+         captured-bash-exe-args)
+    (unwind-protect
+        (cl-letf (((symbol-function 'p3/windows-p) (lambda () nil))
+                  ((symbol-function 'p3/platform-bash-program)
+                   (lambda () "/bin/bash"))
+                  ((symbol-function 'shell)
+                   (lambda (buffer-name)
+                     (setq captured-fontify shell-fontify-input-enable
+                           captured-undef shell-highlight-undef-enable
+                           captured-prompt shell-prompt-pattern
+                           captured-bash-args explicit-bash-args
+                           captured-bash-exe-args explicit-bash.exe-args)
+                     (with-current-buffer (get-buffer-create buffer-name)
+                       (shell-mode)
+                       (current-buffer)))))
+          (let ((buffer (p3/project-shell--start name root)))
+            (should captured-fontify)
+            (should captured-undef)
+            (should (equal captured-bash-args '("--noediting" "-i")))
+            (should (equal captured-bash-exe-args '("--noediting" "-i")))
+            (should (string-match-p "❯" captured-prompt))
+            (with-current-buffer buffer
+              (should comint-input-ignoredups)
+              (should (eq (key-binding (kbd "C-r"))
+                          #'comint-history-isearch-backward-regexp)))))
+      (when-let ((buffer (get-buffer name)))
+        (kill-buffer buffer)))))
+
+(ert-deftest p3-terminal-start-configures-shared-starship-prompt-with-fallback ()
+  (let* ((root (file-name-as-directory
+                (expand-file-name "p3-starship-shell" temporary-file-directory)))
+         (name "*p3-starship-shell-test*")
+         (outer-starship-config (getenv "STARSHIP_CONFIG"))
+         captured-config
+         captured-init)
+    (unwind-protect
+        (cl-letf (((symbol-function 'p3/windows-p) (lambda () nil))
+                  ((symbol-function 'p3/platform-bash-program)
+                   (lambda () "/bin/bash"))
+                  ((symbol-function 'shell)
+                   (lambda (buffer-name)
+                     (setq captured-config (getenv "STARSHIP_CONFIG"))
+                     (with-current-buffer (get-buffer-create buffer-name)
+                       (shell-mode)
+                       (current-buffer))))
+                  ((symbol-function 'shell-eval-command)
+                   (lambda (command)
+                     (setq captured-init command))))
+          (p3/project-shell--start name root)
+          (should captured-config)
+          (should (file-readable-p captured-config))
+          (should (string-suffix-p "templates/p3-starship.toml"
+                                   (subst-char-in-string ?\\ ?/ captured-config)))
+          (should (string-match-p
+                   "starship init bash --print-full-init" captured-init))
+          (should (string-match-p "PS1=.*❯" captured-init))
+          (should (equal (getenv "STARSHIP_CONFIG") outer-starship-config)))
+      (when-let ((buffer (get-buffer name)))
+        (kill-buffer buffer)))))
+
 (provide 'p3-terminal-integration-test)
 
 ;;; p3-terminal-integration-test.el ends here
