@@ -16,10 +16,17 @@
 (defvar flycheck-checker-error-threshold)
 (defvar p3/windows-hunspell-program nil)
 (defvar p3/windows-hunspell-dictionary-directory nil)
+(defvar p3/windows-tool-refresh-hook nil)
 (defvar ispell-program-name)
 (defvar ispell-local-dictionary)
 (defvar ispell-dictionary)
 (defvar ispell-local-dictionary-alist)
+
+(defvar p3/config-editing--windows-hunspell-program :uninitialized
+  "Last Rtools Hunspell program applied by the editing configuration.")
+
+(defvar p3/config-editing--windows-hunspell-dictionary-directory :uninitialized
+  "Last Rtools Hunspell dictionary directory applied by this configuration.")
 
 (declare-function global-undo-tree-mode "undo-tree" (&optional arg))
 (declare-function super-save-mode "super-save" (&optional arg))
@@ -108,6 +115,25 @@
   :config
   (add-hook 'prog-mode-hook #'rainbow-mode))
 
+(defun p3/config-editing-refresh-spelling ()
+  "Reconcile Windows spelling state after Rtools discovery changes.
+Only replace values that this configuration previously owned, so an explicit
+user override made after startup remains authoritative."
+  (when (eq system-type 'windows-nt)
+    (when (or (eq p3/config-editing--windows-hunspell-program :uninitialized)
+              (equal ispell-program-name
+                     p3/config-editing--windows-hunspell-program))
+      (setq ispell-program-name p3/windows-hunspell-program))
+    (when (or (eq p3/config-editing--windows-hunspell-dictionary-directory
+                  :uninitialized)
+              (equal (getenv "DICTPATH")
+                     p3/config-editing--windows-hunspell-dictionary-directory))
+      (setenv "DICTPATH" p3/windows-hunspell-dictionary-directory))
+    (setq p3/config-editing--windows-hunspell-program
+          p3/windows-hunspell-program
+          p3/config-editing--windows-hunspell-dictionary-directory
+          p3/windows-hunspell-dictionary-directory)))
+
 (defun p3/config-editing-setup-spelling ()
   "Configure platform-specific Hunspell and Ispell behavior."
   (use-package ispell
@@ -116,10 +142,7 @@
     :init
     (cond
      ((eq system-type 'windows-nt)
-      (when p3/windows-hunspell-program
-        (setq ispell-program-name p3/windows-hunspell-program))
-      (when p3/windows-hunspell-dictionary-directory
-        (setenv "DICTPATH" p3/windows-hunspell-dictionary-directory))
+      (p3/config-editing-refresh-spelling)
       (setenv "DICTIONARY" "en_US"))
      ((eq system-type 'gnu/linux)
       (setq ispell-program-name "hunspell")))
@@ -130,6 +153,8 @@
           '(("en_US" "[[:alpha:]]" "[^[:alpha:]]" "[']" nil ("-d" "en_US") nil utf-8)))))
 
 (p3/config-editing-setup-spelling)
+(when (eq system-type 'windows-nt)
+  (add-hook 'p3/windows-tool-refresh-hook #'p3/config-editing-refresh-spelling))
 
 (add-hook 'c++-mode-hook
           (lambda ()
