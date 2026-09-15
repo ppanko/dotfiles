@@ -234,8 +234,8 @@ Return non-nil only when the installed package can subsequently be loaded."
               (cond
                ((p3/r-language-server-installed-p program library)
                 (setq p3/r-language-server-bootstrap-failed nil
-                      p3/r-language-server-warning-key nil)
-                (p3/r-language-server-write-state program library)
+                      p3/r-language-server-warning-key nil
+                      p3/r-language-server-ready key)
                 library)
                ((equal p3/r-language-server-bootstrap-failed key)
                 nil)
@@ -244,8 +244,8 @@ Return non-nil only when the installed package can subsequently be loaded."
                     (if (p3/r-install-language-server program library)
                         (progn
                           (setq p3/r-language-server-bootstrap-failed nil
-                                p3/r-language-server-warning-key nil)
-                          (p3/r-language-server-write-state program library)
+                                p3/r-language-server-warning-key nil
+                                p3/r-language-server-ready key)
                           library)
                       (setq p3/r-language-server-bootstrap-failed key)
                       nil)
@@ -283,8 +283,12 @@ Return non-nil only when the installed package can subsequently be loaded."
         p3/r-language-server-warning-key nil)
   (p3/r-language-server-clear-state)
   (condition-case err
-      (if-let ((library (p3/r-ensure-language-server)))
-          (message "R languageserver ready: %s" (abbreviate-file-name library))
+      (if-let* ((library (p3/r-ensure-language-server))
+                (program (p3/r-program)))
+          (progn
+            (p3/r-language-server-write-state program library)
+            (message "R languageserver ready: %s"
+                     (abbreviate-file-name library)))
         (user-error "R languageserver bootstrap failed; see warnings/output buffer"))
     (file-error
      (let ((message (error-message-string err)))
@@ -295,20 +299,34 @@ Return non-nil only when the installed package can subsequently be loaded."
 
 (defun p3/r-language-server-command ()
   "Return the Eglot command only when managed R tooling is already prepared."
-  (if-let* ((state (p3/r-language-server-ready-state))
-            (program (car state))
-            (library (cdr state)))
-      (progn
-        (setq p3/r-language-server-warning-key nil)
-        (list
-         program "--slave" "-e"
-         (p3/r-language-server-library-expression
-          library "languageserver::run()")))
+  (if-let ((program (p3/r-program)))
+      (if-let ((state (p3/r-language-server-ready-state)))
+          (if (equal program (car state))
+              (let ((library (cdr state)))
+                (setq p3/r-language-server-warning-key nil)
+                (list
+                 program "--slave" "-e"
+                 (p3/r-language-server-library-expression
+                  library "languageserver::run()")))
+            (p3/r-language-server-warn-once
+             (list 'stale program (car state))
+             (concat
+              "Prepared R semantic tooling belongs to a different R executable. "
+              "ESS/editing remains available; run "
+              "M-x p3/r-bootstrap-language-server to refresh it."))
+            nil)
+        (p3/r-language-server-warn-once
+         'not-ready
+         (concat
+          "Managed R languageserver is not prepared. ESS/editing remains available; "
+          "run M-x p3/r-bootstrap-language-server once to enable semantic support."))
+        nil)
     (p3/r-language-server-warn-once
-     'not-ready
+     'no-r
      (concat
-      "Managed R languageserver is not prepared. ESS/editing remains available; "
-      "run M-x p3/r-bootstrap-language-server once to enable semantic support."))
+      "No usable R executable is configured for semantic R support. "
+      "ESS editing remains available; install/configure R, then run "
+      "M-x p3/r-bootstrap-language-server to retry."))
     nil))
 
 (defun p3/r-eglot-ensure ()
