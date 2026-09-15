@@ -243,23 +243,24 @@
       (should (= r-scans 1)))))
 
 (ert-deftest p3-integration-windows-r-override-invalidates-selection-cache ()
-  (let ((system-type 'windows-nt)
-        (p3/windows-r-program-override nil)
-        (p3/windows-r-program-selection-cache :uninitialized)
-        (discoveries 0))
-    (cl-letf (((symbol-function 'p3/windows-latest-r-program)
-               (lambda ()
-                 (setq discoveries (1+ discoveries))
-                 "C:/Program Files/R/R-4.6.1/bin/Rterm.exe"))
-              ((symbol-function 'file-regular-p)
-               (lambda (_path) t)))
-      (should
-       (equal (p3/windows-select-r-program)
-              "C:/Program Files/R/R-4.6.1/bin/Rterm.exe"))
-      (setq p3/windows-r-program-override "D:/R/bin/Rterm.exe")
-      (should
-       (equal (p3/windows-select-r-program) "D:/R/bin/Rterm.exe"))
-      (should (= discoveries 1)))))
+  (let* ((override (make-temp-file "p3-r-override-"))
+         (p3/windows-r-program-override nil)
+         (p3/windows-r-program-selection-cache :uninitialized)
+         (discoveries 0))
+    (unwind-protect
+        (cl-letf (((symbol-function 'p3/windows-latest-r-program)
+                   (lambda ()
+                     (setq discoveries (1+ discoveries))
+                     "C:/Program Files/R/R-4.6.1/bin/Rterm.exe")))
+          (should
+           (equal (p3/windows-select-r-program)
+                  "C:/Program Files/R/R-4.6.1/bin/Rterm.exe"))
+          (setq p3/windows-r-program-override override)
+          (should
+           (equal (p3/windows-select-r-program)
+                  (expand-file-name override)))
+          (should (= discoveries 1)))
+      (delete-file override))))
 
 (ert-deftest p3-integration-routed-file-visit-reuses-resolved-project-root ()
   (should (fboundp 'p3/project-with-file-routing))
@@ -281,17 +282,19 @@
       (should (= project-current-calls 1)))))
 
 (ert-deftest p3-integration-routed-relative-file-keeps-original-target ()
-  (let ((default-directory "/tmp/origin/")
-        observed)
+  (let* ((default-directory (expand-file-name "origin/" temporary-file-directory))
+         (expected (expand-file-name "relative.R" default-directory))
+         observed)
     (cl-letf (((symbol-function 'p3/project-route-file)
                (lambda (_file)
-                 (setq default-directory "/tmp/other/")
+                 (setq default-directory
+                       (expand-file-name "other/" temporary-file-directory))
                  nil)))
       (p3/project-with-file-routing
        (lambda (filename &rest _args)
          (setq observed filename))
        "relative.R")
-      (should (equal observed "/tmp/origin/relative.R")))))
+      (should (equal observed expected)))))
 
 (ert-deftest p3-integration-appearance-uses-shared-project-root ()
   (let ((appearance
