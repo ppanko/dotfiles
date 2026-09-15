@@ -261,6 +261,12 @@
        "/tmp/p3-project/file.R")
       (should (= project-current-calls 1)))))
 
+(ert-deftest p3-integration-appearance-uses-shared-project-root ()
+  (let ((appearance
+         (p3-integration-cleanup-test--contents "lisp/p3-config-appearance.el")))
+    (should (string-match-p (regexp-quote "(p3/project-root)") appearance))
+    (should-not (string-match-p "(project-current" appearance))))
+
 (ert-deftest p3-integration-gptel-which-key-matches-current-command-surface ()
   (let* ((forms
           (p3-integration-cleanup-test--forms "lisp/p3-config-gptel.el"))
