@@ -231,5 +231,6 @@ Phase 2 is complete when:
 - stale compiled artifacts cannot override newer source;
 - explicit reload still executes exact edited source immediately;
 - Linux and Windows regression suites cover the resulting behavior;
-- the same startup measurement is repeated after optimization and the implementing PR reports the result;
-- issue #80 can then be closed with the remaining Phase 1 measurement status and Phase 2 evidence explicitly documented.
+- the same startup measurement is repeated after optimization and the implementing PR reports the result.
+
+Closing issue #80 is a separate umbrella check: Phase 2 evidence must be complete, and the unresolved Phase 1 workstation file-open measurement must also be completed or explicitly re-scoped in the issue rather than silently treated as satisfied.
