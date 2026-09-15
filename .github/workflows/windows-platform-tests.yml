@@ -6,10 +6,12 @@ on:
       - opened
       - ready_for_review
     paths:
+      - "init.el"
       - "config.org"
       - "lisp/p3-platform.el"
       - "lisp/p3-project.el"
       - "lisp/p3-config-project.el"
+      - "lisp/p3-startup-profile.el"
       - "lisp/p3-config-loader.el"
       - "lisp/p3-commands.el"
       - "lisp/p3-screen-record.el"
@@ -36,6 +38,8 @@ on:
       - "lisp/p3-r-language-server.el"
       - "lisp/p3-r-tidyverse-completion.el"
       - "templates/r/**"
+      - "test/p3-startup-profile-test.el"
+      - "test/p3-startup-integration-test.el"
       - "test/p3-platform-test.el"
       - "test/p3-project-test.el"
       - "test/p3-project-windows-test.el"
@@ -115,6 +119,7 @@ jobs:
           lisp/p3-platform.el
           lisp/p3-project.el
           lisp/p3-config-project.el
+          lisp/p3-startup-profile.el
           lisp/p3-config-loader.el
           lisp/p3-commands.el
           lisp/p3-screen-record.el
@@ -160,6 +165,8 @@ jobs:
         shell: powershell
         run: >-
           emacs -Q --batch -L lisp
+          -l test/p3-startup-profile-test.el
+          -l test/p3-startup-integration-test.el
           -l test/p3-config-loader-test.el
           -l test/p3-config-test.el
           -l test/p3-config-retirement-test.el
