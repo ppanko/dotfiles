@@ -2,6 +2,9 @@
 
 (require 'subr-x)
 (declare-function dired-get-marked-files "dired" (&optional localp arg filter distinguish-one-marked error))
+(declare-function profiler-start "profiler" (type))
+(declare-function profiler-stop "profiler" ())
+(declare-function profiler-report "profiler" ())
 (declare-function w32-shell-execute "w32fns" (operation document &optional parameters show-flag))
 
 (defconst p3/keybinding-sections
@@ -145,6 +148,33 @@ buffer is not visiting a file."
   "Byte-compile all your dotfiles."
   (interactive)
   (byte-recompile-directory user-emacs-directory 0))
+
+(defun p3/profile-file-visit (file)
+  "Profile one fresh displayed visit to FILE and return elapsed wall time.
+
+The selected file must not already have a live file buffer.  Profiling wraps
+`find-file' itself so project routing, major-mode setup, global file hooks,
+VCS integrations, auto-revert setup, Org/Org-roam hooks, and language tooling
+all appear in the same report.  CPU and allocation data are shown through the
+built-in profiler; the minibuffer reports total wall-clock time so synchronous
+subprocess waits remain visible even when they consume little Emacs CPU."
+  (interactive "fProfile file visit: ")
+  (let ((file (expand-file-name file)))
+    (when (get-file-buffer file)
+      (user-error "File is already visited; kill its buffer before profiling"))
+    (require 'profiler)
+    (let ((start (float-time))
+          elapsed)
+      (profiler-start 'cpu+mem)
+      (unwind-protect
+          (progn
+            (find-file file)
+            (setq elapsed (- (float-time) start)))
+        (profiler-stop))
+      (profiler-report)
+      (message "File visit completed in %.3f seconds; profiler report opened"
+               elapsed)
+      elapsed)))
 
 (when (eq system-type 'windows-nt)
   (defun p3/windows-shell ()
