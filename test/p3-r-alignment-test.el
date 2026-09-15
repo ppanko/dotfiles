@@ -154,7 +154,9 @@
 
 (ert-deftest p3-r-alignment-setup-registers-only-the-r-mode-hook ()
   (should p3-r-alignment-test--loaded)
-  (let ((original (default-value 'ess-r-mode-hook)))
+  (let ((was-bound (boundp 'ess-r-mode-hook))
+        (original (and (boundp 'ess-r-mode-hook)
+                       (default-value 'ess-r-mode-hook))))
     (unwind-protect
         (progn
           (set-default 'ess-r-mode-hook nil)
@@ -162,7 +164,9 @@
           (should
            (equal (default-value 'ess-r-mode-hook)
                   '(p3-r-enable-alignment-on-save))))
-      (set-default 'ess-r-mode-hook original))))
+      (if was-bound
+          (set-default 'ess-r-mode-hook original)
+        (makunbound 'ess-r-mode-hook)))))
 
 (ert-deftest p3-r-alignment-ess-config-enables-module ()
   (let ((config (p3-r-alignment-test--contents "lisp/p3-config-ess.el")))
