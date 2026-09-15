@@ -99,6 +99,57 @@
               (p3/r-language-server-platform-key)
               major-minor)))))
 
+(defun p3/r-language-server-state-file ()
+  "Return the machine-local readiness file for managed R semantic tooling."
+  (expand-file-name
+   (format "r-tools/%s/current-language-server.el"
+           (p3/r-language-server-platform-key))
+   (p3/r-language-server-tool-root)))
+
+(defun p3/r-language-server-write-state (program library)
+  "Persist PROGRAM and LIBRARY as the prepared R semantic-tool state."
+  (let ((state (cons program library))
+        (file (p3/r-language-server-state-file)))
+    (make-directory (file-name-directory file) t)
+    (with-temp-file file
+      (prin1 state (current-buffer))
+      (insert "\n"))
+    (setq p3/r-language-server-ready state)
+    state))
+
+(defun p3/r-language-server-read-state ()
+  "Return persisted prepared R semantic-tool state, or nil when unavailable."
+  (let ((file (p3/r-language-server-state-file)))
+    (when (file-readable-p file)
+      (condition-case nil
+          (with-temp-buffer
+            (insert-file-contents file)
+            (let ((state (read (current-buffer))))
+              (and (consp state)
+                   (stringp (car state))
+                   (stringp (cdr state))
+                   state)))
+        (error nil)))))
+
+(defun p3/r-language-server-clear-state ()
+  "Forget persisted and in-session R semantic-tool readiness."
+  (setq p3/r-language-server-ready nil)
+  (let ((file (p3/r-language-server-state-file)))
+    (when (file-exists-p file)
+      (delete-file file))))
+
+(defun p3/r-language-server-ready-state ()
+  "Return prepared R semantic-tool state using only cheap local checks."
+  (when-let* ((state (or p3/r-language-server-ready
+                         (p3/r-language-server-read-state)))
+              (program (car state))
+              (library (cdr state))
+              ((file-executable-p program))
+              ((file-readable-p
+                (expand-file-name "languageserver/DESCRIPTION" library))))
+    (setq p3/r-language-server-ready state)
+    state))
+
 (defun p3/r-string-literal (text)
   "Return TEXT as a double-quoted R string literal."
   (let ((text (replace-regexp-in-string "\\\\" "/" text t t)))
@@ -182,7 +233,9 @@ Return non-nil only when the installed package can subsequently be loaded."
             (let ((key (cons program library)))
               (cond
                ((p3/r-language-server-installed-p program library)
-                (setq p3/r-language-server-ready key)
+                (setq p3/r-language-server-bootstrap-failed nil
+                      p3/r-language-server-warning-key nil)
+                (p3/r-language-server-write-state program library)
                 library)
                ((equal p3/r-language-server-bootstrap-failed key)
                 nil)
@@ -191,8 +244,8 @@ Return non-nil only when the installed package can subsequently be loaded."
                     (if (p3/r-install-language-server program library)
                         (progn
                           (setq p3/r-language-server-bootstrap-failed nil
-                                p3/r-language-server-warning-key nil
-                                p3/r-language-server-ready key)
+                                p3/r-language-server-warning-key nil)
+                          (p3/r-language-server-write-state program library)
                           library)
                       (setq p3/r-language-server-bootstrap-failed key)
                       nil)
@@ -227,8 +280,8 @@ Return non-nil only when the installed package can subsequently be loaded."
   "Retry preparation of the managed R language server explicitly."
   (interactive)
   (setq p3/r-language-server-bootstrap-failed nil
-        p3/r-language-server-ready nil
         p3/r-language-server-warning-key nil)
+  (p3/r-language-server-clear-state)
   (condition-case err
       (if-let ((library (p3/r-ensure-language-server)))
           (message "R languageserver ready: %s" (abbreviate-file-name library))
@@ -241,13 +294,22 @@ Return non-nil only when the installed package can subsequently be loaded."
        (user-error "R languageserver bootstrap failed: %s" message)))))
 
 (defun p3/r-language-server-command ()
-  "Return the Eglot command for the selected managed R language server."
-  (when-let* ((library (p3/r-ensure-language-server))
-              (program (p3/r-program)))
-    (list
-     program "--slave" "-e"
-     (p3/r-language-server-library-expression
-      library "languageserver::run()"))))
+  "Return the Eglot command only when managed R tooling is already prepared."
+  (if-let* ((state (p3/r-language-server-ready-state))
+            (program (car state))
+            (library (cdr state)))
+      (progn
+        (setq p3/r-language-server-warning-key nil)
+        (list
+         program "--slave" "-e"
+         (p3/r-language-server-library-expression
+          library "languageserver::run()")))
+    (p3/r-language-server-warn-once
+     'not-ready
+     (concat
+      "Managed R languageserver is not prepared. ESS/editing remains available; "
+      "run M-x p3/r-bootstrap-language-server once to enable semantic support."))
+    nil))
 
 (defun p3/r-eglot-ensure ()
   "Start R Eglot with only the semantic capabilities owned by this workflow."
