@@ -2,7 +2,7 @@
 
 (require 'cl-lib)
 (require 'hl-line)
-(require 'project)
+(require 'p3-project)
 (require 'subr-x)
 (require 'tab-bar)
 (require 'use-package)
@@ -231,9 +231,7 @@
         p3/appearance--project-relative-file nil)
   (when (and buffer-file-name
              (not (file-remote-p buffer-file-name)))
-    (when-let* ((project
-                 (project-current nil (file-name-directory buffer-file-name)))
-                (root (project-root project)))
+    (when-let ((root (p3/project-root)))
       (setq p3/appearance--project-root root
             p3/appearance--project-relative-file
             (file-relative-name buffer-file-name root)))))

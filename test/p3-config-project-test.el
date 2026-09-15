@@ -352,9 +352,11 @@
         (find-file-hook nil))
     (p3/config-load-module 'p3-config-project)
     (should-not find-file-hook)
-    (should (advice-member-p #'p3/project-route-file 'find-file))
-    (should (advice-member-p #'p3/project-route-file 'find-file-other-window))
-    (should-not (advice-member-p #'p3/project-route-file 'find-file-read-only))))
+    (should (advice-member-p #'p3/project-with-file-routing 'find-file))
+    (should (advice-member-p #'p3/project-with-file-routing 'find-file-other-window))
+    (should-not (advice-member-p #'p3/project-with-file-routing 'find-file-read-only))
+    (should-not (advice-member-p #'p3/project-route-file 'find-file))
+    (should-not (advice-member-p #'p3/project-route-file 'find-file-other-window))))
 
 (ert-deftest p3-config-project-wires-routing-to-buffer-switches ()
   (let ((p3/config-lisp-directory
