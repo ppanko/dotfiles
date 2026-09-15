@@ -11,6 +11,6 @@ Use this procedure for issue #80 Phase 2 before/after comparisons.
 
 Compare `Total init`, `package-initialize`, `use-package-bootstrap`, aggregate `use-package-ensure`, config-cache phases, and material `module:*` phases. A current-cache startup normally has no `config-cache-build` phase.
 
-Paste the raw reports or a faithful table into the implementing PR and/or issue #80. Repeat the identical procedure after Phase 2B. CI verifies structural behavior only and must not enforce startup-time thresholds.
+Record the Phase 2A baseline on PR #85 and/or issue #80 **before PR #85 is merged**. Repeat the identical procedure after Phase 2B. CI verifies structural behavior only and must not enforce startup-time thresholds.
 
 Hosted-runner timings are not a substitute for workstation baselines: runner provisioning, filesystem caches, package state, and virtualization differ from normal interactive use. If one workstation platform is unavailable during Phase 2A, record that explicitly rather than substituting a CI wall-clock value.
