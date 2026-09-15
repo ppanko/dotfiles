@@ -78,22 +78,26 @@
 (ert-deftest p3-r-language-server-readiness-invalidates-after-program-change ()
   (let* ((tools (make-temp-file "p3-r-ls-readiness-" t))
          (user-emacs-directory (file-name-as-directory tools))
-         (program (expand-file-name "R" tools))
+         (source-program (expand-file-name invocation-name invocation-directory))
+         (program
+          (expand-file-name
+           (if (eq system-type 'windows-nt) "R.exe" "R")
+           tools))
          (library (expand-file-name "library" tools))
          (description (expand-file-name "languageserver/DESCRIPTION" library))
-         (p3/r-language-server-ready nil))
+         (p3/r-language-server-ready nil)
+         (p3/r-language-server-ready-fingerprint nil))
     (unwind-protect
         (progn
           (make-directory (file-name-directory description) t)
-          (with-temp-file program
-            (insert "old-r"))
-          (set-file-modes program #o755)
+          (copy-file source-program program)
+          (unless (eq system-type 'windows-nt)
+            (set-file-modes program #o755))
           (with-temp-file description
             (insert "Package: languageserver\n"))
           (p3/r-language-server-write-state program library)
           (should (p3/r-language-server-ready-state))
           (write-region "-changed" nil program t 'silent)
-          (set-file-modes program #o755)
           (should-not (p3/r-language-server-ready-state)))
       (delete-directory tools t))))
 
