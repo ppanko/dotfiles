@@ -8,6 +8,9 @@
    (directory-file-name
     (file-name-directory (or load-file-name buffer-file-name)))))
 
+(load (expand-file-name "test/p3-r-alignment-test.el"
+                        p3-r-portability-test--root))
+
 (defun p3-r-portability-test--template (name)
   "Return generated R template NAME as text."
   (with-temp-buffer
