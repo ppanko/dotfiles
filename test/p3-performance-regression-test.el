@@ -8,9 +8,7 @@
 
 (ert-deftest p3-performance-routed-remote-file-keeps-project-discovery-unresolved ()
   (let ((project-current-calls 0))
-    (cl-letf (((symbol-function 'file-remote-p)
-               (lambda (_file &optional _identification) t))
-              ((symbol-function 'p3/project-route-file)
+    (cl-letf (((symbol-function 'p3/project-route-file)
                (lambda (_file) nil))
               ((symbol-function 'project-current)
                (lambda (&optional _maybe-prompt _directory)
