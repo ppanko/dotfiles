@@ -199,6 +199,9 @@
   (let ((section (assoc "Org" p3/keybinding-sections)))
     (should-not (assoc "C-c b" (cdr section)))))
 
+(load (expand-file-name "p3-performance-regression-test.el"
+                        (file-name-directory (or load-file-name buffer-file-name))))
+
 (provide 'p3-commands-test)
 
 ;;; p3-commands-test.el ends here

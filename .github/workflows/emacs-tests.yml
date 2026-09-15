@@ -73,6 +73,7 @@ jobs:
             lisp/p3-config-terminal.el \
             lisp/p3-ess.el \
             lisp/p3-r-tools.el \
+            lisp/p3-r-language-server.el \
             lisp/p3-r-tidyverse-completion.el \
             lisp/p3-gptel.el \
             lisp/p3-config-gptel.el \
@@ -220,6 +221,7 @@ jobs:
             -l test/p3-gptel-test.el \
             -l test/p3-config-gptel-test.el \
             -l test/p3-r-tools-test.el \
+            -l test/p3-r-language-server-test.el \
             -l test/p3-r-tidyverse-completion-test.el \
             -l test/p3-org-test.el \
             -l test/p3-config-org-test.el \

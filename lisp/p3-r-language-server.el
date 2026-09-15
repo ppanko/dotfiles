@@ -38,6 +38,9 @@
 (defvar p3/r-language-server-ready nil
   "Cons of R program and managed library known usable this session.")
 
+(defvar p3/r-language-server-ready-fingerprint nil
+  "Cheap local fingerprint of the R executable backing readiness state.")
+
 (defvar p3/r-language-server-warning-key nil
   "Last R language-server setup problem already reported this session.")
 
@@ -98,6 +101,94 @@
       (format "r-tools/%s/R-%s/library"
               (p3/r-language-server-platform-key)
               major-minor)))))
+
+(defun p3/r-language-server-state-file ()
+  "Return the machine-local readiness file for managed R semantic tooling."
+  (expand-file-name
+   (format "r-tools/%s/current-language-server.el"
+           (p3/r-language-server-platform-key))
+   (p3/r-language-server-tool-root)))
+
+(defun p3/r-program-fingerprint (program)
+  "Return a cheap local fingerprint for PROGRAM, or nil when unavailable.
+The fingerprint uses only filesystem metadata and never launches R, so it is
+safe to compare from a file-visit hook."
+  (condition-case nil
+      (let* ((resolved (file-truename program))
+             (attributes (file-attributes resolved 'string)))
+        (when attributes
+          (list resolved
+                (file-attribute-size attributes)
+                (file-attribute-modification-time attributes)
+                (file-attribute-file-identifier attributes))))
+    (file-error nil)))
+
+(defun p3/r-language-server-write-state (program library)
+  "Persist PROGRAM and LIBRARY as the prepared R semantic-tool state."
+  (let* ((fingerprint (p3/r-program-fingerprint program))
+         (ready (cons program library))
+         (state (and fingerprint
+                     (list :program program
+                           :library library
+                           :fingerprint fingerprint)))
+         (file (p3/r-language-server-state-file)))
+    (unless state
+      (user-error "Cannot fingerprint R executable for semantic-tool readiness"))
+    (make-directory (file-name-directory file) t)
+    (with-temp-file file
+      (prin1 state (current-buffer))
+      (insert "\n"))
+    (setq p3/r-language-server-ready ready
+          p3/r-language-server-ready-fingerprint fingerprint)
+    ready))
+
+(defun p3/r-language-server-read-state ()
+  "Return persisted prepared R semantic-tool state, or nil when unavailable."
+  (let ((file (p3/r-language-server-state-file)))
+    (when (file-readable-p file)
+      (condition-case nil
+          (with-temp-buffer
+            (insert-file-contents file)
+            (let* ((state (read (current-buffer)))
+                   (program (plist-get state :program))
+                   (library (plist-get state :library))
+                   (fingerprint (plist-get state :fingerprint)))
+              (and (listp state)
+                   (stringp program)
+                   (stringp library)
+                   (listp fingerprint)
+                   state)))
+        (error nil)))))
+
+(defun p3/r-language-server-clear-state ()
+  "Forget persisted and in-session R semantic-tool readiness."
+  (setq p3/r-language-server-ready nil
+        p3/r-language-server-ready-fingerprint nil)
+  (let ((file (p3/r-language-server-state-file)))
+    (when (file-exists-p file)
+      (delete-file file))))
+
+(defun p3/r-language-server-ready-state ()
+  "Return prepared R semantic-tool state using only cheap local checks."
+  (let* ((persisted (and (null p3/r-language-server-ready)
+                         (p3/r-language-server-read-state)))
+         (state (or p3/r-language-server-ready
+                    (and persisted
+                         (cons (plist-get persisted :program)
+                               (plist-get persisted :library)))))
+         (fingerprint (or p3/r-language-server-ready-fingerprint
+                          (and persisted (plist-get persisted :fingerprint)))))
+    (when-let* ((state state)
+                (program (car state))
+                (library (cdr state))
+                ((file-executable-p program))
+                ((file-readable-p
+                  (expand-file-name "languageserver/DESCRIPTION" library)))
+                (current-fingerprint (p3/r-program-fingerprint program))
+                ((equal fingerprint current-fingerprint)))
+      (setq p3/r-language-server-ready state
+            p3/r-language-server-ready-fingerprint current-fingerprint)
+      state)))
 
 (defun p3/r-string-literal (text)
   "Return TEXT as a double-quoted R string literal."
@@ -182,7 +273,11 @@ Return non-nil only when the installed package can subsequently be loaded."
             (let ((key (cons program library)))
               (cond
                ((p3/r-language-server-installed-p program library)
-                (setq p3/r-language-server-ready key)
+                (setq p3/r-language-server-bootstrap-failed nil
+                      p3/r-language-server-warning-key nil
+                      p3/r-language-server-ready key
+                      p3/r-language-server-ready-fingerprint
+                      (p3/r-program-fingerprint program))
                 library)
                ((equal p3/r-language-server-bootstrap-failed key)
                 nil)
@@ -192,7 +287,9 @@ Return non-nil only when the installed package can subsequently be loaded."
                         (progn
                           (setq p3/r-language-server-bootstrap-failed nil
                                 p3/r-language-server-warning-key nil
-                                p3/r-language-server-ready key)
+                                p3/r-language-server-ready key
+                                p3/r-language-server-ready-fingerprint
+                                (p3/r-program-fingerprint program))
                           library)
                       (setq p3/r-language-server-bootstrap-failed key)
                       nil)
@@ -227,11 +324,15 @@ Return non-nil only when the installed package can subsequently be loaded."
   "Retry preparation of the managed R language server explicitly."
   (interactive)
   (setq p3/r-language-server-bootstrap-failed nil
-        p3/r-language-server-ready nil
         p3/r-language-server-warning-key nil)
+  (p3/r-language-server-clear-state)
   (condition-case err
-      (if-let ((library (p3/r-ensure-language-server)))
-          (message "R languageserver ready: %s" (abbreviate-file-name library))
+      (if-let* ((library (p3/r-ensure-language-server))
+                (program (p3/r-program)))
+          (progn
+            (p3/r-language-server-write-state program library)
+            (message "R languageserver ready: %s"
+                     (abbreviate-file-name library)))
         (user-error "R languageserver bootstrap failed; see warnings/output buffer"))
     (file-error
      (let ((message (error-message-string err)))
@@ -241,13 +342,36 @@ Return non-nil only when the installed package can subsequently be loaded."
        (user-error "R languageserver bootstrap failed: %s" message)))))
 
 (defun p3/r-language-server-command ()
-  "Return the Eglot command for the selected managed R language server."
-  (when-let* ((library (p3/r-ensure-language-server))
-              (program (p3/r-program)))
-    (list
-     program "--slave" "-e"
-     (p3/r-language-server-library-expression
-      library "languageserver::run()"))))
+  "Return the Eglot command only when managed R tooling is already prepared."
+  (if-let ((program (p3/r-program)))
+      (if-let ((state (p3/r-language-server-ready-state)))
+          (if (equal program (car state))
+              (let ((library (cdr state)))
+                (setq p3/r-language-server-warning-key nil)
+                (list
+                 program "--slave" "-e"
+                 (p3/r-language-server-library-expression
+                  library "languageserver::run()")))
+            (p3/r-language-server-warn-once
+             (list 'stale program (car state))
+             (concat
+              "Prepared R semantic tooling belongs to a different R executable. "
+              "ESS/editing remains available; run "
+              "M-x p3/r-bootstrap-language-server to refresh it."))
+            nil)
+        (p3/r-language-server-warn-once
+         'not-ready
+         (concat
+          "Managed R languageserver is not prepared. ESS/editing remains available; "
+          "run M-x p3/r-bootstrap-language-server once to enable semantic support."))
+        nil)
+    (p3/r-language-server-warn-once
+     'no-r
+     (concat
+      "No usable R executable is configured for semantic R support. "
+      "ESS editing remains available; install/configure R, then run "
+      "M-x p3/r-bootstrap-language-server to retry."))
+    nil))
 
 (defun p3/r-eglot-ensure ()
   "Start R Eglot with only the semantic capabilities owned by this workflow."
