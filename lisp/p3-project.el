@@ -22,10 +22,19 @@
 (defvar p3/project--buffer-preview-window-configuration nil
   "Window configuration saved before a guarded Consult buffer preview.")
 
+(defvar p3/project--visit-root :unresolved
+  "Dynamically scoped project root resolved by displayed file routing.
+The value nil means routing already established that the visited file has no
+local project; `:unresolved' means normal `project.el' discovery is required.")
+
 (defun p3/project-root ()
-  "Return the current built-in `project.el' root, if any."
-  (when-let ((project (project-current nil)))
-    (project-root project)))
+  "Return the current built-in `project.el' root, if any.
+During a routed displayed file visit, reuse the root already resolved for the
+workspace decision instead of asking `project.el' to discover it again."
+  (if (eq p3/project--visit-root :unresolved)
+      (when-let ((project (project-current nil)))
+        (project-root project))
+    p3/project--visit-root))
 
 (defun p3/project-normalize-root (root)
   "Return ROOT as the canonical local project workspace identity.
@@ -183,15 +192,23 @@ configuration untouched."
 
 (defun p3/project-route-file (filename &rest _)
   "Route local FILENAME to its project tab or the shared General tab.
-Remote files are left in the current workspace.  Extra arguments are ignored
-so this function can advise the standard file-opening commands directly."
+Return the normalized routed project root, or nil for General/remote files.
+Extra arguments are ignored so callers may use this as the routing primitive."
   (when filename
     (let ((file (expand-file-name filename)))
       (unless (file-remote-p file)
         (if-let ((project
                   (project-current nil (file-name-directory file))))
             (p3/project-switch-to-tab (project-root project))
-          (p3/project-switch-to-general-tab))))))
+          (p3/project-switch-to-general-tab)
+          nil)))))
+
+(defun p3/project-with-file-routing (function filename &rest args)
+  "Route FILENAME once, then call FUNCTION with FILENAME and ARGS.
+The resolved root remains dynamically available to project-aware file hooks for
+the duration of the visit, so they do not repeat project discovery."
+  (let ((p3/project--visit-root (p3/project-route-file filename)))
+    (apply function filename args)))
 
 (defun p3/project--restore-buffer-preview-window-configuration ()
   "Restore the workspace layout saved before Consult buffer preview."
