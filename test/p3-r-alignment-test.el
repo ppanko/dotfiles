@@ -136,8 +136,8 @@
 (ert-deftest p3-r-alignment-on-save-hook-is-buffer-local-and-optional ()
   (should p3-r-alignment-test--loaded)
   (p3-r-alignment-test--with-buffer "a <- 1\nlong_name <- 2\n"
-    (let ((before-save-hook nil)
-          (p3-r-align-on-save t))
+    (setq-local before-save-hook nil)
+    (let ((p3-r-align-on-save t))
       (p3-r-enable-alignment-on-save)
       (should (local-variable-p 'before-save-hook))
       (should (memq #'p3-r-align-before-save before-save-hook))
@@ -145,8 +145,8 @@
       (should (equal (buffer-string)
                      "a         <- 1\nlong_name <- 2\n"))))
   (p3-r-alignment-test--with-buffer "a <- 1\nlong_name <- 2\n"
-    (let ((before-save-hook nil)
-          (p3-r-align-on-save nil))
+    (setq-local before-save-hook nil)
+    (let ((p3-r-align-on-save nil))
       (p3-r-enable-alignment-on-save)
       (run-hooks 'before-save-hook)
       (should (equal (buffer-string)
@@ -154,9 +154,15 @@
 
 (ert-deftest p3-r-alignment-setup-registers-only-the-r-mode-hook ()
   (should p3-r-alignment-test--loaded)
-  (let ((ess-r-mode-hook nil))
-    (p3-r-alignment-setup)
-    (should (equal ess-r-mode-hook '(p3-r-enable-alignment-on-save)))))
+  (let ((original (default-value 'ess-r-mode-hook)))
+    (unwind-protect
+        (progn
+          (set-default 'ess-r-mode-hook nil)
+          (p3-r-alignment-setup)
+          (should
+           (equal (default-value 'ess-r-mode-hook)
+                  '(p3-r-enable-alignment-on-save))))
+      (set-default 'ess-r-mode-hook original))))
 
 (ert-deftest p3-r-alignment-ess-config-enables-module ()
   (let ((config (p3-r-alignment-test--contents "lisp/p3-config-ess.el")))
