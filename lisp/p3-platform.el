@@ -32,10 +32,10 @@ Set this in secrets.el when a machine should not use auto-detection.")
 Set this in secrets.el when a machine should not use auto-detection.")
 
 (defvar p3/windows-rtools-selection-cache :uninitialized
-  "Session cache for selected Rtools path, including a cached nil result.")
+  "Session cache `(OVERRIDE RESULT)' for selected Rtools, including nil.")
 
 (defvar p3/windows-r-program-selection-cache :uninitialized
-  "Session cache for selected Windows R executable, including cached nil.")
+  "Session cache `(OVERRIDE RESULT)' for selected Windows R, including nil.")
 
 (defvar rtools-path nil
   "Selected Rtools installation directory on Windows.")
@@ -144,22 +144,25 @@ When DIRECTORY-P is non-nil, require a directory; otherwise require a file."
 
 (defun p3/windows-select-rtools ()
   "Return the configured or newest usable Rtools installation.
-Cache the result, including absence, for the current Emacs session."
-  (if (not (eq p3/windows-rtools-selection-cache :uninitialized))
-      p3/windows-rtools-selection-cache
-    (setq
-     p3/windows-rtools-selection-cache
-     (let ((override (and p3/windows-rtools-override
-                          (expand-file-name p3/windows-rtools-override))))
-       (cond
-        ((and override (p3/windows-rtools-usable-p override)) override)
-        (override
-         (display-warning
-          'p3/windows
-          (format "Ignoring unusable Rtools override: %s" override)
-          :warning)
-         (p3/windows-latest-rtools))
-        (t (p3/windows-latest-rtools)))))))
+Cache the result, including absence, for the current Emacs session.  Changing
+the override invalidates the cached selection automatically."
+  (let ((override (and p3/windows-rtools-override
+                       (expand-file-name p3/windows-rtools-override))))
+    (if (and (consp p3/windows-rtools-selection-cache)
+             (equal (car p3/windows-rtools-selection-cache) override))
+        (cadr p3/windows-rtools-selection-cache)
+      (let ((result
+             (cond
+              ((and override (p3/windows-rtools-usable-p override)) override)
+              (override
+               (display-warning
+                'p3/windows
+                (format "Ignoring unusable Rtools override: %s" override)
+                :warning)
+               (p3/windows-latest-rtools))
+              (t (p3/windows-latest-rtools)))))
+        (setq p3/windows-rtools-selection-cache (list override result))
+        result))))
 
 (defun p3/windows-configure-rtools ()
   "Discover Rtools and expose its MSYS2 tools to Emacs on Windows."
@@ -263,15 +266,19 @@ Cache the result, including absence, for the current Emacs session."
 
 (defun p3/windows-select-r-program ()
   "Return the configured or newest installed Rterm.exe.
-Cache the result, including absence, for the current Emacs session."
-  (if (not (eq p3/windows-r-program-selection-cache :uninitialized))
-      p3/windows-r-program-selection-cache
-    (setq
-     p3/windows-r-program-selection-cache
-     (if (and p3/windows-r-program-override
-              (file-regular-p p3/windows-r-program-override))
-         (expand-file-name p3/windows-r-program-override)
-       (p3/windows-latest-r-program)))))
+Cache the result, including absence, for the current Emacs session.  Changing
+the override invalidates the cached selection automatically."
+  (let ((override (and p3/windows-r-program-override
+                       (expand-file-name p3/windows-r-program-override))))
+    (if (and (consp p3/windows-r-program-selection-cache)
+             (equal (car p3/windows-r-program-selection-cache) override))
+        (cadr p3/windows-r-program-selection-cache)
+      (let ((result
+             (if (and override (file-regular-p override))
+                 override
+               (p3/windows-latest-r-program))))
+        (setq p3/windows-r-program-selection-cache (list override result))
+        result))))
 
 (defun p3/r-program ()
   "Return the R executable shared by ESS and editor tooling.
