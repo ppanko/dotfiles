@@ -101,6 +101,9 @@
           (should-not (p3/r-language-server-ready-state)))
       (delete-directory tools t))))
 
+(load (expand-file-name "p3-r-eldoc-test.el"
+                        (file-name-directory (or load-file-name buffer-file-name))))
+
 (provide 'p3-r-language-server-test)
 
 ;;; p3-r-language-server-test.el ends here
