@@ -31,6 +31,12 @@ Set this in secrets.el when a machine should not use auto-detection.")
   "Optional absolute path to Rterm.exe on Windows.
 Set this in secrets.el when a machine should not use auto-detection.")
 
+(defvar p3/windows-rtools-selection-cache :uninitialized
+  "Session cache for selected Rtools path, including a cached nil result.")
+
+(defvar p3/windows-r-program-selection-cache :uninitialized
+  "Session cache for selected Windows R executable, including cached nil.")
+
 (defvar rtools-path nil
   "Selected Rtools installation directory on Windows.")
 
@@ -137,18 +143,23 @@ When DIRECTORY-P is non-nil, require a directory; otherwise require a file."
                          separator)))))
 
 (defun p3/windows-select-rtools ()
-  "Return the configured or newest usable Rtools installation."
-  (let ((override (and p3/windows-rtools-override
-                       (expand-file-name p3/windows-rtools-override))))
-    (cond
-     ((and override (p3/windows-rtools-usable-p override)) override)
-     (override
-      (display-warning
-       'p3/windows
-       (format "Ignoring unusable Rtools override: %s" override)
-       :warning)
-      (p3/windows-latest-rtools))
-     (t (p3/windows-latest-rtools)))))
+  "Return the configured or newest usable Rtools installation.
+Cache the result, including absence, for the current Emacs session."
+  (if (not (eq p3/windows-rtools-selection-cache :uninitialized))
+      p3/windows-rtools-selection-cache
+    (setq
+     p3/windows-rtools-selection-cache
+     (let ((override (and p3/windows-rtools-override
+                          (expand-file-name p3/windows-rtools-override))))
+       (cond
+        ((and override (p3/windows-rtools-usable-p override)) override)
+        (override
+         (display-warning
+          'p3/windows
+          (format "Ignoring unusable Rtools override: %s" override)
+          :warning)
+         (p3/windows-latest-rtools))
+        (t (p3/windows-latest-rtools)))))))
 
 (defun p3/windows-configure-rtools ()
   "Discover Rtools and expose its MSYS2 tools to Emacs on Windows."
@@ -251,11 +262,16 @@ When DIRECTORY-P is non-nil, require a directory; otherwise require a file."
             (throw 'found program)))))))
 
 (defun p3/windows-select-r-program ()
-  "Return the configured or newest installed Rterm.exe."
-  (if (and p3/windows-r-program-override
-           (file-regular-p p3/windows-r-program-override))
-      (expand-file-name p3/windows-r-program-override)
-    (p3/windows-latest-r-program)))
+  "Return the configured or newest installed Rterm.exe.
+Cache the result, including absence, for the current Emacs session."
+  (if (not (eq p3/windows-r-program-selection-cache :uninitialized))
+      p3/windows-r-program-selection-cache
+    (setq
+     p3/windows-r-program-selection-cache
+     (if (and p3/windows-r-program-override
+              (file-regular-p p3/windows-r-program-override))
+         (expand-file-name p3/windows-r-program-override)
+       (p3/windows-latest-r-program)))))
 
 (defun p3/r-program ()
   "Return the R executable shared by ESS and editor tooling.
@@ -285,6 +301,18 @@ resolves and otherwise use the R executable available on PATH."
        'p3/windows
        "No Rterm.exe found under C:/Program Files/R"
        :warning))))
+
+;;;###autoload
+(defun p3/windows-refresh-tool-discovery ()
+  "Clear cached Windows tool discovery and reapply platform configuration."
+  (interactive)
+  (setq p3/windows-rtools-selection-cache :uninitialized
+        p3/windows-r-program-selection-cache :uninitialized)
+  (when (p3/windows-p)
+    (p3/windows-configure-rtools)
+    (p3/windows-configure-r-program)
+    (p3/windows-configure-shell))
+  (message "Windows R/Rtools discovery refreshed"))
 
 (provide 'p3-platform)
 
