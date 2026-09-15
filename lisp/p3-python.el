@@ -10,6 +10,9 @@
 (defvar p3/python-language-server-bootstrap-failed nil
   "System-Python/server key whose basedpyright bootstrap failed this session.")
 
+(defvar p3/python-language-server-warning-shown nil
+  "Non-nil after warning that managed basedpyright needs explicit bootstrap.")
+
 (defun p3/python-project-interpreter ()
   "Return the project-local Python executable, when one exists."
   (when-let ((root (p3/project-root)))
@@ -48,6 +51,16 @@
         "python-tools/windows/"
       "python-tools/linux/")
     user-emacs-directory)))
+
+(defun p3/python-language-server-executable ()
+  "Return managed basedpyright when it is already prepared, or nil.
+This readiness check performs no provisioning and is safe in file-visit hooks."
+  (let ((server
+         (p3/python-tools-path
+          (if (eq system-type 'windows-nt)
+              "Scripts/basedpyright-langserver.exe"
+            "bin/basedpyright-langserver"))))
+    (and (file-executable-p server) server)))
 
 (defun p3/python-ensure-language-server ()
   "Install and return the managed basedpyright language-server executable.
@@ -117,23 +130,35 @@ fixing the underlying problem."
 (defun p3/python-bootstrap-language-server ()
   "Retry preparation of the managed basedpyright language server."
   (interactive)
-  (setq p3/python-language-server-bootstrap-failed nil)
+  (setq p3/python-language-server-bootstrap-failed nil
+        p3/python-language-server-warning-shown nil)
   (if-let ((server (p3/python-ensure-language-server)))
       (message "Python language server ready: %s" (abbreviate-file-name server))
     (user-error
      "Python language-server bootstrap failed; see *p3-python-bootstrap*")))
 
 (defun p3/python-eglot-ensure ()
-  "Start Eglot with the managed basedpyright language server."
-  (when-let ((server (p3/python-ensure-language-server)))
-    (require 'eglot)
-    (setq eglot-server-programs
-          (cons `((python-mode python-ts-mode) . (,server "--stdio"))
-                (cl-remove-if
-                 (lambda (entry)
-                   (equal (car entry) '(python-mode python-ts-mode)))
-                 eglot-server-programs)))
-    (eglot-ensure)))
+  "Start Eglot when managed basedpyright is already prepared.
+Never create environments or install packages from a file-visit hook."
+  (if-let ((server (p3/python-language-server-executable)))
+      (progn
+        (setq p3/python-language-server-warning-shown nil)
+        (require 'eglot)
+        (setq eglot-server-programs
+              (cons `((python-mode python-ts-mode) . (,server "--stdio"))
+                    (cl-remove-if
+                     (lambda (entry)
+                       (equal (car entry) '(python-mode python-ts-mode)))
+                     eglot-server-programs)))
+        (eglot-ensure))
+    (unless p3/python-language-server-warning-shown
+      (setq p3/python-language-server-warning-shown t)
+      (display-warning
+       'p3/python
+       (concat
+        "Managed basedpyright is not prepared. Python editing remains available; "
+        "run M-x p3/python-bootstrap-language-server once to enable semantic support.")
+       :warning))))
 
 (defun p3/python-send-region-or-paragraph-and-step ()
   "Send the region, or current paragraph, then move to the next statement."
