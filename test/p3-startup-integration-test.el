@@ -28,6 +28,28 @@
                       "p3/with-startup-profile-phase \"use-package-ensure\""))
       (should (string-match-p (regexp-quote needle) contents)))))
 
+(ert-deftest p3-startup-integration-profiler-load-preserves-load-path-order ()
+  (let* ((contents (p3-startup-integration-test--file-contents "init.el"))
+         (profiler-load
+          (string-match
+           (regexp-quote
+            "(load (expand-file-name \"lisp/p3-startup-profile.el\" user-emacs-directory)\n      nil 'nomessage)")
+           contents))
+         (package-init
+          (string-match
+           (regexp-quote
+            "(p3/with-startup-profile-phase \"package-initialize\"")
+           contents))
+         (local-load-path
+          (string-match
+           (regexp-quote "(defconst p3/lisp-directory")
+           contents)))
+    (should profiler-load)
+    (should package-init)
+    (should local-load-path)
+    (should (< profiler-load package-init))
+    (should (< package-init local-load-path))))
+
 (ert-deftest p3-startup-integration-local-module-boundary-records ()
   (let* ((directory (make-temp-file "p3-profiled-module-" t))
          (p3/config-lisp-directory directory)
