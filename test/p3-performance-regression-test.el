@@ -30,6 +30,7 @@
   (let* ((old-rtools "C:/rtools45")
          (old-bin "C:/rtools45/usr/bin/")
          (old-r "C:/Program Files/R/R-4.5.1/bin/Rterm.exe")
+         (path-separator ";")
          (rtools-path old-rtools)
          (linuxy-environment-path old-bin)
          (mingw64-path "C:/rtools45/mingw64/bin/")
