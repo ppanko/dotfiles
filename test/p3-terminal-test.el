@@ -302,6 +302,9 @@
 (load (expand-file-name "p3-terminal-integration-test.el"
                         (file-name-directory
                          (or load-file-name buffer-file-name))))
+(load (expand-file-name "p3-terminal-rich-ux-test.el"
+                        (file-name-directory
+                         (or load-file-name buffer-file-name))))
 
 (provide 'p3-terminal-test)
 
