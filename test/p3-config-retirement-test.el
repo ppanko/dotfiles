@@ -22,6 +22,10 @@
                           "(workgroups-mode 1)"))
       (should-not (string-match-p (regexp-quote forbidden) contents)))))
 
+(ert-deftest p3-startup-profile-module-exists ()
+  "Phase 2A requires the startup profiler before implementation can pass."
+  (should (require 'p3-startup-profile nil t)))
+
 (provide 'p3-config-retirement-test)
 
 ;;; p3-config-retirement-test.el ends here
