@@ -128,6 +128,38 @@ When DIRECTORY-P is non-nil, require a directory; otherwise require a file."
                 (file-regular-p candidate))
           (throw 'found candidate))))))
 
+(defun p3/windows-path-key (path)
+  "Return PATH normalized for case-insensitive Windows comparisons."
+  (when (stringp path)
+    (downcase
+     (directory-file-name
+      (replace-regexp-in-string "\\\\" "/" path)))))
+
+(defun p3/windows-path-within-p (path directory)
+  "Return non-nil when absolute PATH is DIRECTORY or lies below it."
+  (when (and (stringp path)
+             (file-name-absolute-p path)
+             (stringp directory))
+    (let* ((path-key (p3/windows-path-key path))
+           (directory-key (p3/windows-path-key directory))
+           (prefix (concat directory-key "/")))
+      (or (equal path-key directory-key)
+          (string-prefix-p prefix path-key)))))
+
+(defun p3/windows-path-remove (directory)
+  "Remove DIRECTORY from `exec-path' and the child-process PATH."
+  (when directory
+    (let* ((target (p3/windows-path-key directory))
+           (same-p (lambda (entry)
+                     (equal (p3/windows-path-key entry) target)))
+           (paths (split-string (or (getenv "PATH") "")
+                                (regexp-quote path-separator) t)))
+      (setq exec-path (seq-remove same-p exec-path))
+      (setenv "PATH"
+              (mapconcat #'identity
+                         (seq-remove same-p paths)
+                         path-separator)))))
+
 (defun p3/windows-path-prepend (directory)
   "Prepend DIRECTORY to both `exec-path' and child-process PATH."
   (let* ((directory (file-name-as-directory (expand-file-name directory)))
@@ -141,6 +173,26 @@ When DIRECTORY-P is non-nil, require a directory; otherwise require a file."
               (mapconcat #'identity
                          (cons path-directory paths)
                          separator)))))
+
+(defun p3/windows-clear-rtools-configuration ()
+  "Clear state previously derived from the selected Rtools installation."
+  (let ((old-bin linuxy-environment-path))
+    (when old-bin
+      (p3/windows-path-remove old-bin)
+      (when (p3/windows-path-within-p shell-file-name old-bin)
+        (setq shell-file-name (or (getenv "COMSPEC") "cmdproxy.exe")))
+      (when (and (boundp 'explicit-shell-file-name)
+                 (p3/windows-path-within-p explicit-shell-file-name old-bin))
+        (setq explicit-shell-file-name nil))
+      (when (p3/windows-path-within-p (getenv "SHELL") old-bin)
+        (setenv "SHELL" nil))
+      (when (boundp 'explicit-bash.exe-args)
+        (setq explicit-bash.exe-args nil))))
+  (setq rtools-path nil
+        linuxy-environment-path nil
+        mingw64-path nil
+        p3/windows-hunspell-program nil
+        p3/windows-hunspell-dictionary-directory nil))
 
 (defun p3/windows-select-rtools ()
   "Return the configured or newest usable Rtools installation.
@@ -167,6 +219,7 @@ the override invalidates the cached selection automatically."
 (defun p3/windows-configure-rtools ()
   "Discover Rtools and expose its MSYS2 tools to Emacs on Windows."
   (when (p3/windows-p)
+    (p3/windows-clear-rtools-configuration)
     (if-let ((selected (p3/windows-select-rtools)))
         (progn
           (setq rtools-path (directory-file-name selected)
@@ -302,6 +355,7 @@ resolves and otherwise use the R executable available on PATH."
 (defun p3/windows-configure-r-program ()
   "Configure ESS to use the selected Windows R executable."
   (when (p3/windows-p)
+    (setq-default inferior-R-program-name nil)
     (if-let ((program (p3/r-program)))
         (setq-default inferior-R-program-name program)
       (display-warning
