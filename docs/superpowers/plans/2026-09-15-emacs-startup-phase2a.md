@@ -4,9 +4,9 @@
 
 **Goal:** Add lightweight, repeatable startup instrumentation and capture the pre-optimization Phase 2 baseline without intentionally changing startup loading behavior.
 
-**Architecture:** Load a dependency-free `p3-startup-profile` module at the start of `init.el`, record named elapsed-time phases only while startup is active, and aggregate repeated boundaries such as `use-package` ensure calls. Reuse `p3/config-load-module` and `p3/config-load` as timing boundaries; compiled loading and lazy loading remain Phase 2B work.
+**Architecture:** Load a dependency-free `p3-startup-profile` module at the beginning of `init.el`, record named elapsed-time phases only while startup is active, and aggregate repeated boundaries such as `use-package` ensure calls. Reuse `p3/config-load-module` and `p3/config-load` as instrumentation boundaries; compiled loading, Org-roam deferral, and all other lazy-loading work remain Phase 2B.
 
-**Tech Stack:** Emacs Lisp, built-in Emacs timing APIs, ERT, GitHub Actions on Linux and native Windows.
+**Tech Stack:** Emacs Lisp, built-in timing APIs, ERT, GitHub Actions on Linux and native Windows.
 
 **Spec:** `docs/superpowers/specs/2026-09-15-emacs-startup-phase2-design.md`
 
@@ -14,9 +14,8 @@
 
 - Phase 2A is diagnostics-only: no intentional module deferral, package-activation change, or loader-semantics change.
 - Preserve exact-source development reload behavior.
-- Use normal Emacs mechanisms only; add no module registry or performance cache.
+- Use normal Emacs mechanisms only; add no module registry, performance cache, or timing threshold.
 - Linux and native Windows remain behaviorally equivalent.
-- CI asserts structure and behavior, never elapsed-time thresholds.
 - Phase 2B does not begin until the Phase 2A baseline has been recorded where practical.
 
 ---
@@ -33,7 +32,7 @@
 
 - [ ] **Step 1: Write failing ERT coverage**
 
-Create `test/p3-startup-profile-test.el` with tests equivalent to:
+Create `test/p3-startup-profile-test.el` with deterministic tests for aggregation, inactive-wrapper behavior, startup completion, and report formatting:
 
 ```elisp
 (require 'ert)
@@ -85,7 +84,7 @@ Create `test/p3-startup-profile-test.el` with tests equivalent to:
       (should (string-match-p "use-package-ensure.*4 calls" text)))))
 ```
 
-- [ ] **Step 2: Run the test and verify RED**
+- [ ] **Step 2: Run the focused test and verify RED**
 
 ```bash
 emacs -Q --batch -L lisp -l test/p3-startup-profile-test.el -f ert-run-tests-batch-and-exit
@@ -95,7 +94,7 @@ Expected: failure because `p3-startup-profile` does not exist.
 
 - [ ] **Step 3: Implement the minimal profiler**
 
-Create `lisp/p3-startup-profile.el` with:
+Create `lisp/p3-startup-profile.el` with normal file commentary/docstrings and this behavior:
 
 ```elisp
 (defvar p3/startup-profile-active t)
@@ -104,20 +103,22 @@ Create `lisp/p3-startup-profile.el` with:
 
 (defun p3/startup-profile-record (name seconds)
   (when p3/startup-profile-active
-    (if-let ((entry (assoc-string name p3/startup-profile-phases t)))
-        (setf (nth 1 entry) (+ (nth 1 entry) seconds)
-              (nth 2 entry) (1+ (nth 2 entry)))
-      (setq p3/startup-profile-phases
-            (append p3/startup-profile-phases
-                    (list (list name seconds 1))))))
+    (let ((entry (assoc-string name p3/startup-profile-phases t)))
+      (if entry
+          (setf (nth 1 entry) (+ (nth 1 entry) seconds)
+                (nth 2 entry) (1+ (nth 2 entry)))
+        (setq p3/startup-profile-phases
+              (append p3/startup-profile-phases
+                      (list (list name seconds 1)))))))
   seconds)
 
 (defmacro p3/with-startup-profile-phase (name &rest body)
   (declare (indent 1) (debug t))
   `(if p3/startup-profile-active
-       (let ((started (float-time)))
+       (let ((p3-startup-profile--started (float-time)))
          (prog1 (progn ,@body)
-           (p3/startup-profile-record ,name (- (float-time) started))))
+           (p3/startup-profile-record
+            ,name (- (float-time) p3-startup-profile--started))))
      (progn ,@body)))
 
 (defun p3/startup-profile-finish ()
@@ -158,9 +159,7 @@ Create `lisp/p3-startup-profile.el` with:
 (provide 'p3-startup-profile)
 ```
 
-Include normal file commentary/docstrings so warning-as-error byte compilation is clean.
-
-- [ ] **Step 4: Verify GREEN and strict compilation**
+- [ ] **Step 4: Verify GREEN and strict byte compilation**
 
 ```bash
 emacs -Q --batch -L lisp -l test/p3-startup-profile-test.el -f ert-run-tests-batch-and-exit
@@ -176,7 +175,7 @@ git add lisp/p3-startup-profile.el test/p3-startup-profile-test.el
 git commit -m "feat: add startup profiling core"
 ```
 
-### Task 2: Instrument the existing startup boundaries
+### Task 2: Instrument existing startup boundaries without changing semantics
 
 **Files:**
 - Modify: `init.el`
@@ -188,7 +187,7 @@ git commit -m "feat: add startup profiling core"
 - Adds stable names `package-initialize`, `use-package-bootstrap`, `use-package-ensure`, `config-cache-validate`, `config-cache-build`, `config-cache-load`, and `module:<feature>`.
 - `p3/config-load-module` remains exact-source `load-file` in Phase 2A.
 
-- [ ] **Step 1: Add failing structural tests**
+- [ ] **Step 1: Add failing loader-phase tests**
 
 Append to `test/p3-config-loader-test.el`:
 
@@ -207,17 +206,38 @@ Append to `test/p3-config-loader-test.el`:
                                 p3/startup-profile-phases)))
       (setq features (delq 'p3-profiled-module features))
       (delete-directory directory t))))
+
+(ert-deftest p3-config-loader-profiles-current-cache-validation-and-load ()
+  (let ((p3/startup-profile-active t)
+        (p3/startup-profile-phases nil))
+    (cl-letf (((symbol-function 'p3/config-cache-stale-p) (lambda () nil))
+              ((symbol-function 'p3/config-load-generated) (lambda () 'loaded)))
+      (should (eq (p3/config-load) 'loaded)))
+    (should (assoc-string "config-cache-validate" p3/startup-profile-phases))
+    (should (assoc-string "config-cache-load" p3/startup-profile-phases))
+    (should-not (assoc-string "config-cache-build" p3/startup-profile-phases))))
+
+(ert-deftest p3-config-loader-profiles-cache-build-only-when-stale ()
+  (let ((p3/startup-profile-active t)
+        (p3/startup-profile-phases nil)
+        built)
+    (cl-letf (((symbol-function 'p3/config-cache-stale-p) (lambda () t))
+              ((symbol-function 'p3/config-build) (lambda () (setq built t)))
+              ((symbol-function 'p3/config-load-generated) (lambda () 'loaded)))
+      (p3/config-load))
+    (should built)
+    (should (assoc-string "config-cache-build" p3/startup-profile-phases))))
 ```
 
-Append to `test/p3-startup-profile-test.el` a source-contract test that reads `init.el` and requires all three strings:
+Append to `test/p3-startup-profile-test.el` a source-contract test that reads `init.el`, returns to `point-min`, and `search-forward`s for all three exact strings:
 
 ```elisp
-"p3/with-startup-profile-phase \"package-initialize\""
-"p3/with-startup-profile-phase \"use-package-bootstrap\""
-"p3/with-startup-profile-phase \"use-package-ensure\""
+p3/with-startup-profile-phase "package-initialize"
+p3/with-startup-profile-phase "use-package-bootstrap"
+p3/with-startup-profile-phase "use-package-ensure"
 ```
 
-Use `search-forward` from `point-min` for each string. This avoids a network-dependent full `init.el` test.
+The source-contract test is intentional because loading the real `init.el` in CI would permit network-dependent package bootstrap.
 
 - [ ] **Step 2: Run focused tests and verify RED**
 
@@ -225,17 +245,17 @@ Use `search-forward` from `point-min` for each string. This avoids a network-dep
 emacs -Q --batch -L lisp -l test/p3-startup-profile-test.el -l test/p3-config-loader-test.el -f ert-run-tests-batch-and-exit
 ```
 
-- [ ] **Step 3: Load the profiler before package setup**
+- [ ] **Step 3: Load profiling before package setup**
 
-In `init.el`, move the existing `p3/lisp-directory` definition and `load-path` addition immediately after `custom-file`, then add:
+In `init.el`, move the existing `p3/lisp-directory` definition and `load-path` addition immediately after `custom-file`, add:
 
 ```elisp
 (require 'p3-startup-profile)
 ```
 
-Remove the later duplicate `p3/lisp-directory` block. Move no other startup behavior.
+and remove the later duplicate `p3/lisp-directory` block. Move no other startup behavior.
 
-- [ ] **Step 4: Instrument package boundaries without refactoring package logic**
+- [ ] **Step 4: Instrument package boundaries**
 
 Use:
 
@@ -249,40 +269,41 @@ Use:
   (require 'use-package-ensure))
 ```
 
-Wrap the current `p3/use-package-ensure` `dolist` with:
+Wrap the existing `p3/use-package-ensure` body without changing its package logic:
 
 ```elisp
-(p3/with-startup-profile-phase "use-package-ensure"
-  (dolist (ensure args)
-    (let ((package (if (eq ensure t)
-                       (use-package-as-symbol name)
-                     ensure)))
-      (when package
-        (when (consp package)
-          (use-package-pin-package (car package) (cdr package))
-          (setq package (car package)))
-        (condition-case err
-            (p3/package-install-resilient package)
-          (error
-           (display-warning
-            'use-package
-            (format "Failed to install %s: %s"
-                    package (error-message-string err))
-            :error)))))))
+(defun p3/use-package-ensure (name args _state)
+  "Ensure packages requested by use-package NAME with normalized ARGS."
+  (p3/with-startup-profile-phase "use-package-ensure"
+    (dolist (ensure args)
+      (let ((package (if (eq ensure t)
+                         (use-package-as-symbol name)
+                       ensure)))
+        (when package
+          (when (consp package)
+            (use-package-pin-package (car package) (cdr package))
+            (setq package (car package)))
+          (condition-case err
+              (p3/package-install-resilient package)
+            (error
+             (display-warning
+              'use-package
+              (format "Failed to install %s: %s"
+                      package (error-message-string err))
+              :error)))))))
+  t)
 ```
 
-Keep the existing trailing `t` return unchanged.
+- [ ] **Step 5: Instrument config-cache and local-module boundaries**
 
-- [ ] **Step 5: Instrument config-cache and module boundaries**
-
-In `lisp/p3-config-loader.el`, require `p3-startup-profile`. Wrap the existing `load-file` in `p3/config-load-module`:
+In `lisp/p3-config-loader.el`, require `p3-startup-profile`, wrap the existing exact-source load:
 
 ```elisp
 (p3/with-startup-profile-phase (format "module:%s" module)
   (load-file path))
 ```
 
-Replace `p3/config-load` with:
+and replace `p3/config-load` with:
 
 ```elisp
 (defun p3/config-load ()
@@ -297,14 +318,14 @@ Replace `p3/config-load` with:
       (p3/config-load-generated))))
 ```
 
-- [ ] **Step 6: Verify exact-source loader tests still pass**
+- [ ] **Step 6: Verify GREEN and preserve exact-source behavior**
 
 ```bash
 emacs -Q --batch -L lisp -l test/p3-startup-profile-test.el -l test/p3-config-loader-test.el -f ert-run-tests-batch-and-exit
 emacs -Q --batch -L lisp --eval '(setq byte-compile-error-on-warn t)' -f batch-byte-compile lisp/p3-startup-profile.el lisp/p3-config-loader.el
 ```
 
-Expected: success; especially `p3-config-loader-load-module-reloads-exact-source` remains green.
+Expected: success, including the existing `p3-config-loader-load-module-reloads-exact-source` regression.
 
 - [ ] **Step 7: Commit**
 
@@ -313,7 +334,7 @@ git add init.el lisp/p3-config-loader.el test/p3-startup-profile-test.el test/p3
 git commit -m "perf: instrument startup boundaries"
 ```
 
-### Task 3: Own the diagnostic in CI and capture the baseline
+### Task 3: Add cross-platform ownership and capture the Phase 2A baseline
 
 **Files:**
 - Modify: `.github/workflows/emacs-tests.yml`
@@ -322,20 +343,24 @@ git commit -m "perf: instrument startup boundaries"
 - Update: Phase 2A PR description and/or issue #80 with measured evidence.
 
 **Interfaces:**
-- Linux and Windows both byte-compile/run the new diagnostic tests.
-- Human baseline collection uses only `M-x p3/startup-profile-report`; CI has no timing threshold.
+- Linux and Windows byte-compile and execute the diagnostic tests.
+- Human measurements use only `M-x p3/startup-profile-report`; hosted CI has no timing threshold.
 
 - [ ] **Step 1: Add Linux CI coverage**
 
-In `.github/workflows/emacs-tests.yml`, add `lisp/p3-startup-profile.el` immediately before `lisp/p3-config-loader.el` in byte compilation, and add `-l test/p3-startup-profile-test.el` immediately before `-l test/p3-config-loader-test.el` in ERT loading.
+In `.github/workflows/emacs-tests.yml`, add `lisp/p3-startup-profile.el` immediately before `lisp/p3-config-loader.el` in byte compilation and `-l test/p3-startup-profile-test.el` immediately before `-l test/p3-config-loader-test.el` in the ERT suite.
 
 - [ ] **Step 2: Add native-Windows CI coverage**
 
-In `.github/workflows/windows-platform-tests.yml`, add `lisp/p3-startup-profile.el` and `test/p3-startup-profile-test.el` to `paths`, add the module before `p3-config-loader.el` in byte compilation, and add the test before `p3-config-loader-test.el` in the architecture suite.
+In `.github/workflows/windows-platform-tests.yml`:
 
-- [ ] **Step 3: Create the canonical measurement document**
+- add `init.el`, `lisp/p3-startup-profile.el`, and `test/p3-startup-profile-test.el` to the pull-request `paths` list;
+- add `lisp/p3-startup-profile.el` immediately before `lisp/p3-config-loader.el` in warning-as-error byte compilation;
+- add `-l test/p3-startup-profile-test.el` immediately before `-l test/p3-config-loader-test.el` in `Run Windows config architecture tests`.
 
-Create `docs/startup-performance.md` containing these exact rules:
+- [ ] **Step 3: Create the canonical measurement procedure**
+
+Create `docs/startup-performance.md` with:
 
 ```markdown
 # Emacs startup performance measurement
@@ -354,7 +379,7 @@ Compare `Total init`, `package-initialize`, `use-package-bootstrap`, aggregate `
 Paste the raw reports or a faithful table into the implementing PR and/or issue #80. Repeat the identical procedure after Phase 2B. CI verifies structural behavior only and must not enforce startup-time thresholds.
 ```
 
-- [ ] **Step 4: Run focused tests and the platform-appropriate full suite**
+- [ ] **Step 4: Run focused and platform suites**
 
 Always run:
 
@@ -362,7 +387,7 @@ Always run:
 emacs -Q --batch -L lisp -l test/p3-startup-profile-test.el -l test/p3-config-loader-test.el -f ert-run-tests-batch-and-exit
 ```
 
-Then run the current repository Linux ERT command on Linux or `Run Windows config architecture tests` on native Windows. Expected: zero unexpected failures.
+Then run the repository's normal Linux ERT command on Linux or `Run Windows config architecture tests` on native Windows. Expected: zero unexpected failures.
 
 - [ ] **Step 5: Commit CI/docs**
 
@@ -371,13 +396,13 @@ git add .github/workflows/emacs-tests.yml .github/workflows/windows-platform-tes
 git commit -m "test: cover startup profiling across platforms"
 ```
 
-- [ ] **Step 6: Open Phase 2A as a draft PR and collect baseline evidence**
+- [ ] **Step 6: Open a draft Phase 2A PR and collect baseline evidence**
 
-Use title `Instrument Emacs startup for Phase 2 performance work`. The PR must state that it is diagnostics-only. On each available workstation platform, perform three fresh starts using `docs/startup-performance.md` and add the raw reports or faithful phase tables to the PR or issue #80. If a platform is unavailable, say that explicitly; do not substitute hosted-runner wall-clock values.
+Use title `Instrument Emacs startup for Phase 2 performance work`. State explicitly that it is diagnostics-only. On each available workstation platform, perform three fresh starts using `docs/startup-performance.md` and add the raw reports or faithful phase tables to the PR or issue #80. If one workstation platform is unavailable, record that fact rather than substituting hosted-runner wall-clock values.
 
-- [ ] **Step 7: Final review before ready-for-review**
+- [ ] **Step 7: Final review and verification**
 
-Verify all of the following from the diff:
+Verify from the diff:
 
 ```text
 p3/config-load-module still uses exact tracked source via load-file.
@@ -388,4 +413,4 @@ p3/use-package-ensure differs only by the timing wrapper.
 Profiling stops at emacs-startup-hook.
 ```
 
-Then mark ready, require fresh Linux and Windows CI success, and merge Phase 2A separately from Phase 2B.
+Mark the PR ready, require fresh Linux and native-Windows CI success, and merge Phase 2A separately from Phase 2B.
