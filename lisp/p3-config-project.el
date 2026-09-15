@@ -8,11 +8,14 @@
 
 (define-key project-prefix-map (kbd "c") #'p3/project-compile)
 
-;; Route only file visits that are about to be displayed.  Background
-;; `find-file-noselect' reads and reverts must not change workspaces.
+;; Route only file visits that are about to be displayed.  Keep the resolved
+;; project root dynamically available while the visit runs so downstream
+;; project-aware hooks can reuse it.  Background `find-file-noselect' reads and
+;; reverts must not change workspaces.
 (dolist (command '(find-file find-file-other-window))
   (advice-remove command #'p3/project-route-file)
-  (advice-add command :before #'p3/project-route-file))
+  (advice-remove command #'p3/project-with-file-routing)
+  (advice-add command :around #'p3/project-with-file-routing))
 
 ;; Route already-open file buffers as they are displayed.  Consult preview
 ;; switches use `norecord' and are guarded separately below.
