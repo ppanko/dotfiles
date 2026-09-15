@@ -7,7 +7,8 @@
 (defconst p3-r-language-server-test--root
   (file-name-directory
    (directory-file-name
-    (file-name-directory (or load-file-name buffer-file-name)))))
+    (file-name-directory (or load-file-name buffer-file-name))))
+  "Root of the Emacs configuration under test.")
 
 (add-to-list 'load-path (expand-file-name "lisp" p3-r-language-server-test--root))
 (require 'p3-r-language-server)
@@ -73,6 +74,28 @@
     (should (eq (nth 3 captured) t))
     (should (string-match-p "install.packages" (nth 4 captured)))
     (should (string-match-p "dependencies=NA" (nth 4 captured)))))
+
+(ert-deftest p3-r-language-server-readiness-invalidates-after-program-change ()
+  (let* ((tools (make-temp-file "p3-r-ls-readiness-" t))
+         (user-emacs-directory (file-name-as-directory tools))
+         (program (expand-file-name "R" tools))
+         (library (expand-file-name "library" tools))
+         (description (expand-file-name "languageserver/DESCRIPTION" library))
+         (p3/r-language-server-ready nil))
+    (unwind-protect
+        (progn
+          (make-directory (file-name-directory description) t)
+          (with-temp-file program
+            (insert "old-r"))
+          (set-file-modes program #o755)
+          (with-temp-file description
+            (insert "Package: languageserver\n"))
+          (p3/r-language-server-write-state program library)
+          (should (p3/r-language-server-ready-state))
+          (write-region "-changed" nil program t 'silent)
+          (set-file-modes program #o755)
+          (should-not (p3/r-language-server-ready-state)))
+      (delete-directory tools t))))
 
 (provide 'p3-r-language-server-test)
 
