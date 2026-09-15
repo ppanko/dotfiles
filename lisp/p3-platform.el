@@ -136,9 +136,10 @@ When DIRECTORY-P is non-nil, require a directory; otherwise require a file."
       (replace-regexp-in-string "\\\\" "/" path)))))
 
 (defun p3/windows-path-within-p (path directory)
-  "Return non-nil when absolute PATH is DIRECTORY or lies below it."
+  "Return non-nil when absolute Windows PATH is DIRECTORY or lies below it."
   (when (and (stringp path)
-             (file-name-absolute-p path)
+             (or (file-name-absolute-p path)
+                 (string-match-p "\\`[[:alpha:]]:[/\\\\]" path))
              (stringp directory))
     (let* ((path-key (p3/windows-path-key path))
            (directory-key (p3/windows-path-key directory))
