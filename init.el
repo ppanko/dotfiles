@@ -2,6 +2,13 @@
 ;; Establish this before package.el can persist any Custom/package state.
 (setq custom-file (expand-file-name "custom.el" user-emacs-directory))
 
+;; Make the lightweight startup profiler available before package setup so the
+;; package/bootstrap boundary is included in the same report as later modules.
+(defconst p3/lisp-directory
+  (expand-file-name "lisp" user-emacs-directory))
+(add-to-list 'load-path p3/lisp-directory)
+(require 'p3-startup-profile)
+
 ;; Configure package.el.  Missing packages are bootstrapped automatically;
 ;; upgrades are deliberately handled through the package menu.
 (require 'package)
@@ -13,7 +20,8 @@
       '(("gnu" . 30)
         ("nongnu" . 20)
         ("melpa" . 10)))
-(package-initialize)
+(p3/with-startup-profile-phase "package-initialize"
+  (package-initialize))
 
 (defvar p3/package-refresh-attempted nil
   "Non-nil after this Emacs session has attempted an automatic archive refresh.")
@@ -41,37 +49,35 @@
        (package-install package t)))))
 
 ;; Bootstrap use-package itself before loading the literate configuration.
-(p3/package-install-resilient 'use-package)
-(require 'use-package)
-(require 'use-package-ensure)
+(p3/with-startup-profile-phase "use-package-bootstrap"
+  (p3/package-install-resilient 'use-package)
+  (require 'use-package)
+  (require 'use-package-ensure))
 
 (defun p3/use-package-ensure (name args _state)
   "Ensure packages requested by use-package NAME with normalized ARGS."
-  (dolist (ensure args)
-    (let ((package (if (eq ensure t)
-                       (use-package-as-symbol name)
-                     ensure)))
-      (when package
-        (when (consp package)
-          (use-package-pin-package (car package) (cdr package))
-          (setq package (car package)))
-        (condition-case err
-            (p3/package-install-resilient package)
-          (error
-           (display-warning
-            'use-package
-            (format "Failed to install %s: %s"
-                    package
-                    (error-message-string err))
-            :error))))))
+  (p3/with-startup-profile-phase "use-package-ensure"
+    (dolist (ensure args)
+      (let ((package (if (eq ensure t)
+                         (use-package-as-symbol name)
+                       ensure)))
+        (when package
+          (when (consp package)
+            (use-package-pin-package (car package) (cdr package))
+            (setq package (car package)))
+          (condition-case err
+              (p3/package-install-resilient package)
+            (error
+             (display-warning
+              'use-package
+              (format "Failed to install %s: %s"
+                      package
+                      (error-message-string err))
+              :error)))))))
   t)
 
 (setq use-package-ensure-function #'p3/use-package-ensure
       use-package-always-ensure t)
-
-(defconst p3/lisp-directory
-  (expand-file-name "lisp" user-emacs-directory))
-(add-to-list 'load-path p3/lisp-directory)
 
 ;; Local .elc files are machine-local and may lag tracked source after an update.
 ;; Prefer newer source before requiring any local startup library.
