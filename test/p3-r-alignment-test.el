@@ -80,18 +80,18 @@
 (ert-deftest p3-r-alignment-does-not-cross-scope-with-the-same-operator ()
   (should p3-r-alignment-test--loaded)
   (p3-r-alignment-test--with-buffer
-      (concat "outer <- list(\n"
+      (concat "outer <- {\n"
               "  x <- 1\n"
               "  longer_name <- 2\n"
-              ")\n")
+              "}\n")
     (p3-r-align-assignments)
     (should
      (equal
       (buffer-string)
-      (concat "outer <- list(\n"
+      (concat "outer <- {\n"
               "  x           <- 1\n"
               "  longer_name <- 2\n"
-              ")\n")))))
+              "}\n")))))
 
 (ert-deftest p3-r-alignment-keeps-operator-classes-and-separators-independent ()
   (should p3-r-alignment-test--loaded)
