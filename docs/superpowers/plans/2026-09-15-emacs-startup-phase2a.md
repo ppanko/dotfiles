@@ -32,7 +32,7 @@
 
 - [ ] **Step 1: Write failing ERT coverage**
 
-Create `test/p3-startup-profile-test.el` with deterministic tests for aggregation, inactive-wrapper behavior, startup completion, and report formatting:
+Create `test/p3-startup-profile-test.el` with:
 
 ```elisp
 (require 'ert)
@@ -45,14 +45,24 @@ Create `test/p3-startup-profile-test.el` with deterministic tests for aggregatio
 (add-to-list 'load-path (expand-file-name "lisp" p3-startup-profile-test--root))
 (require 'p3-startup-profile)
 
+(ert-deftest p3-startup-profile-wrapper-records-elapsed-time ()
+  (let ((p3/startup-profile-active t)
+        (p3/startup-profile-phases nil)
+        (times '(10.0 10.25)))
+    (cl-letf (((symbol-function 'float-time)
+               (lambda (&optional _time)
+                 (prog1 (car times) (setq times (cdr times))))))
+      (should (eq (p3/with-startup-profile-phase "example" 'ok) 'ok)))
+    (should (equal p3/startup-profile-phases '(("example" 0.25 1))))))
+
 (ert-deftest p3-startup-profile-records-and-aggregates ()
   (let ((p3/startup-profile-active t)
         (p3/startup-profile-phases nil))
-    (p3/startup-profile-record "ensure" 0.10)
-    (p3/startup-profile-record "other" 0.20)
-    (p3/startup-profile-record "ensure" 0.30)
+    (p3/startup-profile-record "ensure" 0.125)
+    (p3/startup-profile-record "other" 0.25)
+    (p3/startup-profile-record "ensure" 0.375)
     (should (equal p3/startup-profile-phases
-                   '(("ensure" 0.40 2) ("other" 0.20 1))))))
+                   '(("ensure" 0.5 2) ("other" 0.25 1))))))
 
 (ert-deftest p3-startup-profile-wrapper-skips-clock-after-startup ()
   (let ((p3/startup-profile-active nil)
@@ -92,9 +102,9 @@ emacs -Q --batch -L lisp -l test/p3-startup-profile-test.el -f ert-run-tests-bat
 
 Expected: failure because `p3-startup-profile` does not exist.
 
-- [ ] **Step 3: Implement the minimal profiler**
+- [ ] **Step 3: Implement the profiler**
 
-Create `lisp/p3-startup-profile.el` with normal file commentary/docstrings and this behavior:
+Create `lisp/p3-startup-profile.el` with normal file commentary/docstrings and this implementation:
 
 ```elisp
 (defvar p3/startup-profile-active t)
@@ -187,7 +197,7 @@ git commit -m "feat: add startup profiling core"
 - Adds stable names `package-initialize`, `use-package-bootstrap`, `use-package-ensure`, `config-cache-validate`, `config-cache-build`, `config-cache-load`, and `module:<feature>`.
 - `p3/config-load-module` remains exact-source `load-file` in Phase 2A.
 
-- [ ] **Step 1: Add failing loader-phase tests**
+- [ ] **Step 1: Add failing boundary tests**
 
 Append to `test/p3-config-loader-test.el`:
 
@@ -229,15 +239,15 @@ Append to `test/p3-config-loader-test.el`:
     (should (assoc-string "config-cache-build" p3/startup-profile-phases))))
 ```
 
-Append to `test/p3-startup-profile-test.el` a source-contract test that reads `init.el`, returns to `point-min`, and `search-forward`s for all three exact strings:
+Append to `test/p3-startup-profile-test.el` a source-contract test that reads `init.el`, returns to `point-min`, and uses `search-forward` for each exact fragment below:
 
-```elisp
+```text
 p3/with-startup-profile-phase "package-initialize"
 p3/with-startup-profile-phase "use-package-bootstrap"
 p3/with-startup-profile-phase "use-package-ensure"
 ```
 
-The source-contract test is intentional because loading the real `init.el` in CI would permit network-dependent package bootstrap.
+This source-contract test avoids a network-dependent full `init.el` execution in CI.
 
 - [ ] **Step 2: Run focused tests and verify RED**
 
@@ -269,7 +279,7 @@ Use:
   (require 'use-package-ensure))
 ```
 
-Wrap the existing `p3/use-package-ensure` body without changing its package logic:
+Wrap the existing ensure body exactly as follows:
 
 ```elisp
 (defun p3/use-package-ensure (name args _state)
