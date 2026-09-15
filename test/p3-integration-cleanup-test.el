@@ -154,7 +154,7 @@
 (ert-deftest p3-integration-python-signaled-bootstrap-failure-is-latched ()
   (let* ((tools (make-temp-file "p3-python-bootstrap-error-" t))
          (p3/python-language-server-bootstrap-failed nil)
-         (calls 0))
+         (calls 0)
          warnings)
     (unwind-protect
         (cl-letf (((symbol-function 'executable-find)
@@ -241,6 +241,25 @@
               "C:/Program Files/R/R-4.6.1/bin/Rterm.exe"))
       (should (= rtools-scans 1))
       (should (= r-scans 1)))))
+
+(ert-deftest p3-integration-windows-r-override-invalidates-selection-cache ()
+  (let ((system-type 'windows-nt)
+        (p3/windows-r-program-override nil)
+        (p3/windows-r-program-selection-cache :uninitialized)
+        (discoveries 0))
+    (cl-letf (((symbol-function 'p3/windows-latest-r-program)
+               (lambda ()
+                 (setq discoveries (1+ discoveries))
+                 "C:/Program Files/R/R-4.6.1/bin/Rterm.exe"))
+              ((symbol-function 'file-regular-p)
+               (lambda (_path) t)))
+      (should
+       (equal (p3/windows-select-r-program)
+              "C:/Program Files/R/R-4.6.1/bin/Rterm.exe"))
+      (setq p3/windows-r-program-override "D:/R/bin/Rterm.exe")
+      (should
+       (equal (p3/windows-select-r-program) "D:/R/bin/Rterm.exe"))
+      (should (= discoveries 1)))))
 
 (ert-deftest p3-integration-routed-file-visit-reuses-resolved-project-root ()
   (should (fboundp 'p3/project-with-file-routing))
