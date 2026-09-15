@@ -38,6 +38,9 @@
 (defvar p3/r-language-server-ready nil
   "Cons of R program and managed library known usable this session.")
 
+(defvar p3/r-language-server-ready-fingerprint nil
+  "Cheap local fingerprint of the R executable backing readiness state.")
+
 (defvar p3/r-language-server-warning-key nil
   "Last R language-server setup problem already reported this session.")
 
@@ -106,16 +109,38 @@
            (p3/r-language-server-platform-key))
    (p3/r-language-server-tool-root)))
 
+(defun p3/r-program-fingerprint (program)
+  "Return a cheap local fingerprint for PROGRAM, or nil when unavailable.
+The fingerprint uses only filesystem metadata and never launches R, so it is
+safe to compare from a file-visit hook."
+  (condition-case nil
+      (let* ((resolved (file-truename program))
+             (attributes (file-attributes resolved 'string)))
+        (when attributes
+          (list resolved
+                (file-attribute-size attributes)
+                (file-attribute-modification-time attributes)
+                (file-attribute-file-identifier attributes))))
+    (file-error nil)))
+
 (defun p3/r-language-server-write-state (program library)
   "Persist PROGRAM and LIBRARY as the prepared R semantic-tool state."
-  (let ((state (cons program library))
-        (file (p3/r-language-server-state-file)))
+  (let* ((fingerprint (p3/r-program-fingerprint program))
+         (ready (cons program library))
+         (state (and fingerprint
+                     (list :program program
+                           :library library
+                           :fingerprint fingerprint)))
+         (file (p3/r-language-server-state-file)))
+    (unless state
+      (user-error "Cannot fingerprint R executable for semantic-tool readiness"))
     (make-directory (file-name-directory file) t)
     (with-temp-file file
       (prin1 state (current-buffer))
       (insert "\n"))
-    (setq p3/r-language-server-ready state)
-    state))
+    (setq p3/r-language-server-ready ready
+          p3/r-language-server-ready-fingerprint fingerprint)
+    ready))
 
 (defun p3/r-language-server-read-state ()
   "Return persisted prepared R semantic-tool state, or nil when unavailable."
@@ -124,31 +149,46 @@
       (condition-case nil
           (with-temp-buffer
             (insert-file-contents file)
-            (let ((state (read (current-buffer))))
-              (and (consp state)
-                   (stringp (car state))
-                   (stringp (cdr state))
+            (let* ((state (read (current-buffer)))
+                   (program (plist-get state :program))
+                   (library (plist-get state :library))
+                   (fingerprint (plist-get state :fingerprint)))
+              (and (listp state)
+                   (stringp program)
+                   (stringp library)
+                   (listp fingerprint)
                    state)))
         (error nil)))))
 
 (defun p3/r-language-server-clear-state ()
   "Forget persisted and in-session R semantic-tool readiness."
-  (setq p3/r-language-server-ready nil)
+  (setq p3/r-language-server-ready nil
+        p3/r-language-server-ready-fingerprint nil)
   (let ((file (p3/r-language-server-state-file)))
     (when (file-exists-p file)
       (delete-file file))))
 
 (defun p3/r-language-server-ready-state ()
   "Return prepared R semantic-tool state using only cheap local checks."
-  (when-let* ((state (or p3/r-language-server-ready
+  (let* ((persisted (and (null p3/r-language-server-ready)
                          (p3/r-language-server-read-state)))
-              (program (car state))
-              (library (cdr state))
-              ((file-executable-p program))
-              ((file-readable-p
-                (expand-file-name "languageserver/DESCRIPTION" library))))
-    (setq p3/r-language-server-ready state)
-    state))
+         (state (or p3/r-language-server-ready
+                    (and persisted
+                         (cons (plist-get persisted :program)
+                               (plist-get persisted :library)))))
+         (fingerprint (or p3/r-language-server-ready-fingerprint
+                          (and persisted (plist-get persisted :fingerprint)))))
+    (when-let* ((state state)
+                (program (car state))
+                (library (cdr state))
+                ((file-executable-p program))
+                ((file-readable-p
+                  (expand-file-name "languageserver/DESCRIPTION" library)))
+                (current-fingerprint (p3/r-program-fingerprint program))
+                ((equal fingerprint current-fingerprint)))
+      (setq p3/r-language-server-ready state
+            p3/r-language-server-ready-fingerprint current-fingerprint)
+      state)))
 
 (defun p3/r-string-literal (text)
   "Return TEXT as a double-quoted R string literal."
@@ -235,7 +275,9 @@ Return non-nil only when the installed package can subsequently be loaded."
                ((p3/r-language-server-installed-p program library)
                 (setq p3/r-language-server-bootstrap-failed nil
                       p3/r-language-server-warning-key nil
-                      p3/r-language-server-ready key)
+                      p3/r-language-server-ready key
+                      p3/r-language-server-ready-fingerprint
+                      (p3/r-program-fingerprint program))
                 library)
                ((equal p3/r-language-server-bootstrap-failed key)
                 nil)
@@ -245,7 +287,9 @@ Return non-nil only when the installed package can subsequently be loaded."
                         (progn
                           (setq p3/r-language-server-bootstrap-failed nil
                                 p3/r-language-server-warning-key nil
-                                p3/r-language-server-ready key)
+                                p3/r-language-server-ready key
+                                p3/r-language-server-ready-fingerprint
+                                (p3/r-program-fingerprint program))
                           library)
                       (setq p3/r-language-server-bootstrap-failed key)
                       nil)
