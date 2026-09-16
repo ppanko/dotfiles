@@ -90,7 +90,7 @@
           displayed)
       (puthash "/tmp/project/" "R:project" p3/ess-project-processes)
       (cl-letf (((symbol-function 'p3/project-root)
-                 (lambda () "/tmp/project/"))
+                 (lambda (&optional _error-on-unavailable) "/tmp/project/"))
                 ((symbol-function 'p3/ess-process-live-p)
                  (lambda (name) (equal name "R:project")))
                 ((symbol-function 'p3/ess-display-process)
@@ -112,7 +112,7 @@
           seen-directory
           seen-args)
       (cl-letf (((symbol-function 'p3/project-root)
-                 (lambda () "/tmp/project/")))
+                 (lambda (&optional _error-on-unavailable) "/tmp/project/")))
         (p3/ess-project-aware-R
          (lambda (&optional start-args)
            (setq seen-directory default-directory
@@ -129,7 +129,7 @@
           seen-args)
       (puthash "/tmp/project/" "R:project" p3/ess-project-processes)
       (cl-letf (((symbol-function 'p3/project-root)
-                 (lambda () "/tmp/project/"))
+                 (lambda (&optional _error-on-unavailable) "/tmp/project/"))
                 ((symbol-function 'p3/ess-process-live-p)
                  (lambda (_name) t))
                 ((symbol-function 'p3/ess-display-process)
