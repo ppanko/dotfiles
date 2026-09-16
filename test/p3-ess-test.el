@@ -82,6 +82,46 @@
                         'ess-local-process-name (current-buffer))
                        "R:new"))))))
 
+(ert-deftest p3-ess-project-aware-R-reuses-live-project-process ()
+  (with-temp-buffer
+    (let ((default-directory "/tmp/")
+          (p3/ess-project-processes (make-hash-table :test #'equal))
+          seen-process
+          seen-directory)
+      (puthash "/tmp/project/" "R:project" p3/ess-project-processes)
+      (cl-letf (((symbol-function 'p3/project-root)
+                 (lambda () "/tmp/project/"))
+                ((symbol-function 'p3/ess-process-live-p)
+                 (lambda (name) (equal name "R:project"))))
+        (should
+         (eq (p3/ess-project-aware-R
+              (lambda (&optional _start-args)
+                (setq seen-process ess-local-process-name
+                      seen-directory default-directory)
+                'reused))
+             'reused))
+        (should (equal seen-process "R:project"))
+        (should (equal seen-directory "/tmp/project/"))))))
+
+(ert-deftest p3-ess-project-aware-R-starts-new-process-at-project-root ()
+  (with-temp-buffer
+    (let ((default-directory "/tmp/")
+          (p3/ess-project-processes (make-hash-table :test #'equal))
+          seen-process
+          seen-directory
+          seen-args)
+      (cl-letf (((symbol-function 'p3/project-root)
+                 (lambda () "/tmp/project/")))
+        (p3/ess-project-aware-R
+         (lambda (&optional start-args)
+           (setq seen-process ess-local-process-name
+                 seen-directory default-directory
+                 seen-args start-args))
+         '(4))
+        (should-not seen-process)
+        (should (equal seen-directory "/tmp/project/"))
+        (should (equal seen-args '(4)))))))
+
 (ert-deftest p3-ess-source-context-caches-project-root-before-redisplay ()
   (should (fboundp 'p3/ess-cache-project-root))
   (with-temp-buffer
@@ -134,6 +174,18 @@
           (p3/ess-install-process-advice)
           (should (advice-member-p #'p3/ess-ensure-project-process symbol)))
       (advice-remove symbol #'p3/ess-ensure-project-process)
+      (fmakunbound symbol))))
+
+(ert-deftest p3-ess-install-R-advice-is-idempotent ()
+  (let ((symbol 'p3-ess-test--R))
+    (fset symbol (lambda (&optional _start-args) nil))
+    (unwind-protect
+        (cl-letf (((symbol-function 'p3/ess-R-command-symbol)
+                   (lambda () symbol)))
+          (p3/ess-install-R-advice)
+          (p3/ess-install-R-advice)
+          (should (advice-member-p #'p3/ess-project-aware-R symbol)))
+      (advice-remove symbol #'p3/ess-project-aware-R)
       (fmakunbound symbol))))
 
 (provide 'p3-ess-test)
