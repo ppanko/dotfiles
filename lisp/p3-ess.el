@@ -118,7 +118,7 @@ invocation so semantic contexts such as Org project headings remain
 point-sensitive.  With an explicit startup argument, preserve ESS behavior and
 start a new process."
   (let* ((root (p3/ess--canonical-root
-                (or (p3/project-root) default-directory)))
+                (or (p3/project-root t) default-directory)))
          (start-args (car args))
          (process (and (null start-args)
                        (p3/ess-project-process-for-root root)))
