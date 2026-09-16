@@ -22,7 +22,7 @@
 (defun p3-config-org-test--forms (relative)
   "Read all top-level Lisp forms from RELATIVE."
   (with-temp-buffer
-    (insert-file-contents (p3-config-org-test--path relative))
+    (insert-file-contents (p3-config-test--path relative))
     (goto-char (point-min))
     (let (forms)
       (condition-case nil
@@ -67,6 +67,10 @@
     (should (integerp behavior))
     (should (integerp binding))
     (should (< behavior binding))))
+
+(ert-deftest p3-config-org-image-behavior-does-not-own-config ()
+  (let ((contents (p3-config-org-test--contents "lisp/p3-org-image.el")))
+    (should-not (string-match-p "p3-config-" contents))))
 
 (ert-deftest p3-config-org-preserves-core-settings-and-timestamp-hook ()
   (let ((forms (p3-config-org-test--forms "lisp/p3-config-org.el")))
