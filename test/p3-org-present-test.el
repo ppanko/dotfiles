@@ -68,13 +68,29 @@
                 visual-fill-column-width 72
                 visual-fill-column-center-text nil
                 hide-mode-line-mode t)
-    (let (big-called
+    (let ((frame 'presentation-frame)
+          (tab-bar-lines 1)
+          big-called
           small-called
           images-displayed
           images-removed
           remap-adds
           remap-removes)
-      (cl-letf (((symbol-function 'display-line-numbers-mode)
+      (cl-letf (((symbol-function 'selected-frame)
+                 (lambda () frame))
+                ((symbol-function 'frame-parameter)
+                 (lambda (candidate parameter)
+                   (when (and (eq candidate frame)
+                              (eq parameter 'tab-bar-lines))
+                     tab-bar-lines)))
+                ((symbol-function 'set-frame-parameter)
+                 (lambda (candidate parameter value)
+                   (when (and (eq candidate frame)
+                              (eq parameter 'tab-bar-lines))
+                     (setq tab-bar-lines value))))
+                ((symbol-function 'frame-live-p)
+                 (lambda (candidate) (eq candidate frame)))
+                ((symbol-function 'display-line-numbers-mode)
                  (lambda (arg)
                    (setq-local display-line-numbers-mode (> arg 0))))
                 ((symbol-function 'org-present-big)
@@ -112,12 +128,15 @@
         (should (= visual-fill-column-width 90))
         (should visual-fill-column-center-text)
         (should hide-mode-line-mode)
+        (should (= tab-bar-lines 0))
         (should (= (length remap-adds) 3))
         (should (member '(org-level-1 (:height 1.5)) remap-adds))
         (should (member '(org-level-2 (:height 1.2)) remap-adds))
         (should (member '(org-level-3 (:height 1.1)) remap-adds))
         (should (equal (plist-get p3/org-present--state :header-line)
                        "old header"))
+        (should (eq (plist-get p3/org-present--state :frame) frame))
+        (should (= (plist-get p3/org-present--state :tab-bar-lines) 1))
         (should (plist-get p3/org-present--state :line-numbers))
         (should-not (plist-get p3/org-present--state :inline-images))
         (should-not (plist-get p3/org-present--state :visual-fill))
@@ -134,6 +153,7 @@
         (should (= visual-fill-column-width 72))
         (should-not visual-fill-column-center-text)
         (should hide-mode-line-mode)
+        (should (= tab-bar-lines 1))
         (should (= (length remap-removes) 3))
         (should-not p3/org-present--state)))))
 
