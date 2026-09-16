@@ -42,16 +42,25 @@
 
 (defun p3/org-present-hook ()
   "Prepare the current Org buffer for presentation mode."
-  (setq-local p3/org-present--state
-              (list :header-line header-line-format
-                    :line-numbers (bound-and-true-p display-line-numbers-mode)
-                    :inline-images (and (boundp 'org-inline-image-overlays)
-                                        org-inline-image-overlays)
-                    :visual-fill (bound-and-true-p visual-fill-column-mode)
-                    :visual-fill-width visual-fill-column-width
-                    :visual-fill-center visual-fill-column-center-text
-                    :hide-mode-line (bound-and-true-p hide-mode-line-mode)
-                    :face-remap-cookies nil))
+  (let ((frame (selected-frame)))
+    (setq-local p3/org-present--state
+                (list :frame frame
+                      :tab-bar-lines (frame-parameter frame 'tab-bar-lines)
+                      :tab-bar-lines-keep-state
+                      (frame-parameter frame 'tab-bar-lines-keep-state)
+                      :header-line header-line-format
+                      :line-numbers (bound-and-true-p display-line-numbers-mode)
+                      :inline-images (and (boundp 'org-inline-image-overlays)
+                                          org-inline-image-overlays)
+                      :visual-fill (bound-and-true-p visual-fill-column-mode)
+                      :visual-fill-width visual-fill-column-width
+                      :visual-fill-center visual-fill-column-center-text
+                      :hide-mode-line (bound-and-true-p hide-mode-line-mode)
+                      :face-remap-cookies nil))
+    ;; Project workspaces use the native tab bar globally.  Freeze a frame-local
+    ;; override while presenting so tab-bar refreshes cannot reclaim the row.
+    (set-frame-parameter frame 'tab-bar-lines-keep-state t)
+    (set-frame-parameter frame 'tab-bar-lines 0))
   (setq-local header-line-format " ")
   (display-line-numbers-mode -1)
   (org-present-big)
@@ -93,7 +102,14 @@
           (hide-mode-line-mode +1)
         (hide-mode-line-mode -1))
       (dolist (cookie (plist-get state :face-remap-cookies))
-        (face-remap-remove-relative cookie)))
+        (face-remap-remove-relative cookie))
+      (let ((frame (plist-get state :frame)))
+        (when (and frame (frame-live-p frame))
+          (set-frame-parameter frame 'tab-bar-lines
+                               (plist-get state :tab-bar-lines))
+          (set-frame-parameter frame 'tab-bar-lines-keep-state
+                               (plist-get state
+                                          :tab-bar-lines-keep-state)))))
     (setq-local p3/org-present--state nil)))
 
 (defun p3/org-present-prev ()
