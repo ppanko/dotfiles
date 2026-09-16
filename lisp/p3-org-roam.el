@@ -89,6 +89,17 @@
   (when-let ((normalized (p3/project-normalize-root root)))
     (cdr (assoc normalized p3/org-roam-project-associations))))
 
+(defun p3/org-roam-project-root-for-hub-id (hub-id)
+  "Return the preferred available local root associated with HUB-ID.
+Associations are stored most-recent-first, so when one hub deliberately owns
+multiple clones or worktrees, the most recently established available root is
+used as the process context."
+  (catch 'root
+    (dolist (association p3/org-roam-project-associations)
+      (when (equal (cdr association) hub-id)
+        (when-let ((root (p3/project-normalize-root (car association))))
+          (throw 'root root))))))
+
 (defun p3/org-roam-project-associate-root (root hub-id &optional replace)
   "Associate local project ROOT with HUB-ID.
 When REPLACE is non-nil, replace an existing different mapping explicitly."
@@ -152,10 +163,23 @@ Signal `user-error' when the stored identity is stale or invalid."
       (goto-char (point-min))
       (org-entry-get (point) "P3_PROJECT" nil))))
 
+(defun p3/org-roam--explicit-project-context ()
+  "Return explicit heading or file-level P3_PROJECT context at point."
+  (or (p3/org-roam--nearest-heading-project-id)
+      (p3/org-roam--file-project-id-live)))
+
+(defun p3/org-roam-associated-project-root ()
+  "Return the local project root explicitly associated with Org context.
+Only durable heading/file `P3_PROJECT' metadata participates here; filesystem
+fallback remains owned by `p3/project-root'."
+  (when-let ((hub-id (p3/org-roam--explicit-project-context)))
+    (p3/org-roam-project-root-for-hub-id hub-id)))
+
+(add-hook 'p3/project-context-functions #'p3/org-roam-associated-project-root)
+
 (defun p3/org-roam-project-context ()
   "Return the current durable literate-project hub ID, or nil."
-  (or (p3/org-roam--nearest-heading-project-id)
-      (p3/org-roam--file-project-id-live)
+  (or (p3/org-roam--explicit-project-context)
       (when-let ((root (p3/project-root)))
         (p3/org-roam-project-hub-id-for-root root))))
 
