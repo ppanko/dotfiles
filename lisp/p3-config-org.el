@@ -5,9 +5,17 @@
 
 (defvar org-agenda-sorting-strategy)
 (defvar org-confirm-babel-evaluate)
+(defvar org-download-annotate-function)
+(defvar org-download-heading-lvl)
+(defvar org-download-image-dir)
+(defvar org-download-method)
+(defvar org-download-timestamp)
 (defvar org-ellipsis)
 (defvar org-file-apps)
 (defvar org-hide-emphasis-markers)
+(defvar org-image-actual-width)
+(defvar org-image-align)
+(defvar org-image-max-width)
 (defvar org-latex-pdf-process)
 (defvar org-mode-map)
 (defvar org-src-fontify-natively)
@@ -15,6 +23,7 @@
 (defvar org-startup-folded)
 (defvar org-todo-keyword-faces)
 (defvar org-todo-keywords)
+(defvar p3/org-image-command-map)
 (defvar time-stamp-active)
 (defvar time-stamp-end)
 (defvar time-stamp-format)
@@ -57,9 +66,25 @@
         org-src-fontify-natively t
         org-src-tab-acts-natively t
         org-hide-emphasis-markers t
-        org-ellipsis " ↴"))
+        org-ellipsis " ↴"
+        org-image-actual-width nil
+        org-image-align 'center
+        org-image-max-width 'window))
 
 (define-key org-mode-map (kbd "C-c C-x C-o") #'p3/org-sort-todos)
+(define-key org-mode-map (kbd "C-c I") p3/org-image-command-map)
+
+(use-package org-download
+  :after org
+  :commands (org-download-enable org-download-screenshot)
+  :hook (org-mode . org-download-enable)
+  :init
+  (setq-default org-download-image-dir "images"
+                org-download-heading-lvl nil)
+  :config
+  (setq org-download-method 'directory
+        org-download-timestamp "%Y%m%d-%H%M%S-"
+        org-download-annotate-function #'p3/org-image-no-annotation))
 
 (setq org-latex-pdf-process
       '("pdflatex -interaction nonstopmode -output-directory %o %f"
