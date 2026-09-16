@@ -100,7 +100,31 @@
              org-src-fontify-natively t
              org-src-tab-acts-natively t
              org-hide-emphasis-markers t
-             org-ellipsis " ↴")))))
+             org-ellipsis " ↴"
+             org-image-actual-width nil
+             org-image-align 'center
+             org-image-max-width 'window)))))
+
+(ert-deftest p3-config-org-wires-image-insertion-and-layout-prefix ()
+  (let ((forms (p3-config-org-test--forms "lisp/p3-config-org.el")))
+    (should
+     (member
+      '(define-key org-mode-map (kbd "C-c I") p3/org-image-command-map)
+      forms))
+    (should
+     (equal
+      (p3-config-org-test--use-package-form 'org-download)
+      '(use-package org-download
+         :after org
+         :commands (org-download-enable org-download-screenshot)
+         :hook (org-mode . org-download-enable)
+         :init
+         (setq-default org-download-image-dir "images"
+                       org-download-heading-lvl nil)
+         :config
+         (setq org-download-method 'directory
+               org-download-timestamp "%Y%m%d-%H%M%S-"
+               org-download-annotate-function #'p3/org-image-no-annotation))))))
 
 (ert-deftest p3-config-org-preserves-export-pdf-and-agenda-wiring ()
   (let* ((forms (p3-config-org-test--forms "lisp/p3-config-org.el"))
