@@ -30,15 +30,16 @@
 
 **Files:**
 - Create: `test/fixtures/p3-terminal-fixture.py`
+- Create: `test/p3-terminal-test-support.el`
 - Create: `test/p3-eat-feasibility-test.el`
 - Modify: `.github/workflows/emacs-tests.yml`
 - Modify: `.github/workflows/windows-platform-tests.yml`
 
 **Interfaces:**
 - Consumes: the existing Windows MSYS2 test environment exposed through `P3_TEST_MSYS2_ROOT`; upstream public `eat-eshell-mode`.
-- Produces: a permanent cross-platform terminal fixture and a binary feasibility decision. Tasks 2-8 are blocked until both platform gates pass.
+- Produces: `p3-terminal-test-support-prepare-platform`, `p3-terminal-test-support-python`, and `p3-terminal-test-support-run-fixture`; a binary feasibility decision. Tasks 2-7 are blocked until both platform gates pass.
 
-- [ ] **Step 1: Add a deterministic terminal fixture**
+- [ ] **Step 1: Add the deterministic terminal program**
 
 Create `test/fixtures/p3-terminal-fixture.py`:
 
@@ -59,45 +60,39 @@ except OSError:
 
 print(f"__P3_TTY__{stdin_tty}:{stdout_tty}", flush=True)
 print(f"__P3_SIZE__{columns}:{lines}", flush=True)
-
-# Enter alternate screen, clear it, and use cursor addressing. The test inspects
-# the live Eat-rendered region before sending the byte that lets this process exit.
 sys.stdout.write("\x1b[?1049h\x1b[2J\x1b[H__P3_TOP__")
 sys.stdout.write("\x1b[2;5H__P3_CURSOR__")
 sys.stdout.flush()
-
 byte = sys.stdin.buffer.read(1)
-
 sys.stdout.write("\x1b[?1049l")
 sys.stdout.flush()
 print(f"__P3_INPUT__{byte.hex()}", flush=True)
 sys.exit(exit_code)
 ```
 
-- [ ] **Step 2: Write the feasibility ERT test without touching production shell code**
+- [ ] **Step 2: Add shared terminal-test support**
 
-Create `test/p3-eat-feasibility-test.el`:
+Create `test/p3-terminal-test-support.el`:
 
 ```elisp
-;;; p3-eat-feasibility-test.el --- Eat/Eshell platform gate -*- lexical-binding: t; -*-
+;;; p3-terminal-test-support.el --- Shared terminal test helpers -*- lexical-binding: t; -*-
 
 (require 'ert)
 (require 'eshell)
 (require 'esh-proc)
-(require 'eat)
 (require 'p3-platform)
 
-(defconst p3-eat-feasibility-test--root
+(defconst p3-terminal-test-support-root
   (file-name-directory
    (directory-file-name
     (file-name-directory (or load-file-name buffer-file-name)))))
 
-(defun p3-eat-feasibility-test--python ()
+(defun p3-terminal-test-support-python ()
   (or (executable-find "python3")
       (executable-find "python")
-      (ert-skip "Python is unavailable for Eat terminal fixture")))
+      (ert-skip "Python is unavailable for terminal fixture")))
 
-(defun p3-eat-feasibility-test--prepare-platform ()
+(defun p3-terminal-test-support-prepare-platform ()
   (when (eq system-type 'windows-nt)
     (let* ((msys-root
             (or (getenv "P3_TEST_MSYS2_ROOT")
@@ -107,71 +102,114 @@ Create `test/p3-eat-feasibility-test.el`:
       (setq linuxy-environment-path usr-bin)
       (p3/windows-path-prepend usr-bin))))
 
-(defun p3-eat-feasibility-test--run-fixture (exit-code)
-  (p3-eat-feasibility-test--prepare-platform)
-  (let* ((name "*p3-eat-feasibility*")
-         (eshell-buffer-name name)
-         (fixture (expand-file-name "test/fixtures/p3-terminal-fixture.py"
-                                    p3-eat-feasibility-test--root))
-         (python (p3-eat-feasibility-test--python))
-         (eat-eshell-fallback-if-stty-not-available t)
-         (buffer (save-window-excursion (eshell)))
+(defun p3-terminal-test-support-run-fixture (buffer exit-code)
+  "Run the terminal fixture in BUFFER and return an observation plist."
+  (let* ((fixture (expand-file-name "test/fixtures/p3-terminal-fixture.py"
+                                    p3-terminal-test-support-root))
+         (python (p3-terminal-test-support-python))
+         (command (mapconcat #'shell-quote-argument
+                             (list python fixture (number-to-string exit-code))
+                             " "))
+         timer
+         timeout-timer
          observed-terminal
          observed-raw-escape
          input-sent)
-    (unwind-protect
-        (progn
-          (eat-eshell-mode 1)
-          (with-current-buffer buffer
-            (run-at-time
-             0.4 nil
-             (lambda ()
-               (when (buffer-live-p buffer)
-                 (with-current-buffer buffer
+    (setq timer
+          (run-at-time
+           0.05 0.05
+           (lambda ()
+             (when (buffer-live-p buffer)
+               (with-current-buffer buffer
+                 (when-let ((proc (eshell-head-process)))
                    (save-excursion
                      (goto-char (point-min))
-                     (setq observed-terminal
-                           (and (search-forward "__P3_CURSOR__" nil t) t))
-                     (goto-char (point-min))
-                     (setq observed-raw-escape
-                           (search-forward "\033[" nil t)))
-                   (when-let ((proc (eshell-head-process)))
-                     (process-send-string proc "x")
-                     (setq input-sent t))))))
+                     (when (search-forward "__P3_CURSOR__" nil t)
+                       (setq observed-terminal t)
+                       (goto-char (point-min))
+                       (setq observed-raw-escape
+                             (search-forward "\033[" nil t))
+                       (process-send-string proc "x")
+                       (setq input-sent t)
+                       (cancel-timer timer)))))))))
+    (setq timeout-timer
+          (run-at-time
+           5 nil
+           (lambda ()
+             (when (buffer-live-p buffer)
+               (with-current-buffer buffer
+                 (when-let ((proc (eshell-head-process)))
+                   (delete-process proc)))))))
+    (unwind-protect
+        (progn
+          (with-current-buffer buffer
             (goto-char (point-max))
-            (insert (mapconcat #'shell-quote-argument
-                               (list python fixture
-                                     (number-to-string exit-code))
-                               " "))
-            (eshell-send-input)
-            (should input-sent)
-            (should observed-terminal)
-            (should-not observed-raw-escape)
-            (should (save-excursion
-                      (goto-char (point-min))
-                      (re-search-forward "__P3_TTY__1:1" nil t)))
-            (should (save-excursion
-                      (goto-char (point-min))
-                      (re-search-forward
-                       "__P3_SIZE__[1-9][0-9]*:[1-9][0-9]*" nil t)))
-            (should (save-excursion
-                      (goto-char (point-min))
-                      (re-search-forward "__P3_INPUT__78" nil t)))))
-      (when (buffer-live-p buffer)
-        (let ((kill-buffer-query-functions nil))
-          (kill-buffer buffer))))))
+            (insert command)
+            (eshell-send-input))
+          (with-current-buffer buffer
+            (let (tty size input)
+              (save-excursion
+                (goto-char (point-min))
+                (when (re-search-forward "__P3_TTY__\\([01]:[01]\\)" nil t)
+                  (setq tty (match-string-no-properties 1)))
+                (goto-char (point-min))
+                (when (re-search-forward
+                       "__P3_SIZE__\\([0-9]+\\):\\([0-9]+\\)" nil t)
+                  (setq size (cons (string-to-number
+                                    (match-string-no-properties 1))
+                                   (string-to-number
+                                    (match-string-no-properties 2)))))
+                (goto-char (point-min))
+                (when (re-search-forward "__P3_INPUT__\\([0-9a-f]+\\)" nil t)
+                  (setq input (match-string-no-properties 1))))
+              (list :terminal observed-terminal
+                    :raw-escape observed-raw-escape
+                    :input-sent input-sent
+                    :tty tty
+                    :size size
+                    :input input))))
+      (when (timerp timer) (cancel-timer timer))
+      (when (timerp timeout-timer) (cancel-timer timeout-timer)))))
+
+(provide 'p3-terminal-test-support)
+```
+
+- [ ] **Step 3: Write the feasibility ERT gate without changing production shell code**
+
+Create `test/p3-eat-feasibility-test.el`:
+
+```elisp
+;;; p3-eat-feasibility-test.el --- Eat/Eshell platform gate -*- lexical-binding: t; -*-
+
+(require 'ert)
+(require 'eat)
+(require 'p3-terminal-test-support)
 
 (ert-deftest p3-eat-feasibility-supported-eshell-terminal-path ()
-  (p3-eat-feasibility-test--prepare-platform)
+  (p3-terminal-test-support-prepare-platform)
   (should (executable-find "stty"))
   (should (executable-find "env"))
   (should (executable-find "sh"))
-  (p3-eat-feasibility-test--run-fixture 0))
+  (let* ((eshell-buffer-name "*p3-eat-feasibility*")
+         (eat-eshell-fallback-if-stty-not-available t)
+         (buffer (save-window-excursion (eshell))))
+    (unwind-protect
+        (progn
+          (eat-eshell-mode 1)
+          (let ((result (p3-terminal-test-support-run-fixture buffer 0)))
+            (should (plist-get result :terminal))
+            (should-not (plist-get result :raw-escape))
+            (should (plist-get result :input-sent))
+            (should (equal (plist-get result :tty) "1:1"))
+            (should (equal (plist-get result :input) "78"))
+            (should (> (car (plist-get result :size)) 0))
+            (should (> (cdr (plist-get result :size)) 0))))
+      (when (buffer-live-p buffer)
+        (let ((kill-buffer-query-functions nil))
+          (kill-buffer buffer))))))
 ```
 
-This deliberately exercises Eat's supported integration rather than reproducing its private process setup.
-
-- [ ] **Step 3: Run the gate locally on GNU/Linux**
+- [ ] **Step 4: Run the gate locally on GNU/Linux**
 
 ```bash
 rm -rf /tmp/p3-eat-elpa
@@ -183,7 +221,7 @@ emacs -Q --batch \
   --eval '(package-refresh-contents)' \
   --eval '(package-install (quote eat))'
 
-emacs -Q --batch -L lisp \
+emacs -Q --batch -L lisp -L test \
   --eval '(require (quote package))' \
   --eval '(setq package-user-dir "/tmp/p3-eat-elpa")' \
   --eval '(package-initialize)' \
@@ -193,9 +231,9 @@ emacs -Q --batch -L lisp \
 
 Expected: PASS.
 
-- [ ] **Step 4: Add exact Linux CI steps for the gate**
+- [ ] **Step 5: Add the Linux CI gate**
 
-Append before the regular ERT suite in `.github/workflows/emacs-tests.yml`:
+Add before the regular ERT suite in `.github/workflows/emacs-tests.yml`:
 
 ```yaml
       - name: Install Eat feasibility dependency
@@ -208,18 +246,18 @@ Append before the regular ERT suite in `.github/workflows/emacs-tests.yml`:
 
       - name: Run Eat Eshell feasibility gate
         run: |
-          emacs -Q --batch -L lisp \
+          emacs -Q --batch -L lisp -L test \
             --eval '(require (quote package))' \
             --eval '(package-initialize)' \
             -l test/p3-eat-feasibility-test.el \
             -f ert-run-tests-batch-and-exit
 ```
 
-Add these paths to the workflow trigger list if the Linux workflow later switches from `paths-ignore` to explicit paths; under the current `paths-ignore` policy the new test/workflow changes already trigger it.
+The current Linux workflow uses `paths-ignore`, so no trigger change is needed.
 
-- [ ] **Step 5: Strengthen Windows MSYS validation and add exact Windows gate steps**
+- [ ] **Step 6: Add the native-Windows CI gate**
 
-In the existing `Locate Git for Windows MSYS2 root` PowerShell block, add:
+In the existing `Locate Git for Windows MSYS2 root` step, add:
 
 ```powershell
 foreach ($tool in @("stty.exe", "env.exe", "sh.exe")) {
@@ -229,7 +267,15 @@ foreach ($tool in @("stty.exe", "env.exe", "sh.exe")) {
 }
 ```
 
-Then add:
+Add these paths to the Windows workflow trigger:
+
+```yaml
+      - "test/p3-eat-feasibility-test.el"
+      - "test/p3-terminal-test-support.el"
+      - "test/fixtures/p3-terminal-fixture.py"
+```
+
+Add these steps:
 
 ```yaml
       - name: Install Eat feasibility dependency
@@ -244,32 +290,29 @@ Then add:
       - name: Run Eat Eshell feasibility gate
         shell: powershell
         run: >-
-          emacs -Q --batch -L lisp
+          emacs -Q --batch -L lisp -L test
           --eval '(require (quote package))'
           --eval '(package-initialize)'
           -l test/p3-eat-feasibility-test.el
           -f ert-run-tests-batch-and-exit
 ```
 
-Add `test/p3-eat-feasibility-test.el` and `test/fixtures/p3-terminal-fixture.py` to the Windows workflow `paths` trigger.
-
-- [ ] **Step 6: Commit only the feasibility spike**
+- [ ] **Step 7: Commit only the spike and run the gate**
 
 ```bash
 git add test/fixtures/p3-terminal-fixture.py \
+        test/p3-terminal-test-support.el \
         test/p3-eat-feasibility-test.el \
         .github/workflows/emacs-tests.yml \
         .github/workflows/windows-platform-tests.yml
 git commit -m "test: gate Eat Eshell terminal support"
 ```
 
-- [ ] **Step 7: Trigger one cross-platform feasibility run and enforce the stop gate**
+Open the implementation PR as draft, then mark it ready once to trigger Linux and Windows CI.
 
-Open the implementation PR as draft, then mark it ready once. Inspect both workflow results.
+**STOP CONDITION:** If native Windows cannot execute Eat's supported process wrapper, establish an interactive TTY, render the fixture, or return cleanly to Eshell, stop this plan. Leave production `p3-terminal.el` on the current Comint/Bash backend and return to design to choose another terminal-emulation backend. Do not continue to Task 2.
 
-**STOP CONDITION:** If native Windows cannot execute Eat's supported process wrapper, establish an interactive TTY, render the fixture, or return cleanly to Eshell, stop this plan. Leave production `p3-terminal.el` on the current Comint/Bash backend and return to the design stage to choose another terminal-emulation backend. Do not continue to Task 2.
-
-After both feasibility jobs pass, convert the PR back to draft so subsequent implementation commits do not consume another full CI run until Task 8.
+After both jobs pass, convert the PR back to draft so implementation commits do not trigger another full run until Task 7.
 
 ---
 
@@ -282,11 +325,11 @@ After both feasibility jobs pass, convert the PR back to draft so subsequent imp
 
 **Interfaces:**
 - Consumes: `p3/project-shell-root`, `p3/project-normalize-root`, dynamically bound `eshell-buffer-name`, public `eshell`.
-- Produces: buffer-backed `p3/project-shell-buffer-p`, `p3/project-shell-live-p`, and `p3/project-shell--start`; public P3 shell commands remain unchanged.
+- Produces: buffer-backed `p3/project-shell-buffer-p`, `p3/project-shell-live-p`, `p3/project-shell--start`, and test helper `p3-terminal-integration-test--send-command`.
 
-- [ ] **Step 1: Write RED managed-buffer lifecycle tests**
+- [ ] **Step 1: Write RED buffer-lifecycle tests**
 
-Replace `p3-terminal-project-shell-live-p-requires-live-process` and the dead-process restart expectation with:
+Replace the process-liveness test and dead-process restart expectation with:
 
 ```elisp
 (require 'eshell)
@@ -308,39 +351,28 @@ Replace `p3-terminal-project-shell-live-p-requires-live-process` and the dead-pr
           (setq-local p3/project-shell-root-value temporary-file-directory)
           (should-not (p3/project-shell-live-p buffer)))
       (kill-buffer buffer))))
-
-(ert-deftest p3-terminal-idle-primary-remains-reusable ()
-  (let ((p3/project-shell-buffers (make-hash-table :test #'equal))
-        (root (file-name-as-directory temporary-file-directory)))
-    (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root)))
-      (let ((first (p3/project-shell-buffer)))
-        (unwind-protect
-            (progn
-              (should-not (get-buffer-process first))
-              (should (eq first (p3/project-shell-buffer))))
-          (kill-buffer first))))))
 ```
 
-- [ ] **Step 2: Run the new lifecycle selector and confirm RED**
+- [ ] **Step 2: Run the new liveness selector and confirm RED**
 
 ```bash
 emacs -Q --batch -L lisp \
   -l test/p3-terminal-test.el \
-  --eval '(ert-run-tests-batch-and-exit "p3-terminal-\\(project-shell-live-p\\|idle-primary\\)")'
+  --eval '(ert-run-tests-batch-and-exit "p3-terminal-project-shell-live-p")'
 ```
 
-Expected: FAIL because the current implementation requires a live shell process.
+Expected: FAIL because current liveness requires `get-buffer-process`.
 
 - [ ] **Step 3: Implement lazy Eshell startup and buffer-backed liveness**
 
-Do not add a top-level `(require 'eshell)`. Add declarations near the top of `p3-terminal.el`:
+Do not add a top-level `(require 'eshell)`. Add:
 
 ```elisp
 (defvar eshell-buffer-name)
 (declare-function eshell "eshell" (&optional arg))
 ```
 
-Replace the buffer/liveness functions and startup path with:
+Replace startup/liveness with:
 
 ```elisp
 (defun p3/project-shell-buffer-p (buffer)
@@ -366,9 +398,7 @@ Replace the buffer/liveness functions and startup path with:
       buffer)))
 ```
 
-Leave old Comint/Bash helper definitions in place temporarily; Task 7 removes them after the complete path is verified.
-
-- [ ] **Step 4: Clear primary mappings when their buffer is killed**
+- [ ] **Step 4: Clear the primary mapping when its buffer is killed**
 
 Add:
 
@@ -380,30 +410,56 @@ Add:
       (remhash root p3/project-shell-buffers))))
 ```
 
-and add this buffer-locally from `p3/project-shell-mode-setup`:
+Add it buffer-locally from `p3/project-shell-mode-setup`:
 
 ```elisp
 (add-hook 'kill-buffer-hook #'p3/project-shell--forget-primary nil t)
 ```
 
-- [ ] **Step 5: Add killed-primary and child-process-exit regressions**
+- [ ] **Step 5: Add real idle/reuse/process-exit regressions and one shared command helper**
 
-Assert that killing the primary causes replacement on the next lookup, while running and then exiting any external command does not replace the Eshell buffer:
+Add to `test/p3-terminal-integration-test.el`:
 
 ```elisp
-(should (eq first (p3/project-shell-buffer)))
-(kill-buffer first)
-(should-not (eq first (p3/project-shell-buffer)))
+(defun p3-terminal-integration-test--send-command (buffer command)
+  "Insert COMMAND at BUFFER's Eshell prompt and execute it synchronously."
+  (with-current-buffer buffer
+    (goto-char (point-max))
+    (insert command)
+    (eshell-send-input)))
+
+(ert-deftest p3-terminal-idle-primary-remains-reusable ()
+  (let ((p3/project-shell-buffers (make-hash-table :test #'equal))
+        (root (file-name-as-directory temporary-file-directory)))
+    (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root)))
+      (let ((first (p3/project-shell-buffer)))
+        (unwind-protect
+            (progn
+              (should-not (get-buffer-process first))
+              (should (eq first (p3/project-shell-buffer))))
+          (kill-buffer first))))))
+
+(ert-deftest p3-terminal-external-process-exit-keeps-project-shell-live ()
+  (let ((p3/project-shell-buffers (make-hash-table :test #'equal))
+        (root (file-name-as-directory temporary-file-directory)))
+    (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root)))
+      (let ((buffer (p3/project-shell-buffer)))
+        (unwind-protect
+            (progn
+              (p3-terminal-integration-test--send-command buffer "git --version")
+              (should (p3/project-shell-live-p buffer))
+              (should (eq buffer (p3/project-shell-buffer))))
+          (kill-buffer buffer))))))
 ```
 
-For child-process independence, execute a short external command in the real Eshell and assert the original buffer is still returned after the process exits.
+Keep the existing killed-primary replacement test, updating only its backend assumptions.
 
-- [ ] **Step 6: Run the focused lifecycle tests**
+- [ ] **Step 6: Run lifecycle tests**
 
 ```bash
 emacs -Q --batch -L lisp \
   -l test/p3-terminal-test.el \
-  --eval '(ert-run-tests-batch-and-exit "p3-terminal-\\(project-shell-live-p\\|idle-primary\\|primary-shell\\|extra-session\\|stale-primary\\)")'
+  --eval '(ert-run-tests-batch-and-exit "p3-terminal-\\(project-shell-live-p\\|idle-primary\\|external-process-exit\\|primary-shell\\|extra-session\\|stale-primary\\)")'
 ```
 
 Expected: PASS.
@@ -417,7 +473,7 @@ git commit -m "refactor: back project shells with Eshell buffers"
 
 ---
 
-### Task 3: Preserve Project Routing and Session Commands Under Eshell
+### Task 3: Preserve Project Routing and Public Session Commands
 
 **Files:**
 - Modify: `test/p3-project-context-test.el`
@@ -425,10 +481,10 @@ git commit -m "refactor: back project shells with Eshell buffers"
 - Modify: `lisp/p3-terminal.el`
 
 **Interfaces:**
-- Consumes: Task 2 managed-buffer lifecycle.
-- Produces: unchanged project/session command behavior on Eshell buffers.
+- Consumes: Task 2 managed Eshell lifecycle.
+- Produces: unchanged public project/session behavior backed by Eshell buffers.
 
-- [ ] **Step 1: Replace the real-Bash project-root test with a real-Eshell root test**
+- [ ] **Step 1: Replace the real-Bash root test with a real-Eshell root test**
 
 ```elisp
 (ert-deftest p3-terminal-real-eshell-starts-at-project-root ()
@@ -448,11 +504,11 @@ git commit -m "refactor: back project shells with Eshell buffers"
       (delete-directory raw-root t))))
 ```
 
-Delete project-shell assertions for `shell--start-prog`, `CHERE_INVOKING`, and `shell-resync-dirs`; generic Windows `M-x shell` coverage remains in platform/config tests.
+Remove project-shell assertions for `shell--start-prog`, `CHERE_INVOKING`, and `shell-resync-dirs`; ordinary Windows `M-x shell` remains separately covered.
 
-- [ ] **Step 2: Strengthen the Org-associated root regression**
+- [ ] **Step 2: Strengthen the Org-associated project regression**
 
-In `p3-project-shell-uses-associated-org-project-root`, assert all three properties:
+After obtaining the P3 project-shell buffer in `p3-project-shell-uses-associated-org-project-root`, assert:
 
 ```elisp
 (with-current-buffer shell-buffer
@@ -462,9 +518,9 @@ In `p3-project-shell-uses-associated-org-project-root`, assert all three propert
                  (p3/project-normalize-root associated-root))))
 ```
 
-- [ ] **Step 3: Keep the existing public session commands backend-neutral**
+- [ ] **Step 3: Keep the public commands backend-neutral**
 
-Retain the existing implementations of `p3/project-shell`, `p3/project-shell-new`, `p3/project-shell-switch`, `p3/project-shell-other-window`, rename, kill, and `p3/project-shell-command-map` unless a test proves a buffer/process assumption. Change only predicates or wording that still says "Bash process".
+The bodies of `p3/project-shell`, `p3/project-shell-new`, `p3/project-shell-switch`, `p3/project-shell-other-window`, `p3/project-shell-rename`, `p3/project-shell-kill`, and `p3/project-shell-command-map` remain structurally unchanged. Update docstrings from “Bash shell” to “project shell” or “project Eshell”; do not change bindings or session semantics.
 
 - [ ] **Step 4: Run routing/session tests**
 
@@ -480,14 +536,13 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add lisp/p3-terminal.el test/p3-project-context-test.el \
-        test/p3-terminal-integration-test.el test/p3-terminal-test.el
+git add lisp/p3-terminal.el test/p3-project-context-test.el test/p3-terminal-integration-test.el
 git commit -m "test: preserve project shell routing under Eshell"
 ```
 
 ---
 
-### Task 4: Restore Prompt, History, Completion, and Rich Input UX Natively in Eshell
+### Task 4: Restore Prompt, History, Completion, and Input Highlighting
 
 **Files:**
 - Modify: `lisp/p3-terminal.el`
@@ -496,12 +551,10 @@ git commit -m "test: preserve project shell routing under Eshell"
 - Modify: `test/p3-config-terminal-test.el`
 
 **Interfaces:**
-- Consumes: Task 2 managed Eshell buffers; existing Consult package configuration.
-- Produces: `p3/project-shell-prompt`, `p3/project-shell-mode-setup`, Emacs-29 append-history compatibility, `C-r -> consult-history`, and `eshell-syntax-highlighting` activation.
+- Consumes: Task 2 managed Eshell buffers; existing Consult autoload/package ownership.
+- Produces: `p3/project-shell-prompt`, Eshell-owned `p3/project-shell-mode-setup`, Emacs-29 append-history compatibility, `C-r -> consult-history`, and lazy `eshell-syntax-highlighting` activation.
 
-- [ ] **Step 1: Replace Bash/Starship rich-UX tests with Eshell-native RED tests**
-
-Add:
+- [ ] **Step 1: Write RED Eshell-native UX tests**
 
 ```elisp
 (ert-deftest p3-terminal-eshell-setup-uses-history-search ()
@@ -519,9 +572,9 @@ Add:
     (should (string-match-p "❯ " (p3/project-shell-prompt)))))
 ```
 
-In `p3-config-terminal-test.el`, add an ownership test requiring `use-package eshell-syntax-highlighting` in `p3-config-terminal.el` and continuing to reject `vterm`.
+Add a config test asserting `p3-config-terminal.el` contains `(use-package eshell-syntax-highlighting` and still contains no vterm declaration.
 
-- [ ] **Step 2: Run rich-UX tests and confirm RED**
+- [ ] **Step 2: Run the UX tests and confirm RED**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -530,15 +583,15 @@ emacs -Q --batch -L lisp \
   -f ert-run-tests-batch-and-exit
 ```
 
-Expected: FAIL on the new Eshell prompt/history/highlighting expectations.
+Expected: FAIL.
 
-- [ ] **Step 3: Implement a cheap native prompt**
+- [ ] **Step 3: Implement the native P3 prompt**
 
 Add:
 
 ```elisp
-(defconst p3/project-shell-prompt-regexp "^[^❯\n]*❯ "
-  "Prompt regexp for P3 Eshell buffers on Emacs versions that need it.")
+(defconst p3/project-shell-prompt-regexp "^[^❯]*❯ "
+  "Prompt regexp for P3 Eshell buffers.")
 
 (defun p3/project-shell-prompt ()
   "Return the prompt for the current P3 project Eshell."
@@ -560,11 +613,11 @@ Add:
             " ")))
 ```
 
-Do not invoke Git or Starship during prompt rendering.
+P3 controls the generated prompt text, so matching up to the unique `❯` terminator is sufficient; do not run Git or Starship while rendering it.
 
-- [ ] **Step 4: Implement concurrent history safely on Emacs 29 and 30+**
+- [ ] **Step 4: Implement concurrent history on Emacs 29 and 30+**
 
-Add `(require 'ring)` and declarations for Eshell history variables/functions. For Emacs 29, append only the newest command so `eshell-write-history ... t` does not append the whole ring repeatedly:
+Add `(require 'ring)` plus declarations for the Eshell history variables/functions used below. Add:
 
 ```elisp
 (defun p3/project-shell--append-history-compat ()
@@ -579,7 +632,7 @@ Add `(require 'ring)` and declarations for Eshell history variables/functions. F
         (eshell-write-history eshell-history-file-name t)))))
 ```
 
-Replace `p3/project-shell-mode-setup` with Eshell-owned settings:
+Replace `p3/project-shell-mode-setup` with:
 
 ```elisp
 (defun p3/project-shell-mode-setup ()
@@ -596,11 +649,11 @@ Replace `p3/project-shell-mode-setup` with Eshell-owned settings:
               #'p3/project-shell--append-history-compat nil t)))
 ```
 
-Bind the symbol `consult-history` without requiring Consult eagerly; the existing completion configuration owns its autoload/package setup.
+Do not require Consult eagerly; binding the autoloaded command symbol is enough.
 
 - [ ] **Step 5: Configure syntax highlighting lazily**
 
-At the top of `p3-config-terminal.el`, add `(require 'use-package)`. Add:
+Add `(require 'use-package)` to `p3-config-terminal.el`, then:
 
 ```elisp
 (use-package eshell-syntax-highlighting
@@ -609,13 +662,21 @@ At the top of `p3-config-terminal.el`, add `(require 'use-package)`. Add:
   (eshell-syntax-highlighting-global-mode 1))
 ```
 
-Because `esh-mode` is loaded only when Eshell is first used, this does not make shell highlighting an eager startup dependency.
+- [ ] **Step 6: Add exact cross-version history regressions**
 
-- [ ] **Step 6: Add cross-version history regressions**
+For Emacs 30+:
 
-For Emacs 30+, assert `eshell-history-append` is buffer-local and non-nil after setup. For Emacs 29, create two temporary Eshell buffers with one shared temporary `eshell-history-file-name`, insert distinct newest commands into each `eshell-history-ring`, call `p3/project-shell--append-history-compat` in each, and assert the file contains each command exactly once.
+```elisp
+(when (boundp 'eshell-history-append)
+  (with-temp-buffer
+    (eshell-mode)
+    (setq-local p3/project-shell-root-value temporary-file-directory)
+    (p3/project-shell-mode-setup)
+    (should (local-variable-p 'eshell-history-append))
+    (should eshell-history-append)))
+```
 
-Use concrete assertions:
+For Emacs 29, construct two one-item rings containing `__P3_HISTORY_ONE__` and `__P3_HISTORY_TWO__`, bind a shared temporary `eshell-history-file-name`, call `p3/project-shell--append-history-compat` once from each buffer, then read the file into a temp buffer and assert:
 
 ```elisp
 (should (= 1 (how-many "__P3_HISTORY_ONE__" (point-min) (point-max))))
@@ -623,7 +684,7 @@ Use concrete assertions:
 (should-not (re-search-forward "starship\|PS1=\|__p3_" nil t))
 ```
 
-- [ ] **Step 7: Run rich-UX tests**
+- [ ] **Step 7: Run rich-UX tests and commit**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -631,17 +692,13 @@ emacs -Q --batch -L lisp \
   -l test/p3-terminal-test.el \
   -l test/p3-config-terminal-test.el \
   -f ert-run-tests-batch-and-exit
-```
 
-Expected: PASS.
-
-- [ ] **Step 8: Commit**
-
-```bash
 git add lisp/p3-terminal.el lisp/p3-config-terminal.el \
         test/p3-terminal-rich-ux-test.el test/p3-config-terminal-test.el
 git commit -m "feat: restore rich project Eshell UX"
 ```
+
+Expected: PASS before the commit.
 
 ---
 
@@ -653,10 +710,10 @@ git commit -m "feat: restore rich project Eshell UX"
 - Modify: `test/p3-terminal-integration-test.el`
 
 **Interfaces:**
-- Consumes: Task 1 green feasibility gate; Task 2 Eshell project buffers.
+- Consumes: green Task 1 gate; `p3-terminal-integration-test--send-command` from Task 2.
 - Produces: public global Eat integration with `eat-eshell-fallback-if-stty-not-available = t` and no private Eat API usage.
 
-- [ ] **Step 1: Write a config-boundary RED test**
+- [ ] **Step 1: Write the config-boundary RED test**
 
 ```elisp
 (ert-deftest p3-config-terminal-uses-supported-eat-eshell-integration ()
@@ -669,7 +726,7 @@ git commit -m "feat: restore rich project Eshell UX"
     (should-not (string-match-p "eat--eshell-local-mode" contents))))
 ```
 
-- [ ] **Step 2: Run the test and confirm RED**
+- [ ] **Step 2: Run it and confirm RED**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -681,7 +738,7 @@ Expected: FAIL.
 
 - [ ] **Step 3: Configure Eat lazily in the configuration owner**
 
-Add to `p3-config-terminal.el`:
+Add:
 
 ```elisp
 (use-package eat
@@ -692,249 +749,246 @@ Add to `p3-config-terminal.el`:
   (eat-eshell-mode 1))
 ```
 
-`p3-terminal.el` must not require Eat. The first real Eshell load activates this configuration through use-package's `:after eshell` path.
+`p3-terminal.el` must not require Eat.
 
-- [ ] **Step 4: Add a no-`stty` fallback regression**
+- [ ] **Step 4: Add a concrete no-`stty` fallback regression**
 
-With Eat installed, temporarily make `eshell-search-path` return nil for `stty`, bind `eat-eshell-fallback-if-stty-not-available` to `t`, and execute a trivial external command. Stub `y-or-n-p` to fail the test if called:
+Add to `p3-terminal-integration-test.el`:
 
 ```elisp
-(cl-letf (((symbol-function 'y-or-n-p)
-           (lambda (&rest _)
-             (ert-fail "Eat fallback must not prompt")))
-          ((symbol-function 'eshell-search-path)
-           (lambda (name)
-             (unless (equal name "stty")
-               (executable-find name)))))
-  ;; send a trivial external command through the test Eshell here
-  ...)
+(ert-deftest p3-terminal-eat-missing-stty-falls-back-without-prompt ()
+  (require 'eat)
+  (let* ((root (file-name-as-directory temporary-file-directory))
+         (p3/project-shell-buffers (make-hash-table :test #'equal))
+         (eat-eshell-fallback-if-stty-not-available t)
+         (search-path (symbol-function 'eshell-search-path)))
+    (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root))
+              ((symbol-function 'y-or-n-p)
+               (lambda (&rest _)
+                 (ert-fail "Eat fallback must not prompt")))
+              ((symbol-function 'eshell-search-path)
+               (lambda (name)
+                 (if (equal name "stty")
+                     nil
+                   (funcall search-path name)))))
+      (let ((buffer (p3/project-shell-buffer)))
+        (unwind-protect
+            (progn
+              (eat-eshell-mode 1)
+              (p3-terminal-integration-test--send-command
+               buffer "git --version")
+              (should (p3/project-shell-live-p buffer))
+              (should (eq buffer (p3/project-shell-buffer))))
+          (kill-buffer buffer))))))
 ```
 
-The body must assert the command completes and the same Eshell buffer remains usable; replace the comment above with the concrete command-send helper already introduced in `p3-terminal-integration-test.el` during implementation rather than introducing a second helper.
-
-- [ ] **Step 5: Run config/integration tests with installed packages initialized**
+- [ ] **Step 5: Run config/integration tests and commit**
 
 ```bash
-emacs -Q --batch -L lisp \
+emacs -Q --batch -L lisp -L test \
   --eval '(require (quote package))' \
   --eval '(package-initialize)' \
   -l test/p3-config-terminal-test.el \
   -l test/p3-terminal-integration-test.el \
   -f ert-run-tests-batch-and-exit
-```
 
-Expected: PASS.
-
-- [ ] **Step 6: Commit**
-
-```bash
 git add lisp/p3-config-terminal.el test/p3-config-terminal-test.el \
         test/p3-terminal-integration-test.el
 git commit -m "feat: add Eat terminal emulation to project Eshell"
 ```
 
+Expected: PASS before the commit.
+
 ---
 
-### Task 6: Turn the Feasibility Fixture into the Permanent P3 Terminal Contract
+### Task 6: Make the Terminal Fixture a Permanent P3 Regression
 
 **Files:**
-- Modify: `test/p3-eat-feasibility-test.el`
 - Modify: `test/p3-terminal-integration-test.el`
 - Modify: `.github/workflows/emacs-tests.yml`
 - Modify: `.github/workflows/windows-platform-tests.yml`
 
 **Interfaces:**
-- Consumes: production P3 Eshell backend and Eat configuration.
-- Produces: permanent behavioral regression coverage for terminalization and clean return to the same managed project shell.
+- Consumes: `p3-terminal-test-support-run-fixture` from Task 1; production P3 Eshell backend and Eat integration.
+- Produces: P3-level regression coverage for alternate-screen rendering, raw input, TTY dimensions, clean exit, nonzero exit, resize, and shell-buffer reuse.
 
-- [ ] **Step 1: Factor one concrete foreground-command helper for integration tests**
+- [ ] **Step 1: Add the P3-level fixture runner test**
 
-Add to `p3-terminal-integration-test.el`:
-
-```elisp
-(defun p3-terminal-integration-test--send-command (buffer command)
-  "Insert COMMAND at BUFFER's Eshell prompt and execute it synchronously."
-  (with-current-buffer buffer
-    (goto-char (point-max))
-    (insert command)
-    (eshell-send-input)))
-```
-
-Use this helper in Task 5's no-`stty` fallback test instead of duplicating command-send mechanics.
-
-- [ ] **Step 2: Add P3-level zero/nonzero fixture tests**
-
-Create the shell through `p3/project-shell-buffer`. Run the fixture with exit code `0`, then `7`, using the same timer technique from Task 1. After each command assert:
+Require the support module from `p3-terminal-integration-test.el` and add:
 
 ```elisp
-(should (p3/project-shell-live-p buffer))
-(should (eq buffer (p3/project-shell-buffer)))
-(with-current-buffer buffer
-  (should (derived-mode-p 'eshell-mode))
-  (should-not (eshell-head-process)))
+(ert-deftest p3-terminal-eat-fixture-returns-to-same-project-shell ()
+  (p3-terminal-test-support-prepare-platform)
+  (let ((root (file-name-as-directory temporary-file-directory))
+        (p3/project-shell-buffers (make-hash-table :test #'equal)))
+    (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root)))
+      (let ((buffer (p3/project-shell-buffer)))
+        (unwind-protect
+            (progn
+              (dolist (exit-code '(0 7))
+                (let ((result
+                       (p3-terminal-test-support-run-fixture buffer exit-code)))
+                  (should (plist-get result :terminal))
+                  (should-not (plist-get result :raw-escape))
+                  (should (equal (plist-get result :tty) "1:1"))
+                  (should (equal (plist-get result :input) "78"))
+                  (should (> (car (plist-get result :size)) 0))
+                  (should (> (cdr (plist-get result :size)) 0))))
+              (should (p3/project-shell-live-p buffer))
+              (should (eq buffer (p3/project-shell-buffer)))
+              (with-current-buffer buffer
+                (should-not (eshell-head-process))))
+          (kill-buffer buffer))))))
 ```
 
-Also assert no literal `"\033["` appears in the buffer after the command returns.
+- [ ] **Step 2: Add resize coverage with a real displayed shell window**
 
-- [ ] **Step 3: Add terminal-size/resize coverage**
+Add:
 
-Run the fixture once, record its positive `__P3_SIZE__COLS:ROWS` values, resize the selected test window with `window-resize`, run it again, and assert at least one dimension changes. Do not assert fixed dimensions because GitHub-hosted frames differ.
+```elisp
+(ert-deftest p3-terminal-eat-fixture-tracks-window-resize ()
+  (p3-terminal-test-support-prepare-platform)
+  (let ((root (file-name-as-directory temporary-file-directory))
+        (p3/project-shell-buffers (make-hash-table :test #'equal))
+        test-window)
+    (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root)))
+      (let ((buffer (p3/project-shell-buffer)))
+        (unwind-protect
+            (progn
+              (setq test-window (split-window-below))
+              (set-window-buffer test-window buffer)
+              (with-selected-window test-window
+                (let ((before
+                       (plist-get
+                        (p3-terminal-test-support-run-fixture buffer 0)
+                        :size)))
+                  (window-resize test-window -2)
+                  (let ((after
+                         (plist-get
+                          (p3-terminal-test-support-run-fixture buffer 0)
+                          :size)))
+                    (should-not (equal before after))))))
+          (when (window-live-p test-window) (delete-window test-window))
+          (when (buffer-live-p buffer) (kill-buffer buffer)))))))
+```
 
-- [ ] **Step 4: Run the permanent terminal contract locally**
+- [ ] **Step 3: Run the permanent terminal contract**
 
 ```bash
-emacs -Q --batch -L lisp \
+emacs -Q --batch -L lisp -L test \
   --eval '(require (quote package))' \
   --eval '(package-initialize)' \
-  -l test/p3-eat-feasibility-test.el \
   -l test/p3-terminal-test.el \
-  --eval '(ert-run-tests-batch-and-exit "p3-\\(eat-feasibility\\|terminal-.*fixture\\|terminal-.*resize\\)")'
+  --eval '(ert-run-tests-batch-and-exit "p3-terminal-eat-fixture")'
 ```
 
 Expected: PASS.
 
-- [ ] **Step 5: Fold the fixture into existing workflow test steps**
+- [ ] **Step 4: Keep one Eat install and one fixture gate per CI job**
 
-Keep one Eat installation per job. Load `test/p3-eat-feasibility-test.el` alongside terminal tests; do not create another workflow or second package-install step.
+In both workflows, retain the Task 1 Eat installation step. Add `-L test` and ensure the normal terminal test invocation loads the support file through `require`; do not add a second Eat installation or a second workflow.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add test/p3-eat-feasibility-test.el test/p3-terminal-integration-test.el \
-        .github/workflows/emacs-tests.yml .github/workflows/windows-platform-tests.yml
+git add test/p3-terminal-integration-test.el \
+        .github/workflows/emacs-tests.yml \
+        .github/workflows/windows-platform-tests.yml
 git commit -m "test: cover project Eshell terminal contract"
 ```
 
 ---
 
-### Task 7: Remove Displaced Project-Shell Comint/Bash/Starship Machinery
+### Task 7: Remove Old Project-Shell Machinery and Perform Final Verification
 
 **Files:**
 - Modify: `lisp/p3-terminal.el`
 - Modify: `test/p3-terminal-test.el`
 - Modify: `test/p3-terminal-integration-test.el`
 - Modify: `test/p3-terminal-rich-ux-test.el`
-- Delete: `templates/p3-starship.toml` only after the search step below proves it has no runtime consumer
-- Verify unchanged behavior: `lisp/p3-platform.el`
-- Verify unchanged behavior: `test/p3-config-terminal-windows-test.el`
-- Verify unchanged behavior: `test/p3-platform-test.el`
+- Modify: `test/p3-config-terminal-test.el`
+- Modify: `test/p3-integration-cleanup-test.el`
+- Modify: `.github/workflows/emacs-tests.yml`
+- Modify: `.github/workflows/windows-platform-tests.yml`
+- Delete: `templates/p3-starship.toml` after the consumer search is clean
+- Verify unchanged: `lisp/p3-platform.el`
+- Verify unchanged: `test/p3-config-terminal-windows-test.el`
+- Verify unchanged: `test/p3-platform-test.el`
 
 **Interfaces:**
-- Consumes: green Eshell lifecycle, rich UX, and Eat contract.
-- Produces: one project-shell implementation with no dead Comint/Bash compatibility layer.
+- Consumes: green Tasks 1-6.
+- Produces: one Eshell project-shell implementation, preserved ordinary Windows `M-x shell`, final Linux/native-Windows CI evidence, and manual Codex acceptance evidence.
 
-- [ ] **Step 1: Search every displaced runtime dependency before deletion**
+- [ ] **Step 1: Search all displaced runtime dependencies before deletion**
 
 ```bash
 git grep -nE 'project-shell-prompt-init-command|project-shell-rich-terminfo|project-shell-comint-terminal|p3-starship|STARSHIP_CONFIG|shell-dirstack-query|CHERE_INVOKING|shell-eval-command' -- ':!docs/superpowers/**'
 ```
 
-Any `p3-platform.el` hit belonging to ordinary `M-x shell` stays. Project-shell-only hits are removed in Step 2.
+Keep any `p3-platform.el` code belonging to ordinary `M-x shell`. Remove only project-shell-specific matches.
 
 - [ ] **Step 2: Remove project-shell-only Comint/Bash code**
 
-Delete these project-shell implementation pieces from `p3-terminal.el`:
+Remove from `p3-terminal.el` after the search confirms each item is project-shell-only:
 
 ```text
 (require 'shell)
-(require 'p3-platform)                    if no non-shell reference remains
+(require 'p3-platform) if no non-shell reference remains
 (defvar explicit-bash.exe-args)
-p3/project-shell-prompt-pattern           old Comint regexp
-p3/project-shell-prompt-init-command      injected Bash bootstrap
+old p3/project-shell-prompt-pattern
+p3/project-shell-prompt-init-command
 p3/project-shell-starship-config
 p3/project-shell-rich-terminfo-p
 p3/project-shell-comint-terminal
-Comint input/history bindings
-p3/windows-p project-shell directory setup
-p3/platform-bash-program project-shell startup
-explicit-shell-file-name / explicit-bash-args bindings
-comint-terminfo-terminal project-shell binding
+Comint input/history setup
+project-shell p3/windows-p directory setup
+project-shell p3/platform-bash-program startup
+explicit-shell-file-name and explicit-bash-args bindings
+comint-terminfo-terminal binding
 shell-fontify-input-enable binding
 shell-highlight-undef-enable binding
 shell-prompt-pattern binding
 STARSHIP_CONFIG mutation
 HISTFILE mutation
 CHERE_INVOKING mutation
-(shell ...)
-(shell-eval-command ...)
+shell invocation
+shell-eval-command invocation
 ```
 
 Do not edit `p3/windows-configure-shell` or `p3/windows-shell-mode-setup` in `p3-platform.el`.
 
-- [ ] **Step 3: Delete the tracked Starship file only after a clean consumer search**
+- [ ] **Step 3: Remove obsolete Bash/Starship tests and tracked prompt file**
+
+Delete tests whose only contract is Bash `--noediting -i`, Starship initialization/fallback, rich Comint terminfo, Bash `HISTFILE`/`histappend`, project-shell `CHERE_INVOKING`, or project-shell `shell-resync-dirs`.
+
+Then verify and remove the file:
 
 ```bash
 git grep -n 'p3-starship.toml' -- ':!docs/superpowers/**'
-```
-
-Expected before deletion: only the file itself or obsolete tests being removed in this task. After removing those tests:
-
-```bash
 git rm templates/p3-starship.toml
 git grep -n 'p3-starship.toml' -- ':!docs/superpowers/**' || true
 ```
 
-Expected final result: no runtime/test matches.
+The final grep must return no runtime/test consumer.
 
-- [ ] **Step 4: Remove Bash-specific project-shell tests and retain generic Windows shell tests**
+- [ ] **Step 4: Add architecture regressions preventing a second terminal stack**
 
-Delete assertions whose only contract is Bash `--noediting -i`, Starship, rich Comint terminfo, Bash `HISTFILE`/`histappend`, project-shell `CHERE_INVOKING`, or project-shell `shell-resync-dirs`.
-
-Then run the existing generic Windows shell boundary tests unchanged on a Windows runner in the final gate; their continued presence prevents this cleanup from erasing ordinary `M-x shell` behavior.
-
-- [ ] **Step 5: Run focused cleanup regressions**
-
-On GNU/Linux:
-
-```bash
-emacs -Q --batch -L lisp \
-  --eval '(require (quote package))' \
-  --eval '(package-initialize)' \
-  -l test/p3-platform-test.el \
-  -l test/p3-terminal-test.el \
-  -l test/p3-config-terminal-test.el \
-  -f ert-run-tests-batch-and-exit
-```
-
-Expected: PASS.
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add lisp/p3-terminal.el test/p3-terminal-test.el \
-        test/p3-terminal-integration-test.el test/p3-terminal-rich-ux-test.el
-git add -u templates/p3-starship.toml
-git commit -m "refactor: retire project Bash shell machinery"
-```
-
----
-
-### Task 8: Final Architecture and Acceptance Verification
-
-**Files:**
-- Modify: `.github/workflows/emacs-tests.yml`
-- Modify: `.github/workflows/windows-platform-tests.yml`
-- Modify: `test/p3-config-terminal-test.el`
-- Modify: `test/p3-integration-cleanup-test.el`
-
-**Interfaces:**
-- Consumes: all previous tasks.
-- Produces: merge-ready cross-platform project-shell implementation and final verification evidence.
-
-- [ ] **Step 1: Add architecture assertions preventing a second shell stack from returning**
-
-Extend `p3-config-terminal-uses-one-project-shell-surface` so it continues to require `C-x C-u`/`C-c T`, rejects `vterm`, and verifies the project-shell behavior module no longer invokes Shell-mode:
+Extend `p3-config-terminal-uses-one-project-shell-surface` with:
 
 ```elisp
-(let ((terminal (p3-config-terminal-test--contents "lisp/p3-terminal.el")))
+(let ((terminal (p3-config-terminal-test--contents "lisp/p3-terminal.el"))
+      (config (p3-config-terminal-test--contents "lisp/p3-config-terminal.el")))
   (should-not (string-match-p "(require 'shell)" terminal))
   (should-not (string-match-p "(shell " terminal))
-  (should-not (string-match-p "shell-eval-command" terminal)))
+  (should-not (string-match-p "shell-eval-command" terminal))
+  (should (string-match-p "(use-package eat" config))
+  (should (string-match-p "(use-package eshell-syntax-highlighting" config))
+  (should-not (string-match-p "vterm" config)))
 ```
 
-Keep separate assertions that `p3-config-terminal.el` owns `use-package eat` and `use-package eshell-syntax-highlighting`.
+Keep the existing binding assertions for `C-x C-u` and `C-c T`.
 
-- [ ] **Step 2: Run strict byte compilation**
+- [ ] **Step 5: Run strict byte compilation and the complete relevant Linux regression set**
 
 ```bash
 emacs -Q --batch -L lisp \
@@ -944,14 +998,8 @@ emacs -Q --batch -L lisp \
   -f batch-byte-compile \
   lisp/p3-terminal.el \
   lisp/p3-config-terminal.el
-```
 
-Expected: no warnings or errors.
-
-- [ ] **Step 3: Run the complete relevant Linux shell/project regression set locally**
-
-```bash
-emacs -Q --batch -L lisp \
+emacs -Q --batch -L lisp -L test \
   --eval '(require (quote package))' \
   --eval '(package-initialize)' \
   -l test/p3-platform-test.el \
@@ -965,29 +1013,7 @@ emacs -Q --batch -L lisp \
   -f ert-run-tests-batch-and-exit
 ```
 
-Expected: zero unexpected failures.
-
-- [ ] **Step 4: Run the Linux manual Codex acceptance smoke**
-
-From a real project buffer:
-
-```text
-C-x C-u
-codex
-```
-
-Verify all of these manually: exactly one initial Eshell prompt; Codex renders as a usable TUI; keyboard input and resize work; exiting Codex returns to the same editable Eshell; `C-x C-u` toggles back to the previous buffer; invoking it again reuses the same project shell.
-
-- [ ] **Step 5: Run the native-Windows manual Codex acceptance smoke**
-
-Repeat Step 4 in native Windows Emacs with the normal Rtools/MSYS2 environment. After Codex exits, also run:
-
-```text
-git --version
-bash -lc "pwd"
-```
-
-Both commands must resolve successfully from the configured environment while the project-shell surface itself remains Eshell.
+Expected: no byte-compile warnings and zero unexpected ERT failures.
 
 - [ ] **Step 6: Run final cleanup searches**
 
@@ -996,21 +1022,48 @@ git grep -nE 'vterm|ble\.sh|project-shell-prompt-init-command|p3-starship|STARSH
 git grep -n 'p3/project-shell' lisp test
 ```
 
-Every runtime hit for retired project-shell machinery is a failure. Historical design/spec references under `docs/superpowers/` are excluded intentionally.
+Review every returned runtime/test hit. No retired project-shell machinery may remain.
 
-- [ ] **Step 7: Commit final architecture/test adjustments**
+- [ ] **Step 7: Commit the cleanup/final-test changes**
 
 ```bash
-git add .github/workflows/emacs-tests.yml \
-        .github/workflows/windows-platform-tests.yml \
+git add lisp/p3-terminal.el \
+        test/p3-terminal-test.el \
+        test/p3-terminal-integration-test.el \
+        test/p3-terminal-rich-ux-test.el \
         test/p3-config-terminal-test.el \
-        test/p3-integration-cleanup-test.el
-git commit -m "test: finalize Eshell project shell migration"
+        test/p3-integration-cleanup-test.el \
+        .github/workflows/emacs-tests.yml \
+        .github/workflows/windows-platform-tests.yml
+git add -u templates/p3-starship.toml
+git commit -m "refactor: finish Eshell project shell migration"
 ```
 
-- [ ] **Step 8: Trigger one final Linux/native-Windows CI run**
+- [ ] **Step 8: Run manual Codex acceptance on GNU/Linux**
 
-Mark the draft PR ready for review. Require all of the following before merge:
+From a real project buffer:
+
+```text
+C-x C-u
+codex
+```
+
+Verify: one initial Eshell prompt; Codex renders as a usable TUI; keyboard input and resizing work; exiting returns to the same editable Eshell; `C-x C-u` toggles back; invoking `C-x C-u` again reuses the same project shell.
+
+- [ ] **Step 9: Run manual Codex acceptance on native Windows**
+
+Repeat Step 8 in native Windows Emacs with the normal Rtools/MSYS2 environment. After Codex exits, run:
+
+```text
+git --version
+bash -lc "pwd"
+```
+
+Both commands must resolve successfully while the project-shell surface remains Eshell.
+
+- [ ] **Step 10: Trigger one final Linux/native-Windows CI run**
+
+Mark the draft PR ready for review and require:
 
 ```text
 Linux strict byte compilation: PASS
