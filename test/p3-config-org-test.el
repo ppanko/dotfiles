@@ -54,6 +54,24 @@
     (should (integerp binding))
     (should (< behavior binding))))
 
+(ert-deftest p3-config-org-loads-image-behavior-before-image-binding ()
+  (let* ((forms (p3-config-org-test--forms "lisp/p3-config-org.el"))
+         (behavior (seq-position
+                    forms '(p3/config-load-module 'p3-org-image) #'equal))
+         (binding (seq-position
+                   forms
+                   '(define-key org-mode-map
+                      (kbd "C-c I")
+                      p3/org-image-command-map)
+                   #'equal)))
+    (should (integerp behavior))
+    (should (integerp binding))
+    (should (< behavior binding))))
+
+(ert-deftest p3-config-org-image-behavior-does-not-own-config ()
+  (let ((contents (p3-config-org-test--contents "lisp/p3-org-image.el")))
+    (should-not (string-match-p "p3-config-" contents))))
+
 (ert-deftest p3-config-org-preserves-core-settings-and-timestamp-hook ()
   (let ((forms (p3-config-org-test--forms "lisp/p3-config-org.el")))
     (should (member '(setq org-startup-folded 'content) forms))
@@ -100,7 +118,32 @@
              org-src-fontify-natively t
              org-src-tab-acts-natively t
              org-hide-emphasis-markers t
-             org-ellipsis " ↴")))))
+             org-ellipsis " ↴"
+             org-image-actual-width nil
+             org-image-align 'center
+             org-image-max-width 'window)))))
+
+(ert-deftest p3-config-org-wires-image-insertion-and-layout-prefix ()
+  (let ((forms (p3-config-org-test--forms "lisp/p3-config-org.el")))
+    (should
+     (member
+      '(define-key org-mode-map (kbd "C-c I") p3/org-image-command-map)
+      forms))
+    (should
+     (equal
+      (p3-config-org-test--use-package-form 'org-download)
+      '(use-package org-download
+         :after org
+         :commands (org-download-enable org-download-screenshot)
+         :hook (org-mode . org-download-enable)
+         :init
+         (setq-default org-download-image-dir "images"
+                       org-download-heading-lvl nil)
+         :config
+         (setq org-download-method 'directory
+               org-download-timestamp "%Y%m%d-%H%M%S-"
+               org-download-image-attr-list
+               '("#+ATTR_ORG: :align center :width 70%")))))))
 
 (ert-deftest p3-config-org-preserves-export-pdf-and-agenda-wiring ()
   (let* ((forms (p3-config-org-test--forms "lisp/p3-config-org.el"))

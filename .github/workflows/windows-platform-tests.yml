@@ -24,6 +24,8 @@ on:
       - "lisp/p3-config-workspace.el"
       - "lisp/p3-config-git.el"
       - "lisp/p3-config-python.el"
+      - "lisp/p3-org.el"
+      - "lisp/p3-org-image.el"
       - "lisp/p3-config-org.el"
       - "lisp/p3-config-org-roam.el"
       - "lisp/p3-org-present.el"
@@ -49,6 +51,8 @@ on:
       - "test/p3-config-editing-windows-test.el"
       - "test/p3-config-ess-test.el"
       - "test/p3-config-python-test.el"
+      - "test/p3-org-test.el"
+      - "test/p3-org-image-test.el"
       - "test/p3-config-org-test.el"
       - "test/p3-config-org-roam-test.el"
       - "test/p3-org-present-test.el"
@@ -131,6 +135,8 @@ jobs:
           lisp/p3-r-alignment.el
           lisp/p3-r-language-server.el
           lisp/p3-r-tidyverse-completion.el
+          lisp/p3-org.el
+          lisp/p3-org-image.el
           lisp/p3-org-present.el
           lisp/p3-terminal.el
           lisp/p3-config-terminal.el
@@ -171,6 +177,7 @@ jobs:
           -l test/p3-config-project-test.el
           -l test/p3-config-ess-test.el
           -l test/p3-config-python-test.el
+          -l test/p3-org-test.el
           -l test/p3-config-org-test.el
           -l test/p3-config-org-roam-test.el
           -l test/p3-org-present-test.el

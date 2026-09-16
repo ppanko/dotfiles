@@ -74,6 +74,7 @@
           big-called
           small-called
           images-displayed
+          image-layouts-applied
           images-removed
           remap-adds
           remap-removes)
@@ -105,6 +106,8 @@
                  (lambda (&rest _)
                    (setq images-displayed t
                          org-inline-image-overlays '(shown))))
+                ((symbol-function 'p3/org-apply-image-layouts)
+                 (lambda () (setq image-layouts-applied t)))
                 ((symbol-function 'org-remove-inline-images)
                  (lambda ()
                    (setq images-removed t
@@ -126,6 +129,7 @@
         (p3/org-present-hook)
         (should big-called)
         (should images-displayed)
+        (should image-layouts-applied)
         (should (equal header-line-format " "))
         (should-not display-line-numbers-mode)
         (should visual-fill-column-mode)
@@ -166,6 +170,54 @@
         (should-not tab-bar-lines-keep-state)
         (should (= (length remap-removes) 3))
         (should-not p3/org-present--state)))))
+
+(ert-deftest p3-org-present-rerenders-preexisting-images-after-restoring-editing-width ()
+  (with-temp-buffer
+    (setq-local header-line-format nil
+                display-line-numbers-mode nil
+                org-inline-image-overlays '(existing)
+                visual-fill-column-mode t
+                visual-fill-column-width 72
+                visual-fill-column-center-text nil
+                hide-mode-line-mode nil)
+    (let ((frame 'presentation-frame)
+          (tab-bar-lines 1)
+          (tab-bar-lines-keep-state nil)
+          refresh-widths)
+      (cl-letf (((symbol-function 'selected-frame)
+                 (lambda () frame))
+                ((symbol-function 'frame-parameter)
+                 (lambda (candidate parameter)
+                   (when (eq candidate frame)
+                     (pcase parameter
+                       ('tab-bar-lines tab-bar-lines)
+                       ('tab-bar-lines-keep-state tab-bar-lines-keep-state)))))
+                ((symbol-function 'set-frame-parameter)
+                 (lambda (candidate parameter value)
+                   (when (eq candidate frame)
+                     (pcase parameter
+                       ('tab-bar-lines (setq tab-bar-lines value))
+                       ('tab-bar-lines-keep-state
+                        (setq tab-bar-lines-keep-state value))))))
+                ((symbol-function 'frame-live-p)
+                 (lambda (candidate) (eq candidate frame)))
+                ((symbol-function 'display-line-numbers-mode) #'ignore)
+                ((symbol-function 'org-present-big) #'ignore)
+                ((symbol-function 'org-present-small) #'ignore)
+                ((symbol-function 'p3/org--refresh-inline-images)
+                 (lambda () (push visual-fill-column-width refresh-widths)))
+                ((symbol-function 'visual-fill-column-mode)
+                 (lambda (arg)
+                   (setq-local visual-fill-column-mode (> arg 0))))
+                ((symbol-function 'hide-mode-line-mode) #'ignore)
+                ((symbol-function 'face-remap-add-relative)
+                 (lambda (&rest _) 'cookie))
+                ((symbol-function 'face-remap-remove-relative) #'ignore))
+        (p3/org-present-hook)
+        (p3/org-present-quit-hook)
+        (should (equal (nreverse refresh-widths) '(90 72)))
+        (should (= tab-bar-lines 1))
+        (should-not tab-bar-lines-keep-state)))))
 
 (provide 'p3-org-present-test)
 
