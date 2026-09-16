@@ -157,6 +157,27 @@
         (regexp-quote "C:/tmp/a''b.png")
         (car (last seen-args)))))))
 
+(ert-deftest p3-org-image-windows-clipboard-helper-accepts-copied-image-file ()
+  (let (seen-script)
+    (cl-letf (((symbol-function 'executable-find)
+               (lambda (program)
+                 (when (equal program "powershell.exe")
+                   "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe")))
+              ((symbol-function 'call-process)
+               (lambda (_program _infile _destination _display &rest args)
+                 (setq seen-script (car (last args)))
+                 0)))
+      (p3/org--save-windows-clipboard-image "C:/tmp/pasted.png")
+      (should (string-match-p
+               (regexp-quote "[System.Windows.Forms.Clipboard]::ContainsFileDropList()")
+               seen-script))
+      (should (string-match-p
+               (regexp-quote "[System.Windows.Forms.Clipboard]::GetFileDropList()")
+               seen-script))
+      (should (string-match-p
+               (regexp-quote "[System.Drawing.Image]::FromFile")
+               seen-script)))))
+
 (provide 'p3-org-image-test)
 
 ;;; p3-org-image-test.el ends here
