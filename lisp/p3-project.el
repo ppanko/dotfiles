@@ -16,6 +16,11 @@
 (defconst p3/project-general-tab-name "General"
   "Name of the shared workspace for local files outside projects.")
 
+(defvar p3/project-context-functions nil
+  "Functions that may provide semantic project roots for the current context.
+Each function is called with no arguments and should return a local project
+root or nil.  The first valid root wins before filesystem project discovery.")
+
 (defvar p3/project--buffer-preview-active nil
   "Non-nil while Consult is previewing buffer candidates.")
 
@@ -25,16 +30,7 @@
 (defvar p3/project--visit-root :unresolved
   "Dynamically scoped project root resolved by displayed file routing.
 The value nil means routing already established that the visited file has no
-local project; `:unresolved' means normal `project.el' discovery is required.")
-
-(defun p3/project-root ()
-  "Return the current built-in `project.el' root, if any.
-During a routed displayed file visit, reuse the root already resolved for the
-workspace decision instead of asking `project.el' to discover it again."
-  (if (eq p3/project--visit-root :unresolved)
-      (when-let ((project (project-current nil)))
-        (project-root project))
-    p3/project--visit-root))
+local project; `:unresolved' means normal context resolution is required.")
 
 (defun p3/project-normalize-root (root)
   "Return ROOT as the canonical local project workspace identity.
@@ -42,6 +38,24 @@ Return nil when ROOT does not name an existing directory."
   (when (and root (file-directory-p root))
     (file-name-as-directory
      (file-truename (expand-file-name root)))))
+
+(defun p3/project--context-root ()
+  "Return the first valid root supplied by semantic context resolvers."
+  (catch 'root
+    (dolist (resolver p3/project-context-functions)
+      (when-let ((root (p3/project-normalize-root (funcall resolver))))
+        (throw 'root root)))))
+
+(defun p3/project-root ()
+  "Return the current shared project root, if any.
+During a routed displayed file visit, reuse the root already resolved for the
+workspace decision.  Otherwise prefer explicit semantic project context before
+falling back to built-in `project.el' filesystem discovery."
+  (if (eq p3/project--visit-root :unresolved)
+      (or (p3/project--context-root)
+          (when-let ((project (project-current nil)))
+            (project-root project)))
+    p3/project--visit-root))
 
 (defun p3/project-compilation-buffer-name (mode)
   "Return a stable, collision-resistant project buffer name for MODE."
@@ -65,13 +79,12 @@ Return nil when ROOT does not name an existing directory."
   "Run the current project's repository-level check from its root.
 
 Resolve a project-level `compile-command' from directory-local variables even
-when invoked from a non-file project buffer, then delegate execution, prompting,
-error navigation, cancellation, and recompile behavior to `project-compile'."
+when invoked from a non-file or semantically associated project buffer, then
+delegate execution, prompting, error navigation, cancellation, and recompile
+behavior to `project-compile'."
   (interactive)
   (require 'compile)
-  (let* ((project (project-current nil))
-         (root (and project
-                    (p3/project-normalize-root (project-root project)))))
+  (let ((root (p3/project-normalize-root (p3/project-root))))
     (unless root
       (user-error "Selected project root is unavailable"))
     (let ((project-current-directory-override root)
