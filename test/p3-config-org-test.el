@@ -54,6 +54,20 @@
     (should (integerp binding))
     (should (< behavior binding))))
 
+(ert-deftest p3-config-org-loads-image-behavior-before-image-binding ()
+  (let* ((forms (p3-config-org-test--forms "lisp/p3-config-org.el"))
+         (behavior (seq-position
+                    forms '(p3/config-load-module 'p3-org-image) #'equal))
+         (binding (seq-position
+                   forms
+                   '(define-key org-mode-map
+                      (kbd "C-c I")
+                      p3/org-image-command-map)
+                   #'equal)))
+    (should (integerp behavior))
+    (should (integerp binding))
+    (should (< behavior binding))))
+
 (ert-deftest p3-config-org-preserves-core-settings-and-timestamp-hook ()
   (let ((forms (p3-config-org-test--forms "lisp/p3-config-org.el")))
     (should (member '(setq org-startup-folded 'content) forms))
@@ -124,7 +138,8 @@
          :config
          (setq org-download-method 'directory
                org-download-timestamp "%Y%m%d-%H%M%S-"
-               org-download-annotate-function #'p3/org-image-default-attributes))))))
+               org-download-image-attr-list
+               '("#+ATTR_ORG: :align center :width 70%")))))))
 
 (ert-deftest p3-config-org-preserves-export-pdf-and-agenda-wiring ()
   (let* ((forms (p3-config-org-test--forms "lisp/p3-config-org.el"))
