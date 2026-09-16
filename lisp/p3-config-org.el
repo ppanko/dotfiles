@@ -30,6 +30,7 @@
 (defvar time-stamp-start)
 
 (declare-function org-babel-do-load-languages "ob-core" (sym value))
+(declare-function p3/org-image-no-annotation "p3-org" (link))
 (declare-function p3/org-sort-todos "p3-org" ())
 (declare-function p3-org-export-setup "p3-org-export" ())
 
