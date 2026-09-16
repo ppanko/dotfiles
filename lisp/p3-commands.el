@@ -41,6 +41,7 @@
      ("C-c s" . "insert source block")
      ("C-c C-o" . "open link at point")
      ("C-c E" . "export Org file")
+     ("C-c I" . "insert and lay out images")
      ("C-c C-x C-o" . "sort TODO entries")
      ("C-c P" . "start presentation"))
     ("References"
