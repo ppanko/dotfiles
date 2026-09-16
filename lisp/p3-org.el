@@ -15,6 +15,7 @@
                   "org"
                   (&optional with-case sorting-type get-key-func compare-func
                              property interactive?))
+(declare-function org-version "org" (&optional here full message))
 
 (defconst p3/org--standalone-image-link-regexp
   "^[ \t]*\\[\\[\\(?:file:\\)?\\([^]\n]+\\)\\]\\][ \t]*$"
@@ -40,9 +41,9 @@ TODO states according to `org-todo-keywords'."
       (forward-line))
     (beginning-of-line)))
 
-(defun p3/org-image-no-annotation (_link)
-  "Return no annotation for an image inserted through `org-download'."
-  "")
+(defun p3/org-image-default-attributes (_link)
+  "Return the default display attributes for images inserted by org-download."
+  "#+ATTR_ORG: :align center :width 70%\n")
 
 (defun p3/org--save-windows-clipboard-image (filename)
   "Save the Windows clipboard image as PNG at FILENAME using PowerShell."
@@ -149,13 +150,59 @@ Only contiguous Org keyword lines immediately above the image are considered."
         (replace-match value t t line 2)
       (concat line " :" key " " value))))
 
+(defun p3/org--image-align-at (position)
+  "Return the ATTR_ORG alignment associated with image at POSITION."
+  (save-excursion
+    (goto-char position)
+    (let ((attr-line (p3/org--affiliated-attr-org-line
+                      (line-beginning-position)))
+          (case-fold-search t))
+      (when attr-line
+        (goto-char attr-line)
+        (when (re-search-forward
+               ":align[ \t]+\\([^ \t\n]+\\)"
+               (line-end-position) t)
+          (downcase (match-string-no-properties 1)))))))
+
+(defun p3/org--legacy-image-before-string (align image)
+  "Return an Org 9.6 alignment prefix for ALIGN and IMAGE."
+  (pcase align
+    ("center"
+     (propertize
+      " " 'face 'default
+      'display `(space :align-to (- center (0.5 . ,image)))))
+    ("right"
+     (propertize
+      " " 'face 'default
+      'display `(space :align-to (- right ,image))))
+    (_ nil)))
+
+(defun p3/org-apply-image-layouts ()
+  "Apply native image layout metadata on Org versions before 9.7.
+Org 9.7 and newer handle `:align' themselves.  Older Org versions already
+understand percentage `:width' values, so only alignment needs emulation."
+  (when (and (fboundp 'org-version)
+             (version< (org-version) "9.7")
+             (boundp 'org-inline-image-overlays))
+    (dolist (overlay org-inline-image-overlays)
+      (when (and (overlayp overlay)
+                 (overlay-buffer overlay))
+        (let ((image (overlay-get overlay 'display)))
+          (when image
+            (overlay-put
+             overlay 'before-string
+             (p3/org--legacy-image-before-string
+              (p3/org--image-align-at (overlay-start overlay))
+              image))))))))
+
 (defun p3/org--refresh-inline-images ()
   "Refresh displayed Org inline images when they are already visible."
   (when (and (boundp 'org-inline-image-overlays)
              org-inline-image-overlays)
     (if (fboundp 'org-redisplay-inline-images)
         (org-redisplay-inline-images)
-      (org-display-inline-images t t))))
+      (org-display-inline-images t t))
+    (p3/org-apply-image-layouts)))
 
 (defun p3/org--set-image-layout (align width)
   "Set standalone image at point to ALIGN and WIDTH using native Org metadata."
@@ -184,9 +231,9 @@ Only contiguous Org keyword lines immediately above the image are considered."
   (p3/org--set-image-layout "center" "70%"))
 
 (defun p3/org-image-layout-full ()
-  "Center the image at point and let Org use its window-limited full width."
+  "Center the image at point at the presentation text width."
   (interactive)
-  (p3/org--set-image-layout "center" "t"))
+  (p3/org--set-image-layout "center" "100%"))
 
 (defun p3/org-image-layout-left ()
   "Place the image at point on the left at 40 percent text width."
