@@ -124,7 +124,7 @@
          :config
          (setq org-download-method 'directory
                org-download-timestamp "%Y%m%d-%H%M%S-"
-               org-download-annotate-function #'p3/org-image-no-annotation))))))
+               org-download-annotate-function #'p3/org-image-default-attributes))))))
 
 (ert-deftest p3-config-org-preserves-export-pdf-and-agenda-wiring ()
   (let* ((forms (p3-config-org-test--forms "lisp/p3-config-org.el"))
