@@ -18,7 +18,8 @@
   "Regexp matching a standalone Org image-style file link.")
 
 (defun p3/org--save-windows-clipboard-image (filename)
-  "Save the Windows clipboard image as PNG at FILENAME using PowerShell."
+  "Save a Windows clipboard image as PNG at FILENAME using PowerShell.
+The clipboard may contain image pixels or one copied image file."
   (let ((powershell (or (executable-find "powershell.exe")
                         (executable-find "powershell"))))
     (unless powershell
@@ -32,16 +33,28 @@
               "Add-Type -AssemblyName System.Windows.Forms; "
               "Add-Type -AssemblyName System.Drawing; "
               "$image = [System.Windows.Forms.Clipboard]::GetImage(); "
-              "if ($null -eq $image) { exit 2 }; "
+              "if ($null -ne $image) { "
               "$image.Save('%s', [System.Drawing.Imaging.ImageFormat]::Png); "
-              "$image.Dispose()")
-             escaped))
+              "$image.Dispose(); exit 0 }; "
+              "if (-not [System.Windows.Forms.Clipboard]::ContainsFileDropList()) { exit 2 }; "
+              "$files = [System.Windows.Forms.Clipboard]::GetFileDropList(); "
+              "if ($files.Count -ne 1) { exit 3 }; "
+              "$fileImage = $null; "
+              "try { "
+              "$fileImage = [System.Drawing.Image]::FromFile($files[0]); "
+              "$fileImage.Save('%s', [System.Drawing.Imaging.ImageFormat]::Png); "
+              "$fileImage.Dispose(); exit 0 "
+              "} catch { "
+              "if ($null -ne $fileImage) { $fileImage.Dispose() }; exit 4 "
+              "}")
+             escaped escaped))
            (status
             (call-process powershell nil nil nil
                           "-NoProfile" "-STA" "-NonInteractive"
                           "-Command" script)))
       (unless (and (integerp status) (zerop status))
-        (user-error "Clipboard does not contain a readable image")))))
+        (user-error
+         "Clipboard must contain image pixels or one readable image file")))))
 
 (defun p3/org--clipboard-image-method ()
   "Return the platform clipboard-image method for `org-download-screenshot'."
