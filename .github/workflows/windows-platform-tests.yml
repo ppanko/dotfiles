@@ -64,6 +64,9 @@ on:
       - "test/p3-terminal-integration-test.el"
       - "test/p3-config-terminal-test.el"
       - "test/p3-config-terminal-windows-test.el"
+      - "test/p3-eat-feasibility-test.el"
+      - "test/p3-terminal-test-support.el"
+      - "test/fixtures/p3-terminal-fixture.py"
       - "test/p3-reference-test.el"
       - "test/p3-reference-reconstruction-test.el"
       - "test/p3-reference-adversarial-test.el"
@@ -112,7 +115,30 @@ jobs:
           if (-not (Test-Path (Join-Path $gitRoot "usr/bin/find.exe"))) {
             throw "Git for Windows MSYS2 find not found under $gitRoot"
           }
+          foreach ($tool in @("stty.exe", "env.exe", "sh.exe")) {
+            if (-not (Test-Path (Join-Path $gitRoot "usr/bin/$tool"))) {
+              throw "Git for Windows MSYS2 $tool not found under $gitRoot"
+            }
+          }
           "P3_TEST_MSYS2_ROOT=$($gitRoot -replace '\\','/')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Install Eat feasibility dependency
+        shell: powershell
+        run: >-
+          emacs -Q --batch
+          --eval '(require (quote package))'
+          --eval '(setq package-archives (quote (("nongnu" . "https://elpa.nongnu.org/nongnu/"))))'
+          --eval '(package-refresh-contents)'
+          --eval '(package-install (quote eat))'
+
+      - name: Run Eat Eshell feasibility gate
+        shell: powershell
+        run: >-
+          emacs -Q --batch -L lisp -L test
+          --eval '(require (quote package))'
+          --eval '(package-initialize)'
+          -l test/p3-eat-feasibility-test.el
+          -f ert-run-tests-batch-and-exit
 
       - name: Byte-compile Windows boundary modules
         shell: powershell
