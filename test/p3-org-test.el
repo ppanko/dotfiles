@@ -42,6 +42,9 @@
                    "- [ ] alpha\n- [ ] beta\ngamma\n"))
     (should (looking-at "gamma"))))
 
+(load (expand-file-name "p3-org-image-test.el"
+                        (file-name-directory (or load-file-name buffer-file-name))))
+
 (provide 'p3-org-test)
 
 ;;; p3-org-test.el ends here
