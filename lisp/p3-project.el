@@ -16,10 +16,15 @@
 (defconst p3/project-general-tab-name "General"
   "Name of the shared workspace for local files outside projects.")
 
+(defconst p3/project-context-unavailable :p3/project-context-unavailable
+  "Resolver result meaning explicit semantic project context cannot resolve.")
+
 (defvar p3/project-context-functions nil
   "Functions that may provide semantic project roots for the current context.
 Each function is called with no arguments and should return a local project
-root or nil.  The first valid root wins before filesystem project discovery.")
+root, nil when it makes no semantic claim, or
+`p3/project-context-unavailable' when an explicit claim cannot resolve locally.
+The first claimed context wins before filesystem project discovery.")
 
 (defvar p3/project--buffer-preview-active nil
   "Non-nil while Consult is previewing buffer candidates.")
@@ -40,22 +45,37 @@ Return nil when ROOT does not name an existing directory."
      (file-truename (expand-file-name root)))))
 
 (defun p3/project--context-root ()
-  "Return the first valid root supplied by semantic context resolvers."
+  "Return the first claimed result supplied by semantic context resolvers."
   (catch 'root
     (dolist (resolver p3/project-context-functions)
-      (when-let ((root (p3/project-normalize-root (funcall resolver))))
-        (throw 'root root)))))
+      (let ((candidate (funcall resolver)))
+        (cond
+         ((eq candidate p3/project-context-unavailable)
+          (throw 'root p3/project-context-unavailable))
+         ((p3/project-normalize-root candidate)
+          (throw 'root (p3/project-normalize-root candidate))))))))
 
-(defun p3/project-root ()
+(defun p3/project-root (&optional error-on-unavailable)
   "Return the current shared project root, if any.
 During a routed displayed file visit, reuse the root already resolved for the
 workspace decision.  Otherwise prefer explicit semantic project context before
-falling back to built-in `project.el' filesystem discovery."
-  (if (eq p3/project--visit-root :unresolved)
-      (or (p3/project--context-root)
-          (when-let ((project (project-current nil)))
-            (project-root project)))
-    p3/project--visit-root))
+falling back to built-in `project.el' filesystem discovery.
+
+When an explicit semantic project claim exists but has no available local root,
+do not fall back to filesystem discovery.  Return nil by default, or signal a
+`user-error' when ERROR-ON-UNAVAILABLE is non-nil."
+  (if (not (eq p3/project--visit-root :unresolved))
+      p3/project--visit-root
+    (let ((context (p3/project--context-root)))
+      (cond
+       ((eq context p3/project-context-unavailable)
+        (if error-on-unavailable
+            (user-error
+             "Explicit project association has no available local root")
+          nil))
+       (context context)
+       ((when-let ((project (project-current nil)))
+          (project-root project)))))))
 
 (defun p3/project-compilation-buffer-name (mode)
   "Return a stable, collision-resistant project buffer name for MODE."
