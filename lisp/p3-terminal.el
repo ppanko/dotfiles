@@ -77,7 +77,7 @@
 (defun p3/project-shell-root ()
   "Return the canonical local root for the current project shell context."
   (let ((root (or p3/project-shell-root-value
-                  (p3/project-root)
+                  (p3/project-root t)
                   default-directory)))
     (when (file-remote-p root)
       (user-error "Project shell requires a local project or directory"))

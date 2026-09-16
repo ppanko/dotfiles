@@ -77,9 +77,9 @@ This is safe for mode-line redisplay and performs no project discovery."
     (and (process-live-p process)
          (process-get process 'busy))))
 
-(defun p3/ess-project-process ()
-  "Return the live ESS process name for the current project, or nil."
-  (let* ((root (p3/ess-project-root))
+(defun p3/ess-project-process-for-root (root)
+  "Return the live ESS process name registered for ROOT, or nil."
+  (let* ((root (p3/ess--canonical-root root))
          (name (gethash root p3/ess-project-processes)))
     (cond
      ((null name)
@@ -90,6 +90,10 @@ This is safe for mode-line redisplay and performs no project discovery."
       (remhash root p3/ess-project-processes)
       nil))))
 
+(defun p3/ess-project-process ()
+  "Return the live ESS process name for the current project, or nil."
+  (p3/ess-project-process-for-root (p3/ess-project-root)))
+
 (defun p3/ess-register-current-process ()
   "Register the current inferior ESS process to its project."
   (when (and (derived-mode-p 'inferior-ess-mode)
@@ -97,6 +101,38 @@ This is safe for mode-line redisplay and performs no project discovery."
     (puthash (p3/ess-project-root)
              ess-local-process-name
              p3/ess-project-processes)))
+
+(defun p3/ess-display-process (name)
+  "Display the live ESS process buffer named NAME, or return nil."
+  (when-let* ((process (get-process name))
+              ((process-live-p process))
+              (buffer (process-buffer process))
+              ((buffer-live-p buffer)))
+    (pop-to-buffer buffer)))
+
+(defun p3/ess-project-aware-R (original &rest args)
+  "Run ORIGINAL `R' command in the current shared project context.
+With no startup argument, reuse and display the live ESS process already
+registered for the current project.  Resolve project identity fresh on every
+invocation so semantic contexts such as Org project headings remain
+point-sensitive.  With an explicit startup argument, preserve ESS behavior and
+start a new process."
+  (let* ((root (p3/ess--canonical-root
+                (or (p3/project-root t) default-directory)))
+         (start-args (car args))
+         (process (and (null start-args)
+                       (p3/ess-project-process-for-root root)))
+         (default-directory root))
+    (if process
+        (progn
+          (setq-local ess-local-process-name process)
+          (or (p3/ess-display-process process)
+              ;; The process can disappear between lookup and display.
+              (progn
+                (remhash root p3/ess-project-processes)
+                (setq-local ess-local-process-name nil)
+                (apply original args))))
+      (apply original args))))
 
 (defun p3/ess-ensure-project-process (&rest _)
   "Ensure the current source buffer has a project-specific ESS process."
@@ -122,6 +158,17 @@ This is safe for mode-line redisplay and performs no project discovery."
                (not (advice-member-p #'p3/ess-ensure-project-process target)))
       (advice-add target :before #'p3/ess-ensure-project-process))))
 
+(defun p3/ess-R-command-symbol ()
+  "Return the interactive ESS R startup command symbol."
+  'R)
+
+(defun p3/ess-install-R-advice ()
+  "Install project-aware interactive R advice exactly once."
+  (let ((target (p3/ess-R-command-symbol)))
+    (when (and (fboundp target)
+               (not (advice-member-p #'p3/ess-project-aware-R target)))
+      (advice-add target :around #'p3/ess-project-aware-R))))
+
 (defun p3/ess-setup ()
   "Install project-aware ESS hooks and process-selection advice."
   (add-hook 'ess-mode-hook #'p3/ess-cache-project-root)
@@ -129,7 +176,11 @@ This is safe for mode-line redisplay and performs no project discovery."
   (if (featurep 'ess-inf)
       (p3/ess-install-process-advice)
     (with-eval-after-load 'ess-inf
-      (p3/ess-install-process-advice))))
+      (p3/ess-install-process-advice)))
+  (if (featurep 'ess-r-mode)
+      (p3/ess-install-R-advice)
+    (with-eval-after-load 'ess-r-mode
+      (p3/ess-install-R-advice))))
 
 (provide 'p3-ess)
 

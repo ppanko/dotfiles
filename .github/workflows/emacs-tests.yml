@@ -210,6 +210,7 @@ jobs:
             -l test/p3-config-editing-ownership-test.el \
             -l test/p3-config-ess-test.el \
             -l test/p3-project-test.el \
+            -l test/p3-project-context-test.el \
             -l test/p3-config-project-test.el \
             -l test/p3-project-preview-window-test.el \
             -l test/p3-core-test.el \
