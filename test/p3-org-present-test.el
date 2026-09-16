@@ -141,6 +141,32 @@
         (should (= (length remap-removes) 3))
         (should-not p3/org-present--state)))))
 
+(ert-deftest p3-org-present-rerenders-preexisting-images-after-restoring-editing-width ()
+  (with-temp-buffer
+    (setq-local header-line-format nil
+                display-line-numbers-mode nil
+                org-inline-image-overlays '(existing)
+                visual-fill-column-mode t
+                visual-fill-column-width 72
+                visual-fill-column-center-text nil
+                hide-mode-line-mode nil)
+    (let (refresh-widths)
+      (cl-letf (((symbol-function 'display-line-numbers-mode) #'ignore)
+                ((symbol-function 'org-present-big) #'ignore)
+                ((symbol-function 'org-present-small) #'ignore)
+                ((symbol-function 'p3/org--refresh-inline-images)
+                 (lambda () (push visual-fill-column-width refresh-widths)))
+                ((symbol-function 'visual-fill-column-mode)
+                 (lambda (arg)
+                   (setq-local visual-fill-column-mode (> arg 0))))
+                ((symbol-function 'hide-mode-line-mode) #'ignore)
+                ((symbol-function 'face-remap-add-relative)
+                 (lambda (&rest _) 'cookie))
+                ((symbol-function 'face-remap-remove-relative) #'ignore))
+        (p3/org-present-hook)
+        (p3/org-present-quit-hook)
+        (should (equal (nreverse refresh-widths) '(90 72)))))))
+
 (provide 'p3-org-present-test)
 
 ;;; p3-org-present-test.el ends here
