@@ -44,6 +44,8 @@
 
 (load (expand-file-name "p3-org-image-test.el"
                         (file-name-directory (or load-file-name buffer-file-name))))
+(load (expand-file-name "p3-org-image-windows-test.el"
+                        (file-name-directory (or load-file-name buffer-file-name))))
 
 (provide 'p3-org-test)
 
