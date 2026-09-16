@@ -139,7 +139,6 @@ jobs:
           lisp/p3-r-tidyverse-completion.el
           lisp/p3-org.el
           lisp/p3-org-image.el
-          lisp/p3-org-roam.el
           lisp/p3-org-present.el
           lisp/p3-terminal.el
           lisp/p3-config-terminal.el
