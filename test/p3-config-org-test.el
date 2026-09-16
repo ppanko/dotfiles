@@ -22,7 +22,7 @@
 (defun p3-config-org-test--forms (relative)
   "Read all top-level Lisp forms from RELATIVE."
   (with-temp-buffer
-    (insert-file-contents (p3-config-test--path relative))
+    (insert-file-contents (p3-config-org-test--path relative))
     (goto-char (point-min))
     (let (forms)
       (condition-case nil
