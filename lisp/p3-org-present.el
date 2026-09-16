@@ -1,6 +1,7 @@
 ;;; p3-org-present.el --- Org presentation behavior -*- lexical-binding: t; -*-
 
 (require 'face-remap)
+(require 'p3-org)
 
 (defvar display-line-numbers-mode)
 (defvar hide-mode-line-mode)
@@ -18,6 +19,7 @@
 (declare-function org-present-prev "org-present" ())
 (declare-function org-present-small "org-present" ())
 (declare-function org-remove-inline-images "org" ())
+(declare-function p3/org--refresh-inline-images "p3-org" ())
 (declare-function p3/org-apply-image-layouts "p3-org" ())
 (declare-function visual-fill-column-mode "visual-fill-column" (&optional arg))
 
@@ -56,10 +58,11 @@
   (setq-local visual-fill-column-width 90
               visual-fill-column-center-text t)
   (visual-fill-column-mode 1)
-  (unless (and (boundp 'org-inline-image-overlays)
-               org-inline-image-overlays)
-    (org-display-inline-images))
-  (p3/org-apply-image-layouts)
+  (if (and (boundp 'org-inline-image-overlays)
+           org-inline-image-overlays)
+      (p3/org--refresh-inline-images)
+    (org-display-inline-images)
+    (p3/org-apply-image-layouts))
   (hide-mode-line-mode +1)
   (setf (plist-get p3/org-present--state :face-remap-cookies)
         (list (face-remap-add-relative 'org-level-1 :height 1.5)
