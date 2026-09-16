@@ -7,6 +7,7 @@
 (defvar org-download-screenshot-method)
 (defvar org-inline-image-overlays)
 
+(declare-function image-type-from-file-name "image" (file))
 (declare-function org-display-inline-images "org" (&rest args))
 (declare-function org-download-screenshot "org-download" (&optional basename))
 (declare-function org-redisplay-inline-images "org" ())
