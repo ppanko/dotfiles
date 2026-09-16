@@ -45,7 +45,7 @@
 
 (ert-deftest p3-org-image-layout-presets-write-native-org-attributes ()
   (dolist (case '((p3/org-image-layout-center "center" "70%")
-                  (p3/org-image-layout-full "center" "t")
+                  (p3/org-image-layout-full "center" "100%")
                   (p3/org-image-layout-left "left" "40%")
                   (p3/org-image-layout-right "right" "40%")))
     (with-temp-buffer
@@ -59,6 +59,11 @@
         (regexp-quote
          (format "#+ATTR_ORG: :align %s :width %s\n"
                  (nth 1 case) (nth 2 case))))))))
+
+(ert-deftest p3-org-image-default-attributes-keep-new-images-bounded ()
+  (should
+   (equal (p3/org-image-default-attributes nil)
+          "#+ATTR_ORG: :align center :width 70%\n")))
 
 (ert-deftest p3-org-image-layout-updates-existing-attributes-without-clobbering-others ()
   (with-temp-buffer
@@ -81,6 +86,25 @@
     (insert "plain text\n")
     (goto-char (point-min))
     (should-error (p3/org-image-layout-right) :type 'user-error)))
+
+(ert-deftest p3-org-legacy-image-alignment-applies-center-and-right-overlays ()
+  (dolist (case '(("center" . (space :align-to (- center (0.5 . fake-image))))
+                  ("right" . (space :align-to (- right fake-image)))))
+    (with-temp-buffer
+      (org-mode)
+      (insert (format "#+ATTR_ORG: :align %s :width 40%%\n" (car case))
+              "[[file:images/chart.png]]\n")
+      (goto-char (point-min))
+      (forward-line 1)
+      (let* ((overlay (make-overlay (line-beginning-position) (line-end-position)))
+             (org-inline-image-overlays (list overlay)))
+        (overlay-put overlay 'display 'fake-image)
+        (cl-letf (((symbol-function 'org-version) (lambda () "9.6.15")))
+          (p3/org-apply-image-layouts))
+        (let ((before (overlay-get overlay 'before-string)))
+          (should before)
+          (should (equal (get-text-property 0 'display before)
+                         (cdr case))))))))
 
 (ert-deftest p3-org-image-command-map-exposes-insert-and-layout-actions ()
   (should (eq (lookup-key p3/org-image-command-map (kbd "i"))
