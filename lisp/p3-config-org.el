@@ -5,8 +5,8 @@
 
 (defvar org-agenda-sorting-strategy)
 (defvar org-confirm-babel-evaluate)
-(defvar org-download-annotate-function)
 (defvar org-download-heading-lvl)
+(defvar org-download-image-attr-list)
 (defvar org-download-image-dir)
 (defvar org-download-method)
 (defvar org-download-timestamp)
@@ -30,11 +30,11 @@
 (defvar time-stamp-start)
 
 (declare-function org-babel-do-load-languages "ob-core" (sym value))
-(declare-function p3/org-image-default-attributes "p3-org" (link))
 (declare-function p3/org-sort-todos "p3-org" ())
 (declare-function p3-org-export-setup "p3-org-export" ())
 
 (p3/config-load-module 'p3-org)
+(p3/config-load-module 'p3-org-image)
 
 (setq org-startup-folded 'content)
 
@@ -85,7 +85,8 @@
   :config
   (setq org-download-method 'directory
         org-download-timestamp "%Y%m%d-%H%M%S-"
-        org-download-annotate-function #'p3/org-image-default-attributes))
+        org-download-image-attr-list
+        '("#+ATTR_ORG: :align center :width 70%")))
 
 (setq org-latex-pdf-process
       '("pdflatex -interaction nonstopmode -output-directory %o %f"
