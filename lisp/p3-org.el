@@ -1,5 +1,6 @@
 ;;; p3-org.el --- Core Org workflow helpers -*- lexical-binding: t; -*-
 
+(require 'image)
 (require 'subr-x)
 
 (defvar org-download-heading-lvl)
@@ -7,7 +8,6 @@
 (defvar org-download-screenshot-method)
 (defvar org-inline-image-overlays)
 
-(declare-function image-supported-file-p "image" (file))
 (declare-function org-display-inline-images "org" (&rest args))
 (declare-function org-download-screenshot "org-download" (&optional basename))
 (declare-function org-redisplay-inline-images "org" ())
@@ -115,7 +115,7 @@ Signal a `user-error' when the current line is not a standalone image link."
       (unless (looking-at p3/org--standalone-image-link-regexp)
         (user-error "Place point on a standalone Org image link"))
       (let ((path (match-string-no-properties 1)))
-        (unless (image-supported-file-p path)
+        (unless (string-match-p (image-file-name-regexp) path)
           (user-error "The link at point is not a recognized image")))
       (point))))
 
