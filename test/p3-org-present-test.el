@@ -71,6 +71,7 @@
     (let (big-called
           small-called
           images-displayed
+          image-layouts-applied
           images-removed
           remap-adds
           remap-removes)
@@ -85,6 +86,8 @@
                  (lambda (&rest _)
                    (setq images-displayed t
                          org-inline-image-overlays '(shown))))
+                ((symbol-function 'p3/org-apply-image-layouts)
+                 (lambda () (setq image-layouts-applied t)))
                 ((symbol-function 'org-remove-inline-images)
                  (lambda ()
                    (setq images-removed t
@@ -106,6 +109,7 @@
         (p3/org-present-hook)
         (should big-called)
         (should images-displayed)
+        (should image-layouts-applied)
         (should (equal header-line-format " "))
         (should-not display-line-numbers-mode)
         (should visual-fill-column-mode)
