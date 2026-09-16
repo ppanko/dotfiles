@@ -15,6 +15,7 @@
 (require 'p3-project)
 (require 'p3-org-roam)
 (require 'p3-terminal)
+(require 'p3-ess)
 
 (defun p3-project-context-test--canonical (directory)
   "Return canonical DIRECTORY with a trailing separator."
@@ -150,6 +151,54 @@
                   (p3-project-context-test--canonical semantic-root))))
       (delete-directory semantic-root t)
       (delete-directory physical-root t))))
+
+(ert-deftest p3-ess-interactive-R-follows-point-sensitive-org-project-context ()
+  (let ((file-root (make-temp-file "p3-R-file-project-" t))
+        (heading-root (make-temp-file "p3-R-heading-project-" t))
+        (org-root (make-temp-file "p3-R-org-root-" t)))
+    (unwind-protect
+        (with-temp-buffer
+          (org-mode)
+          (insert ":PROPERTIES:\n:P3_PROJECT: file-hub\n:END:\n"
+                  "#+title: note\n\n"
+                  "* Work\n"
+                  ":PROPERTIES:\n:P3_PROJECT: heading-hub\n:END:\n"
+                  "body\n")
+          (setq default-directory (file-name-as-directory org-root))
+          (let* ((file-canonical
+                  (p3-project-context-test--canonical file-root))
+                 (heading-canonical
+                  (p3-project-context-test--canonical heading-root))
+                 (p3/org-roam-project-associations
+                  (list (cons file-canonical "file-hub")
+                        (cons heading-canonical "heading-hub")))
+                 (p3/ess-project-processes (make-hash-table :test #'equal))
+                 seen)
+            (puthash file-canonical "R:file" p3/ess-project-processes)
+            (puthash heading-canonical "R:heading" p3/ess-project-processes)
+            (cl-letf (((symbol-function 'project-current)
+                       (lambda (&optional _maybe-prompt _directory)
+                         'org-project))
+                      ((symbol-function 'project-root)
+                       (lambda (_project) org-root))
+                      ((symbol-function 'p3/ess-process-live-p)
+                       (lambda (_name) t)))
+              (goto-char (point-min))
+              (p3/ess-project-aware-R
+               (lambda (&optional _start-args)
+                 (push (list ess-local-process-name default-directory) seen)))
+              (search-forward "body")
+              (setq-local ess-local-process-name nil)
+              (p3/ess-project-aware-R
+               (lambda (&optional _start-args)
+                 (push (list ess-local-process-name default-directory) seen)))
+              (should
+               (equal (nreverse seen)
+                      (list (list "R:file" file-canonical)
+                            (list "R:heading" heading-canonical)))))))
+      (delete-directory file-root t)
+      (delete-directory heading-root t)
+      (delete-directory org-root t))))
 
 (provide 'p3-project-context-test)
 
