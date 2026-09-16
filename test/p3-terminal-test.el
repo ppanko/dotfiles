@@ -30,14 +30,15 @@
          (default-directory temporary-file-directory))
     (unwind-protect
         (cl-letf (((symbol-function 'p3/project-root)
-                   (lambda () project)))
+                   (lambda (&optional _error-on-unavailable) project)))
           (should (equal (p3/project-shell-root)
                          (p3/project-normalize-root project))))
       (delete-directory project t))))
 
 (ert-deftest p3-terminal-root-falls-back-to-local-default-directory ()
   (let ((default-directory temporary-file-directory))
-    (cl-letf (((symbol-function 'p3/project-root) (lambda () nil)))
+    (cl-letf (((symbol-function 'p3/project-root)
+               (lambda (&optional _error-on-unavailable) nil)))
       (should (equal (p3/project-shell-root)
                      (p3/project-normalize-root default-directory))))))
 
@@ -48,7 +49,8 @@
                      (expand-file-name "p3-project-canonical"
                                        temporary-file-directory)))
          seen)
-    (cl-letf (((symbol-function 'p3/project-root) (lambda () raw))
+    (cl-letf (((symbol-function 'p3/project-root)
+               (lambda (&optional _error-on-unavailable) raw))
               ((symbol-function 'p3/project-normalize-root)
                (lambda (root)
                  (setq seen root)
@@ -58,7 +60,8 @@
 
 (ert-deftest p3-terminal-root-rejects-remote-fallback ()
   (let ((default-directory "/ssh:host:/tmp/project/"))
-    (cl-letf (((symbol-function 'p3/project-root) (lambda () nil)))
+    (cl-letf (((symbol-function 'p3/project-root)
+               (lambda (&optional _error-on-unavailable) nil)))
       (should-error (p3/project-shell-root) :type 'user-error))))
 
 (ert-deftest p3-terminal-project-shell-live-p-requires-live-process ()
@@ -134,7 +137,8 @@
                                            temporary-file-directory)))
         created)
     (unwind-protect
-        (cl-letf (((symbol-function 'p3/project-root) (lambda () raw-root))
+        (cl-letf (((symbol-function 'p3/project-root)
+                   (lambda (&optional _error-on-unavailable) raw-root))
                   ((symbol-function 'file-remote-p) (lambda (_root) nil))
                   ((symbol-function 'p3/project-normalize-root)
                    (lambda (_root) canonical-root))
