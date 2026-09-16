@@ -27,6 +27,7 @@ on:
       - "lisp/p3-org.el"
       - "lisp/p3-org-image.el"
       - "lisp/p3-config-org.el"
+      - "lisp/p3-org-roam.el"
       - "lisp/p3-config-org-roam.el"
       - "lisp/p3-org-present.el"
       - "lisp/p3-config-org-present.el"
@@ -41,6 +42,7 @@ on:
       - "templates/r/**"
       - "test/p3-platform-test.el"
       - "test/p3-project-test.el"
+      - "test/p3-project-context-test.el"
       - "test/p3-project-windows-test.el"
       - "test/p3-config-project-test.el"
       - "test/p3-config-loader-test.el"
@@ -137,6 +139,7 @@ jobs:
           lisp/p3-r-tidyverse-completion.el
           lisp/p3-org.el
           lisp/p3-org-image.el
+          lisp/p3-org-roam.el
           lisp/p3-org-present.el
           lisp/p3-terminal.el
           lisp/p3-config-terminal.el
@@ -161,6 +164,7 @@ jobs:
           emacs -Q --batch -L lisp
           -l test/p3-platform-test.el
           -l test/p3-project-windows-test.el
+          -l test/p3-project-context-test.el
           -l test/p3-terminal-test.el
           -l test/p3-screen-record-test.el
           -f ert-run-tests-batch-and-exit
