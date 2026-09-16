@@ -1,7 +1,7 @@
 ;;; p3-org-present.el --- Org presentation behavior -*- lexical-binding: t; -*-
 
 (require 'face-remap)
-(require 'p3-org)
+(require 'p3-org-image)
 
 (defvar display-line-numbers-mode)
 (defvar hide-mode-line-mode)
@@ -19,8 +19,8 @@
 (declare-function org-present-prev "org-present" ())
 (declare-function org-present-small "org-present" ())
 (declare-function org-remove-inline-images "org" ())
-(declare-function p3/org--refresh-inline-images "p3-org" ())
-(declare-function p3/org-apply-image-layouts "p3-org" ())
+(declare-function p3/org--refresh-inline-images "p3-org-image" ())
+(declare-function p3/org-apply-image-layouts "p3-org-image" ())
 (declare-function visual-fill-column-mode "visual-fill-column" (&optional arg))
 
 (defvar-local p3/org-present--state nil
@@ -87,6 +87,8 @@
       (if (plist-get state :visual-fill)
           (visual-fill-column-mode +1)
         (visual-fill-column-mode -1))
+      (when (plist-get state :inline-images)
+        (p3/org--refresh-inline-images))
       (if (plist-get state :hide-mode-line)
           (hide-mode-line-mode +1)
         (hide-mode-line-mode -1))
