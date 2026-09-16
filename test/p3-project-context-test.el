@@ -201,6 +201,66 @@
       (delete-directory heading-root t)
       (delete-directory org-root t))))
 
+(ert-deftest p3-project-unavailable-semantic-context-blocks-filesystem-fallback ()
+  (let ((physical-root (make-temp-file "p3-unavailable-physical-" t))
+        filesystem-called)
+    (unwind-protect
+        (let ((p3/project-context-functions
+               (list (lambda () :p3/project-context-unavailable))))
+          (cl-letf (((symbol-function 'project-current)
+                     (lambda (&optional _maybe-prompt _directory)
+                       (setq filesystem-called t)
+                       'physical-project))
+                    ((symbol-function 'project-root)
+                     (lambda (_project) physical-root)))
+            (should-not (p3/project-root))
+            (should-not filesystem-called)
+            (should-error (p3/project-root t) :type 'user-error)))
+      (delete-directory physical-root t))))
+
+(ert-deftest p3-project-shell-rejects-stale-explicit-org-association ()
+  (let ((org-root (make-temp-file "p3-stale-shell-org-root-" t)))
+    (unwind-protect
+        (with-temp-buffer
+          (org-mode)
+          (insert ":PROPERTIES:\n:P3_PROJECT: missing-hub\n:END:\n#+title: note\n")
+          (goto-char (point-min))
+          (setq default-directory (file-name-as-directory org-root))
+          (let ((p3/org-roam-project-associations
+                 (list (cons "/definitely/missing/p3-project/" "missing-hub"))))
+            (cl-letf (((symbol-function 'project-current)
+                       (lambda (&optional _maybe-prompt _directory)
+                         'org-project))
+                      ((symbol-function 'project-root)
+                       (lambda (_project) org-root)))
+              (should-error (p3/project-shell-root) :type 'user-error))))
+      (delete-directory org-root t))))
+
+(ert-deftest p3-ess-interactive-R-rejects-stale-explicit-org-association ()
+  (let ((org-root (make-temp-file "p3-stale-R-org-root-" t))
+        started)
+    (unwind-protect
+        (with-temp-buffer
+          (org-mode)
+          (insert ":PROPERTIES:\n:P3_PROJECT: missing-hub\n:END:\n#+title: note\n")
+          (goto-char (point-min))
+          (setq default-directory (file-name-as-directory org-root))
+          (let ((p3/org-roam-project-associations
+                 (list (cons "/definitely/missing/p3-project/" "missing-hub"))))
+            (cl-letf (((symbol-function 'project-current)
+                       (lambda (&optional _maybe-prompt _directory)
+                         'org-project))
+                      ((symbol-function 'project-root)
+                       (lambda (_project) org-root)))
+              (should-error
+               (p3/ess-project-aware-R
+                (lambda (&optional _start-args)
+                  (setq started t))
+                nil)
+               :type 'user-error)
+              (should-not started))))
+      (delete-directory org-root t))))
+
 (provide 'p3-project-context-test)
 
 ;;; p3-project-context-test.el ends here
