@@ -59,6 +59,22 @@
                     (p3-project-context-test--canonical root)))))
       (delete-directory root t))))
 
+(ert-deftest p3-org-roam-associated-project-root-prefers-newest-valid-mapping ()
+  (let ((older-root (make-temp-file "p3-associated-older-" t))
+        (newer-root (make-temp-file "p3-associated-newer-" t)))
+    (unwind-protect
+        (let ((p3/org-roam-project-associations
+               (list (cons (p3-project-context-test--canonical newer-root)
+                           "hub-a")
+                     (cons "/definitely/missing/p3-root/" "hub-a")
+                     (cons (p3-project-context-test--canonical older-root)
+                           "hub-a"))))
+          (should
+           (equal (p3/org-roam-project-root-for-hub-id "hub-a")
+                  (p3-project-context-test--canonical newer-root))))
+      (delete-directory older-root t)
+      (delete-directory newer-root t))))
+
 (ert-deftest p3-org-roam-associated-project-root-is-point-sensitive ()
   (let ((file-root (make-temp-file "p3-file-project-" t))
         (heading-root (make-temp-file "p3-heading-project-" t)))
