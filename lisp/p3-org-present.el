@@ -43,6 +43,8 @@
     (setq-local p3/org-present--state
                 (list :frame frame
                       :tab-bar-lines (frame-parameter frame 'tab-bar-lines)
+                      :tab-bar-lines-keep-state
+                      (frame-parameter frame 'tab-bar-lines-keep-state)
                       :header-line header-line-format
                       :line-numbers (bound-and-true-p display-line-numbers-mode)
                       :inline-images (and (boundp 'org-inline-image-overlays)
@@ -52,8 +54,9 @@
                       :visual-fill-center visual-fill-column-center-text
                       :hide-mode-line (bound-and-true-p hide-mode-line-mode)
                       :face-remap-cookies nil))
-    ;; Project workspaces use the native tab bar globally.  Presentation mode
-    ;; temporarily owns the frame chrome so slides retain their full viewport.
+    ;; Project workspaces use the native tab bar globally.  Freeze a frame-local
+    ;; override while presenting so tab-bar refreshes cannot reclaim the row.
+    (set-frame-parameter frame 'tab-bar-lines-keep-state t)
     (set-frame-parameter frame 'tab-bar-lines 0))
   (setq-local header-line-format " ")
   (display-line-numbers-mode -1)
@@ -96,7 +99,10 @@
       (let ((frame (plist-get state :frame)))
         (when (and frame (frame-live-p frame))
           (set-frame-parameter frame 'tab-bar-lines
-                               (plist-get state :tab-bar-lines)))))
+                               (plist-get state :tab-bar-lines))
+          (set-frame-parameter frame 'tab-bar-lines-keep-state
+                               (plist-get state
+                                          :tab-bar-lines-keep-state)))))
     (setq-local p3/org-present--state nil)))
 
 (defun p3/org-present-prev ()
