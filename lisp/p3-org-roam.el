@@ -169,11 +169,12 @@ Signal `user-error' when the stored identity is stale or invalid."
       (p3/org-roam--file-project-id-live)))
 
 (defun p3/org-roam-associated-project-root ()
-  "Return the local project root explicitly associated with Org context.
-Only durable heading/file `P3_PROJECT' metadata participates here; filesystem
-fallback remains owned by `p3/project-root'."
+  "Return the local root claimed by explicit Org project context.
+Return `p3/project-context-unavailable' when durable `P3_PROJECT' metadata
+exists but none of its machine-local roots is currently available."
   (when-let ((hub-id (p3/org-roam--explicit-project-context)))
-    (p3/org-roam-project-root-for-hub-id hub-id)))
+    (or (p3/org-roam-project-root-for-hub-id hub-id)
+        p3/project-context-unavailable)))
 
 (add-hook 'p3/project-context-functions #'p3/org-roam-associated-project-root)
 
