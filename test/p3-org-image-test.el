@@ -1,5 +1,6 @@
 ;;; p3-org-image-test.el --- Tests for p3-org-image -*- lexical-binding: t; -*-
 
+(require 'bytecomp)
 (require 'cl-lib)
 (require 'ert)
 (require 'org)
@@ -17,6 +18,16 @@
   (should (featurep 'p3-org-image))
   (should (commandp #'p3/org-insert-image))
   (should (keymapp p3/org-image-command-map)))
+
+(ert-deftest p3-org-image-module-byte-compiles-cleanly ()
+  (let* ((source (expand-file-name "lisp/p3-org-image.el"
+                                   p3-org-image-test--root))
+         (compiled (byte-compile-dest-file source))
+         (byte-compile-error-on-warn t))
+    (unwind-protect
+        (should (byte-compile-file source))
+      (when (file-exists-p compiled)
+        (delete-file compiled)))))
 
 (ert-deftest p3-org-image-layout-presets-write-native-org-attributes ()
   (dolist (case '((p3/org-image-layout-center "center" "70%")
