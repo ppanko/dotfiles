@@ -6,6 +6,7 @@
 (require 'p3-project)
 
 (defvar eshell-buffer-name)
+(defvar eshell-exit-hook)
 (defvar eshell-hist-ignoredups)
 (defvar eshell-history-append)
 (defvar eshell-history-file-name)
@@ -15,9 +16,13 @@
 (defvar eshell-prompt-function)
 (defvar eshell-prompt-regexp)
 (defvar eshell-save-history-on-exit)
+(defvar eshell-visual-commands)
+(defvar eshell-visual-options)
+(defvar eshell-visual-subcommands)
 
 (declare-function consult-history "consult" ())
 (declare-function eshell "eshell" (&optional arg))
+(declare-function eshell-add-to-history "em-hist" ())
 (declare-function eshell-write-history "em-hist" (&optional filename append))
 
 (defgroup p3/terminal nil
@@ -80,15 +85,43 @@
             (propertize "❯" 'face (if ok 'success 'error))
             " ")))
 
-(defun p3/project-shell--append-history-compat ()
-  "Append only the newest Eshell command to the shared history file."
+(defun p3/project-shell--history-head ()
+  "Return the newest Eshell history entry, or nil when history is empty."
   (when (and (boundp 'eshell-history-ring)
              (ring-p eshell-history-ring)
              (not (ring-empty-p eshell-history-ring)))
+    (ring-ref eshell-history-ring 0)))
+
+(defun p3/project-shell--write-latest-history-compat ()
+  "Append only the newest Eshell history entry to the shared history file."
+  (when-let ((latest-entry (p3/project-shell--history-head)))
     (let ((latest (make-ring 1)))
-      (ring-insert latest (ring-ref eshell-history-ring 0))
+      (ring-insert latest latest-entry)
       (let ((eshell-history-ring latest))
         (eshell-write-history eshell-history-file-name t)))))
+
+(defun p3/project-shell--append-history-compat ()
+  "Add current input to history and append it only when Eshell accepted it."
+  (let ((before (p3/project-shell--history-head)))
+    (eshell-add-to-history)
+    (let ((after (p3/project-shell--history-head)))
+      (unless (equal before after)
+        (p3/project-shell--write-latest-history-compat)))))
+
+(defun p3/project-shell--setup-history-append-compat ()
+  "Provide concurrent-safe append-only Eshell history on Emacs 29."
+  ;; Emacs 29 always installs `eshell-write-history' on `eshell-exit-hook';
+  ;; that writer replaces the complete file and can erase commands appended by
+  ;; another live project shell.  P3 persists accepted commands incrementally,
+  ;; so suppress both that overwrite and the separate Emacs-exit save path.
+  (setq-local eshell-save-history-on-exit nil)
+  (remove-hook 'eshell-exit-hook #'eshell-write-history t)
+  ;; Replace the stock history-adder rather than adding a second hook after it.
+  ;; This lets us know whether the current input was actually accepted (blank
+  ;; input and consecutive duplicates must not append the previous command).
+  (remove-hook 'eshell-input-filter-functions #'eshell-add-to-history t)
+  (add-hook 'eshell-input-filter-functions
+            #'p3/project-shell--append-history-compat t t))
 
 (defun p3/project-shell--forget-primary ()
   "Forget the current buffer if it owns its project's primary mapping."
@@ -100,16 +133,18 @@
   "Apply P3 interactive UX to the current project Eshell."
   (setq-local eshell-prompt-function #'p3/project-shell-prompt
               eshell-prompt-regexp p3/project-shell-prompt-regexp
-              eshell-hist-ignoredups t)
+              eshell-hist-ignoredups t
+              ;; Eat owns terminal-native programs in managed P3 shells.  The
+              ;; stock Eshell visual-command route would divert these programs
+              ;; into a separate term buffer before Eat can handle them.
+              eshell-visual-commands nil
+              eshell-visual-subcommands nil
+              eshell-visual-options nil)
   (local-set-key (kbd "C-r") #'consult-history)
   (add-hook 'kill-buffer-hook #'p3/project-shell--forget-primary nil t)
   (if (boundp 'eshell-history-append)
       (setq-local eshell-history-append t)
-    (setq-local eshell-save-history-on-exit nil)
-    ;; `eshell-add-to-history' already runs from this hook.  Appending at the
-    ;; end makes the just-added command the newest ring entry on Emacs 29.
-    (add-hook 'eshell-input-filter-functions
-              #'p3/project-shell--append-history-compat t t)))
+    (p3/project-shell--setup-history-append-compat)))
 
 (defun p3/project-shell--start (name root)
   "Start a managed Eshell named NAME at ROOT and return its buffer."
