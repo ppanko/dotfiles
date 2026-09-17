@@ -6,6 +6,7 @@
 (require 'p3-project)
 
 (defvar eshell-buffer-name)
+(defvar eshell-destroy-buffer-when-process-dies)
 (defvar eshell-exit-hook)
 (defvar eshell-hist-ignoredups)
 (defvar eshell-history-append)
@@ -13,6 +14,7 @@
 (defvar eshell-history-ring)
 (defvar eshell-input-filter-functions)
 (defvar eshell-last-command-status)
+(defvar eshell-parent-buffer)
 (defvar eshell-prompt-function)
 (defvar eshell-prompt-regexp)
 (defvar eshell-save-history-on-exit)
@@ -186,6 +188,17 @@
 (defun p3/project-shell-live-p (buffer)
   "Return non-nil when BUFFER is a live managed P3 project Eshell."
   (p3/project-shell-buffer-p buffer))
+
+(defun p3/project-shell-eat-visual-buffer-setup (_process)
+  "Configure an Eat child launched from a managed P3 project Eshell.
+
+Eat calls this from `eat-exec-hook' in the dedicated terminal buffer.
+When that buffer belongs to a managed P3 Eshell, allow Eat's visual-command
+sentinel to return to the parent Eshell and destroy the terminal buffer after a
+successful process exit.  Unrelated Eat sessions keep their normal policy."
+  (when (and (boundp 'eshell-parent-buffer)
+             (p3/project-shell-buffer-p eshell-parent-buffer))
+    (setq-local eshell-destroy-buffer-when-process-dies t)))
 
 (defun p3/project-shell-buffer (&optional new-session)
   "Return the project shell, creating a NEW-SESSION when requested."
