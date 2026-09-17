@@ -5,6 +5,7 @@
 (require 'subr-x)
 (require 'p3-project)
 
+(defvar eat-kill-buffer-on-exit)
 (defvar eshell-buffer-name)
 (defvar eshell-exit-hook)
 (defvar eshell-hist-ignoredups)
@@ -12,18 +13,25 @@
 (defvar eshell-history-file-name)
 (defvar eshell-history-ring)
 (defvar eshell-input-filter-functions)
+(defvar eshell-interpreter-alist)
 (defvar eshell-last-command-status)
 (defvar eshell-parent-buffer)
 (defvar eshell-prompt-function)
 (defvar eshell-prompt-regexp)
 (defvar eshell-save-history-on-exit)
 (defvar eshell-visual-commands)
-(defvar eshell-visual-options)
-(defvar eshell-visual-subcommands)
 
 (declare-function consult-history "consult" ())
+(declare-function eat-exec "eat" (buffer name command startfile switches))
+(declare-function eat-mode "eat" ())
+(declare-function eat-semi-char-mode "eat" (&optional arg))
 (declare-function eshell "eshell" (&optional arg))
 (declare-function eshell-add-to-history "em-hist" ())
+(declare-function eshell-find-interpreter "esh-ext"
+                  (file args &optional no-examine-p))
+(declare-function eshell-interactive-output-p "esh-proc" (&optional handles))
+(declare-function eshell-stringify-list "esh-util" (args))
+(declare-function eshell-visual-command-p "em-term" (command args))
 (declare-function eshell-write-history "em-hist" (&optional filename append))
 
 (defgroup p3/terminal nil
@@ -32,6 +40,14 @@
 
 (defconst p3/project-shell-prompt-regexp "^[^❯\n]*❯ "
   "Prompt regexp for P3 project Eshell buffers.")
+
+(defconst p3/project-shell-codex-line-subcommands
+  '("exec" "e" "review" "login" "logout" "mcp" "plugin"
+    "app-server" "remote-control" "app" "completion" "update"
+    "doctor" "sandbox" "debug" "execpolicy" "apply" "a" "queue"
+    "archive" "delete" "migrate-rollouts" "unarchive" "cloud"
+    "cloud-tasks" "responses-api-proxy")
+  "Codex subcommands whose useful output belongs in Eshell scrollback.")
 
 (defvar p3/project-shell-buffers (make-hash-table :test #'equal)
   "Map local project roots to their primary P3 shell buffers.")
@@ -124,22 +140,125 @@
   (add-hook 'eshell-input-filter-functions
             #'p3/project-shell--append-history-compat t t))
 
+(defun p3/project-shell-eat-supported-p ()
+  "Return non-nil when P3's dedicated Eat PTY path is supported here."
+  ;; Native Windows deliberately keeps ordinary Eshell/CLI support but does
+  ;; not claim a PTY/TUI contract.  The Linux path is regression-tested with a
+  ;; real terminal fixture and requires stty for raw terminal setup.
+  (and (eq system-type 'gnu/linux)
+       (executable-find "stty")))
+
+(defun p3/project-shell--codex-visual-p (args)
+  "Return non-nil when Codex ARGS describe an interactive TUI session."
+  (and
+   ;; Help/version output is useful shell scrollback, never a transient TUI.
+   (not (seq-some (lambda (arg)
+                    (member arg '("--help" "-h" "--version" "-V")))
+                  args))
+   ;; The top-level CLI has a small set of explicitly interactive surfaces:
+   ;; its default prompt/session plus resume/fork.  Known administrative and
+   ;; noninteractive subcommands should retain their ordinary Eshell output.
+   (not (seq-some (lambda (arg)
+                    (member arg p3/project-shell-codex-line-subcommands))
+                  args))))
+
+(defun p3/project-shell--pacman-sync-query-p (arg)
+  "Return non-nil when pacman short sync ARG is output-only."
+  (and (string-match-p "\\`-S[silgp]+\\'" arg)
+       (not (string-match-p "[cyu]" arg))))
+
+(defun p3/project-shell--pacman-visual-p (args)
+  "Return non-nil when pacman ARGS benefit from an interactive terminal."
+  (let ((query-only-long
+         (seq-some (lambda (arg)
+                     (member arg '("--search" "--info" "--list"
+                                   "--groups" "--print")))
+                   args)))
+    (or
+     ;; Explicit package upgrades/removals are mutating and may prompt.
+     (seq-some (lambda (arg)
+                 (or (string-match-p "\\`-[UR]" arg)
+                     (member arg '("--upgrade" "--remove"))))
+               args)
+     ;; Sync operations download/install/update unless they are one of the
+     ;; documented search/info/list/groups/print forms.
+     (and (not query-only-long)
+          (seq-some
+           (lambda (arg)
+             (or (equal arg "--sync")
+                 (and (string-prefix-p "-S" arg)
+                      (not (p3/project-shell--pacman-sync-query-p arg)))))
+           args)))))
+
+(defun p3/project-shell-eat-visual-command-p (command args)
+  "Return non-nil when COMMAND ARGS should use P3's dedicated Eat buffer."
+  (let ((command (file-name-nondirectory command)))
+    (and (p3/project-shell-eat-supported-p)
+         (eshell-interactive-output-p 'all)
+         (or
+          ;; Preserve Eshell's normal visual-command knowledge, but route it
+          ;; through Eat only inside a managed P3 shell on a verified platform.
+          (eshell-visual-command-p command args)
+          (cond
+           ((equal command "codex")
+            (p3/project-shell--codex-visual-p args))
+           ((equal command "pacman")
+            (p3/project-shell--pacman-visual-p args))
+           ((equal command "sudo")
+            (when-let ((pacman-tail (member "pacman" args)))
+              (p3/project-shell--pacman-visual-p (cdr pacman-tail)))))))))
+
+(defun p3/project-shell-exec-visual (&rest args)
+  "Run visual command ARGS in a dedicated Eat buffer for this P3 Eshell."
+  (require 'eat)
+  (require 'esh-ext)
+  (let* (eshell-interpreter-alist
+         (interp (eshell-find-interpreter (car args) (cdr args)))
+         (program (car interp))
+         (program-args
+          (flatten-tree
+           (eshell-stringify-list (append (cdr interp) (cdr args)))))
+         (eat-buffer
+          (generate-new-buffer
+           (concat "*eat:" (file-name-nondirectory program) "*")))
+         (eshell-buffer (current-buffer))
+         (directory default-directory))
+    (condition-case err
+        (save-current-buffer
+          ;; Display first so Eat sizes the terminal against the window the
+          ;; user will actually interact with, matching Eat's visual-command
+          ;; integration without enabling its global Eshell minor mode.
+          (switch-to-buffer eat-buffer)
+          (setq default-directory directory)
+          (eat-mode)
+          (setq-local eshell-parent-buffer eshell-buffer
+                      eat-kill-buffer-on-exit nil)
+          (eat-exec eat-buffer program program nil program-args)
+          (let ((process (get-buffer-process eat-buffer)))
+            (unless (and process (process-live-p process))
+              (error "Failed to invoke visual command: %s" program)))
+          (eat-semi-char-mode))
+      (error
+       (when (buffer-live-p eat-buffer)
+         (let ((kill-buffer-query-functions nil))
+           (kill-buffer eat-buffer)))
+       (signal (car err) (cdr err))))))
+  nil)
+
 (defun p3/project-shell--setup-visual-commands ()
-  "Route terminal-heavy commands through Eshell's visual-command path."
-  ;; Keep Eshell's standard TUI classification, but localize it so project
-  ;; shells can add P3-specific terminal-heavy commands without changing every
-  ;; Eshell buffer in the session.  `eat-eshell-visual-command-mode' replaces
-  ;; Eshell's normal Term backend for this path with a dedicated Eat buffer.
-  (setq-local eshell-visual-commands (copy-sequence eshell-visual-commands)
-              eshell-visual-subcommands (copy-tree eshell-visual-subcommands)
-              eshell-visual-options (copy-tree eshell-visual-options))
-  (dolist (command '("codex" "pacman"))
-    (unless (member command eshell-visual-commands)
-      (push command eshell-visual-commands)))
-  (if-let ((sudo-entry (assoc "sudo" eshell-visual-subcommands)))
-      (unless (member "pacman" (cdr sudo-entry))
-        (setcdr sudo-entry (cons "pacman" (cdr sudo-entry))))
-    (push '("sudo" "pacman") eshell-visual-subcommands)))
+  "Install P3's Eat visual-command route in this managed Eshell only."
+  (require 'esh-ext)
+  ;; `eshell-interpreter-alist' is buffer-local in Eshell.  Put P3's narrow
+  ;; Eat route before the stock visual-command interpreter, retaining the stock
+  ;; entry as a fallback (notably on native Windows, where P3 declines Eat).
+  (setq-local
+   eshell-interpreter-alist
+   (cons (cons #'p3/project-shell-eat-visual-command-p
+               #'p3/project-shell-exec-visual)
+         (seq-remove
+          (lambda (entry)
+            (eq (car-safe entry) #'p3/project-shell-eat-visual-command-p))
+          eshell-interpreter-alist))))
 
 (defun p3/project-shell--forget-primary ()
   "Forget the current buffer if it owns its project's primary mapping."
