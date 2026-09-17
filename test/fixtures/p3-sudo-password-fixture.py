@@ -17,6 +17,7 @@ for index, arg in enumerate(args):
 
 expected = os.environ.get("P3_TEST_SUDO_PASSWORD", "p3-secret")
 prompts = int(os.environ.get("P3_TEST_SUDO_PROMPTS", "2"))
+exit_code = int(os.environ.get("P3_TEST_SUDO_EXIT", "7"))
 
 for attempt in range(prompts):
     sys.stdout.write(prompt)
@@ -36,3 +37,4 @@ for attempt in range(prompts):
         sys.exit(98)
 
 print(f"__P3_SUDO_OK__{prompts}", flush=True)
+sys.exit(exit_code)
