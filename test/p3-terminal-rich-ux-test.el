@@ -35,6 +35,18 @@
                  (directory-file-name temporary-file-directory)))
                prompt)))))
 
+(ert-deftest p3-terminal-new-shell-starts-with-one-p3-prompt ()
+  (let* ((root (file-name-as-directory temporary-file-directory))
+         (name (generate-new-buffer-name "*p3-prompt-test*"))
+         (buffer (p3/project-shell--start name root)))
+    (unwind-protect
+        (with-current-buffer buffer
+          (goto-char (point-min))
+          (should (= 1 (how-many "❯ " (point-min) (point-max))))
+          (should (derived-mode-p 'eshell-mode)))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
 (ert-deftest p3-terminal-prompt-regexp-rejects-prompt-like-output ()
   (dolist (line '("cost $ 20"
                   "hash # tag"
@@ -72,7 +84,9 @@
             (insert-file-contents history-file)
             (should (= 1 (how-many "__P3_HISTORY_NEW__"
                                    (point-min) (point-max))))
+            (goto-char (point-min))
             (should-not (re-search-forward "__P3_HISTORY_OLD__" nil t))
+            (goto-char (point-min))
             (should-not (re-search-forward "starship\|PS1=\|__p3_" nil t))))
       (delete-file history-file))))
 
