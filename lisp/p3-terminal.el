@@ -123,6 +123,23 @@
   (add-hook 'eshell-input-filter-functions
             #'p3/project-shell--append-history-compat t t))
 
+(defun p3/project-shell--setup-visual-commands ()
+  "Route terminal-heavy commands through Eshell's visual-command path."
+  ;; Keep Eshell's standard TUI classification, but localize it so project
+  ;; shells can add P3-specific terminal-heavy commands without changing every
+  ;; Eshell buffer in the session.  `eat-eshell-visual-command-mode' replaces
+  ;; Eshell's normal Term backend for this path with a dedicated Eat buffer.
+  (setq-local eshell-visual-commands (copy-sequence eshell-visual-commands)
+              eshell-visual-subcommands (copy-tree eshell-visual-subcommands)
+              eshell-visual-options (copy-tree eshell-visual-options))
+  (dolist (command '("codex" "pacman"))
+    (unless (member command eshell-visual-commands)
+      (push command eshell-visual-commands)))
+  (if-let ((sudo-entry (assoc "sudo" eshell-visual-subcommands)))
+      (unless (member "pacman" (cdr sudo-entry))
+        (setcdr sudo-entry (cons "pacman" (cdr sudo-entry))))
+    (push '("sudo" "pacman") eshell-visual-subcommands)))
+
 (defun p3/project-shell--forget-primary ()
   "Forget the current buffer if it owns its project's primary mapping."
   (when-let ((root p3/project-shell-root-value))
@@ -133,13 +150,8 @@
   "Apply P3 interactive UX to the current project Eshell."
   (setq-local eshell-prompt-function #'p3/project-shell-prompt
               eshell-prompt-regexp p3/project-shell-prompt-regexp
-              eshell-hist-ignoredups t
-              ;; Eat owns terminal-native programs in managed P3 shells.  The
-              ;; stock Eshell visual-command route would divert these programs
-              ;; into a separate term buffer before Eat can handle them.
-              eshell-visual-commands nil
-              eshell-visual-subcommands nil
-              eshell-visual-options nil)
+              eshell-hist-ignoredups t)
+  (p3/project-shell--setup-visual-commands)
   (local-set-key (kbd "C-r") #'consult-history)
   (add-hook 'kill-buffer-hook #'p3/project-shell--forget-primary nil t)
   (if (boundp 'eshell-history-append)
