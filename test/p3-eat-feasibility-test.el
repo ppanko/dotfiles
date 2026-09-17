@@ -80,7 +80,14 @@
         (save-excursion
           (goto-char start)
           (setq found (re-search-forward regexp nil t))))
-      (should found))))
+      (should found)
+      ;; Seeing output can precede Eshell's process sentinel.  Do not submit
+      ;; the next command until this child has been fully reaped.
+      (let ((reap-deadline (+ (float-time) 5.0)))
+        (while (and (eshell-head-process)
+                    (< (float-time) reap-deadline))
+          (accept-process-output (eshell-head-process) 0.05))
+        (should-not (eshell-head-process))))))
 
 (defun p3-eat-feasibility-test--start-visual-fixture (parent exit-code &optional mode)
   "Run the terminal fixture visually from PARENT and return its Eat child."
