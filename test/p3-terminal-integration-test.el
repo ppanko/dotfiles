@@ -163,13 +163,18 @@
                   (concat raw-root path-separator (or (getenv "PATH") "")))
           (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root)))
             (setq buffer (p3/project-shell-buffer))
-            ;; These successful commands used to be routed into transient Eat
-            ;; buffers and disappear on exit 0.  Their output must live in the
-            ;; parent Eshell scrollback instead.
+            ;; Successful line-oriented commands must remain in the parent
+            ;; Eshell scrollback rather than disappearing with a transient Eat
+            ;; buffer.  Cover both stable informational forms and current CLI
+            ;; combinations that previously escaped the classifier.
             (p3-terminal-integration-test--run-command-for-output
              buffer "codex --version" "__P3_CODEX_VERSION__")
             (p3-terminal-integration-test--run-command-for-output
+             buffer "codex features list" "__P3_CODEX_VERSION__")
+            (p3-terminal-integration-test--run-command-for-output
              buffer "pacman -Q" "__P3_PACMAN_QUERY__")
+            (p3-terminal-integration-test--run-command-for-output
+             buffer "pacman -Ssq emacs" "__P3_PACMAN_QUERY__")
             (should (p3/project-shell-live-p buffer))))
       (when (and buffer (buffer-live-p buffer))
         (kill-buffer buffer))
