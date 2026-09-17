@@ -60,13 +60,14 @@
     (should (string-match-p "(use-package eshell-syntax-highlighting" config))
     (should-not (string-match-p "vterm" config))))
 
-(ert-deftest p3-config-terminal-uses-supported-eat-eshell-integration ()
+(ert-deftest p3-config-terminal-uses-dedicated-eat-visual-command-integration ()
   (let ((contents
          (p3-config-terminal-test--contents "lisp/p3-config-terminal.el")))
     (should (string-match-p "(use-package eat" contents))
-    (should (string-match-p "eat-eshell-mode" contents))
-    (should (string-match-p
-             "eat-eshell-fallback-if-stty-not-available" contents))
+    (should (string-match-p "eat-eshell-visual-command-mode" contents))
+    (should-not (string-match-p "(eat-eshell-mode 1)" contents))
+    (should-not (string-match-p
+                 "eat-eshell-fallback-if-stty-not-available" contents))
     (should-not (string-match-p "eat--eshell-local-mode" contents))))
 
 (ert-deftest p3-config-terminal-config-org-delegates-shell-boundary ()
