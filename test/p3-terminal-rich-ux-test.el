@@ -126,8 +126,9 @@
                           (,second . "__P3_SECOND__")))
             (with-current-buffer (car spec)
               (eshell-mode)
-              ;; Simulate the Emacs 29 history module's overwrite-on-exit hook.
-              (add-hook 'eshell-exit-hook #'eshell-write-history nil t)
+              ;; Replace the current Emacs version's exit hook with the exact
+              ;; overwrite-on-exit shape used by Emacs 29.
+              (setq-local eshell-exit-hook '(eshell-write-history))
               (setq-local eshell-history-file-name history-file
                           eshell-history-ring (make-ring 4))
               (p3/project-shell--setup-history-append-compat)
