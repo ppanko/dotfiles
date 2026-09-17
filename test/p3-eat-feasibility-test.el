@@ -2,6 +2,7 @@
 
 (require 'cl-lib)
 (require 'ert)
+(require 'seq)
 (require 'eat)
 (require 'p3-terminal)
 (require 'p3-terminal-test-support)
@@ -84,6 +85,47 @@
           (when (buffer-live-p buffer)
             (let ((kill-buffer-query-functions nil))
               (kill-buffer buffer))))))))
+
+(ert-deftest p3-eat-feasibility-windows-falls-back-without-stty ()
+  (unless (eq system-type 'windows-nt)
+    (ert-skip "Native Windows-only no-stty fallback contract"))
+  (p3-terminal-test-support-prepare-platform)
+  (let* ((git-program (or (executable-find "git")
+                          (ert-fail "git is required for Windows fallback test")))
+         (msys-root (or (getenv "P3_TEST_MSYS2_ROOT")
+                        (ert-fail "P3_TEST_MSYS2_ROOT is required")))
+         (usr-bin (file-name-as-directory
+                   (expand-file-name "usr/bin" msys-root)))
+         ;; Eat decides whether its in-Eshell terminal path is available by
+         ;; looking up stty.  Hide the MSYS2 usr/bin directory from Emacs while
+         ;; invoking git by absolute path; the process environment itself is
+         ;; otherwise unchanged.
+         (exec-path
+          (seq-remove
+           (lambda (directory)
+             (equal (file-truename (file-name-as-directory directory))
+                    (file-truename usr-bin)))
+           exec-path))
+         (root (file-name-as-directory temporary-file-directory))
+         (p3/project-shell-buffers (make-hash-table :test #'equal))
+         (eat-eshell-fallback-if-stty-not-available t)
+         buffer)
+    (should-not (executable-find "stty"))
+    (unwind-protect
+        (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root)))
+          (setq buffer (p3/project-shell-buffer))
+          (with-current-buffer buffer
+            (eat-eshell-mode 1)
+            (should (derived-mode-p 'eshell-mode)))
+          (p3-eat-feasibility-test--run-command
+           buffer
+           (concat (shell-quote-argument git-program) " --version")
+           "git version")
+          (p3-eat-feasibility-test--wait-for-child-exit buffer)
+          (should (p3/project-shell-live-p buffer)))
+      (when (and buffer (buffer-live-p buffer))
+        (let ((kill-buffer-query-functions nil))
+          (kill-buffer buffer))))))
 
 (ert-deftest p3-eat-feasibility-windows-project-shell-runs-normal-cli-tools ()
   (unless (eq system-type 'windows-nt)
