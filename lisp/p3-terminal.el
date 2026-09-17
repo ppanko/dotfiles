@@ -114,10 +114,11 @@
 (defun p3/project-shell--start (name root)
   "Start a managed Eshell named NAME at ROOT and return its buffer."
   (require 'eshell)
-  ;; Bind the prompt variables before `eshell-mode' initializes so the very
-  ;; first prompt is already the P3 prompt.  The buffer-local setup below then
-  ;; keeps those settings for subsequent prompts.
+  ;; Bind project identity and prompt variables before `eshell-mode' initializes
+  ;; so the very first prompt already uses the project-relative P3 label.  The
+  ;; buffer-local setup below keeps those settings for subsequent prompts.
   (let ((default-directory root)
+        (p3/project-shell-root-value root)
         (eshell-buffer-name name)
         (eshell-prompt-function #'p3/project-shell-prompt)
         (eshell-prompt-regexp p3/project-shell-prompt-regexp)
