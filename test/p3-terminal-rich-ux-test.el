@@ -1,9 +1,11 @@
-;;; p3-terminal-rich-ux-test.el --- Adversarial project shell UX tests -*- lexical-binding: t; -*-
+;;; p3-terminal-rich-ux-test.el --- Adversarial project Eshell UX tests -*- lexical-binding: t; -*-
 
-(require 'ert)
 (require 'cl-lib)
+(require 'ert)
 (require 'ring)
-(require 'seq)
+(require 'eshell)
+(require 'em-hist)
+(require 'em-term)
 
 (defconst p3-terminal-rich-ux-test--root
   (file-name-directory
@@ -16,148 +18,146 @@
 
 (require 'p3-terminal)
 
-(defun p3-terminal-rich-ux-test--wait-for-output (buffer process regexp)
-  "Return non-nil when REGEXP appears in BUFFER while PROCESS is live."
-  (let ((deadline (+ (float-time) 10.0))
-        found)
-    (while (and (not found) (< (float-time) deadline))
-      (accept-process-output process 0.1)
-      (with-current-buffer buffer
-        (save-excursion
+(defun p3-terminal-rich-ux-test--fake-history-writer (filename append)
+  "Write the newest history entry to FILENAME, honoring APPEND."
+  (let ((entry (ring-ref eshell-history-ring 0)))
+    (with-temp-buffer
+      (insert entry "\n")
+      (write-region (point-min) (point-max) filename append 'silent))))
+
+(ert-deftest p3-terminal-eshell-setup-uses-history-search ()
+  (with-temp-buffer
+    (eshell-mode)
+    (setq-local p3/project-shell-root-value temporary-file-directory)
+    (p3/project-shell-mode-setup)
+    (should eshell-hist-ignoredups)
+    (should (eq (key-binding (kbd "C-r")) #'consult-history))))
+
+(ert-deftest p3-terminal-prompt-has-path-and-status-marker ()
+  (let ((default-directory temporary-file-directory)
+        (p3/project-shell-root-value temporary-file-directory)
+        (eshell-last-command-status 0))
+    (let ((prompt (p3/project-shell-prompt)))
+      (should (string-match-p "❯ " prompt))
+      (should (string-match-p
+               (regexp-quote
+                (file-name-nondirectory
+                 (directory-file-name temporary-file-directory)))
+               prompt)))))
+
+(ert-deftest p3-terminal-new-shell-starts-with-one-p3-prompt ()
+  (let* ((root (file-name-as-directory temporary-file-directory))
+         (name (generate-new-buffer-name "*p3-prompt-test*"))
+         (buffer (p3/project-shell--start name root)))
+    (unwind-protect
+        (with-current-buffer buffer
           (goto-char (point-min))
-          (setq found (re-search-forward regexp nil t)))))
-    found))
+          (should (= 1 (how-many "❯ " (point-min) (point-max))))
+          (should (derived-mode-p 'eshell-mode)))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
 
-(defun p3-terminal-rich-ux-test--exit-shell (process)
-  "Exit PROCESS normally and fail if it remains live."
-  (when (process-live-p process)
-    (process-send-string process "exit\n")
-    (let ((deadline (+ (float-time) 10.0)))
-      (while (and (process-live-p process) (< (float-time) deadline))
-        (accept-process-output process 0.1)))
-    (should-not (process-live-p process))))
-
-(ert-deftest p3-terminal-prompt-pattern-rejects-prompt-like-command-output ()
+(ert-deftest p3-terminal-prompt-regexp-rejects-prompt-like-output ()
   (dolist (line '("cost $ 20"
                   "hash # tag"
                   "progress % done"
                   "redirect > file"))
-    (should-not (string-match-p p3/project-shell-prompt-pattern line)))
+    (should-not (string-match-p p3/project-shell-prompt-regexp line)))
   (should
-   (string-match-p p3/project-shell-prompt-pattern
-                   "~/src/project git:main ! ❯ ")))
+   (string-match-p p3/project-shell-prompt-regexp
+                   "project/subdir ❯ ")))
 
-(ert-deftest p3-terminal-linux-missing-rich-terminfo-keeps-safe-default ()
-  (unless (eq system-type 'gnu/linux)
-    (ert-skip "GNU/Linux-only terminfo fallback regression"))
-  (let* ((root (file-name-as-directory
-                (expand-file-name "p3-terminfo-fallback"
-                                  temporary-file-directory)))
-         (name "*p3-terminfo-fallback-test*")
-         (comint-terminfo-terminal "dumb")
-         captured-term)
-    (unwind-protect
-        (cl-letf (((symbol-function 'p3/windows-p) (lambda () nil))
-                  ((symbol-function 'p3/platform-bash-program)
-                   (lambda () "/bin/bash"))
-                  ((symbol-function 'executable-find)
-                   (lambda (_program) nil))
-                  ((symbol-function 'shell)
-                   (lambda (buffer-name &optional _file-name)
-                     (setq captured-term comint-terminfo-terminal)
-                     (get-buffer-create buffer-name))))
-          (p3/project-shell--start name root)
-          (should (equal captured-term "dumb")))
-      (when-let ((buffer (get-buffer name)))
-        (kill-buffer buffer)))))
+(ert-deftest p3-terminal-history-configuration-is-concurrent-safe ()
+  (with-temp-buffer
+    (eshell-mode)
+    (setq-local p3/project-shell-root-value temporary-file-directory)
+    (p3/project-shell-mode-setup)
+    (if (boundp 'eshell-history-append)
+        (progn
+          (should (local-variable-p 'eshell-history-append))
+          (should eshell-history-append))
+      (should-not eshell-save-history-on-exit)
+      (should-not (memq #'eshell-write-history eshell-exit-hook))
+      (should-not (memq #'eshell-add-to-history
+                        eshell-input-filter-functions))
+      (should (memq #'p3/project-shell--append-history-compat
+                    eshell-input-filter-functions)))))
 
-(ert-deftest p3-terminal-concurrent-shells-preserve-clean-shared-history ()
-  (let* ((raw-root (make-temp-file "p3-shared-history-" t))
-         (root (p3/project-normalize-root raw-root))
-         (home (expand-file-name "home" raw-root))
-         (history-file (expand-file-name "p3-history" raw-root))
-         (msys-root (getenv "P3_TEST_MSYS2_ROOT"))
-         (linuxy-environment-path
-          (if (eq system-type 'windows-nt)
-              (and msys-root
-                   (file-name-as-directory
-                    (expand-file-name "usr/bin" msys-root)))
-            linuxy-environment-path))
-         (shell-file-name shell-file-name)
-         (explicit-shell-file-name explicit-shell-file-name)
-         (explicit-bash.exe-args
-          (and (boundp 'explicit-bash.exe-args) explicit-bash.exe-args))
-         (shell-mode-hook shell-mode-hook)
-         (process-environment (copy-sequence process-environment))
-         (names '("*p3-history-one*" "*p3-history-two*" "*p3-history-three*"))
-         buffers
-         processes)
-    (make-directory home)
-    ;; Force a hostile startup state so the project-shell contract, rather than
-    ;; the runner's personal Bash defaults, must provide append-only history.
-    (with-temp-file (expand-file-name ".bashrc" home)
-      (insert "shopt -u histappend\n"))
-    (setenv "HOME" home)
-    (setenv "HISTFILE" history-file)
+(ert-deftest p3-terminal-history-compat-appends-only-accepted-new-input ()
+  (let ((history-file (make-temp-file "p3-eshell-history-"))
+        (eshell-history-ring (make-ring 4))
+        (next-input "__P3_HISTORY_NEW__"))
     (unwind-protect
         (progn
-          (when (eq system-type 'windows-nt)
-            (unless msys-root
-              (ert-skip "P3_TEST_MSYS2_ROOT is required for Windows shell smoke"))
-            (p3/windows-configure-shell))
-          (unless (or (eq system-type 'windows-nt) (executable-find "bash"))
-            (ert-skip "Bash is unavailable for shared-history smoke"))
-          (let* ((first (p3/project-shell--start (nth 0 names) root))
-                 (second (p3/project-shell--start (nth 1 names) root))
-                 (first-process (get-buffer-process first))
-                 (second-process (get-buffer-process second)))
-            (setq buffers (list first second)
-                  processes (list first-process second-process))
-            (should (process-live-p first-process))
-            (should (process-live-p second-process))
-            (process-send-string first-process "echo __P3_HISTORY_ONE__\n")
-            (process-send-string second-process "echo __P3_HISTORY_TWO__\n")
-            (should (p3-terminal-rich-ux-test--wait-for-output
-                     first first-process "__P3_HISTORY_ONE__"))
-            (should (p3-terminal-rich-ux-test--wait-for-output
-                     second second-process "__P3_HISTORY_TWO__"))
-            (p3-terminal-rich-ux-test--exit-shell first-process)
-            (p3-terminal-rich-ux-test--exit-shell second-process))
-          (let* ((third (p3/project-shell--start (nth 2 names) root))
-                 (third-process (get-buffer-process third)))
-            (push third buffers)
-            (push third-process processes)
-            (should (process-live-p third-process))
-            (process-send-string
-             third-process
-             "if shopt -q histappend; then echo __P3_HISTAPPEND_ON__; else echo __P3_HISTAPPEND_OFF__; fi\n")
-            (should (p3-terminal-rich-ux-test--wait-for-output
-                     third third-process "__P3_HISTAPPEND_ON__"))
-            (with-current-buffer third
-              (let ((entries (ring-elements comint-input-ring)))
-                (should (seq-some
-                         (lambda (entry)
-                           (string-match-p "__P3_HISTORY_ONE__" entry))
-                         entries))
-                (should (seq-some
-                         (lambda (entry)
-                           (string-match-p "__P3_HISTORY_TWO__" entry))
-                         entries))
-                (should-not
-                 (seq-some
-                  (lambda (entry)
-                    (or (string-match-p "starship init bash" entry)
-                        (string-match-p "__p3_starship_init" entry)
-                        (string-match-p "PS1=.*❯" entry)))
-                  entries))))))
-      (dolist (process processes)
-        (when (and process (process-live-p process))
-          (delete-process process)))
-      (dolist (buffer buffers)
-        (when (and buffer (buffer-live-p buffer))
-          (let ((kill-buffer-query-functions nil))
-            (kill-buffer buffer))))
-      (delete-directory raw-root t))))
+          (ring-insert eshell-history-ring "__P3_HISTORY_OLD__")
+          (cl-letf (((symbol-function 'eshell-add-to-history)
+                     (lambda ()
+                       (when next-input
+                         (unless (and (not (ring-empty-p eshell-history-ring))
+                                      (equal (ring-ref eshell-history-ring 0)
+                                             next-input))
+                           (ring-insert eshell-history-ring next-input)))))
+                    ((symbol-function 'eshell-write-history)
+                     #'p3-terminal-rich-ux-test--fake-history-writer))
+            (let ((eshell-history-file-name history-file))
+              (p3/project-shell--append-history-compat)
+              ;; Consecutive duplicate: Eshell rejects it, so nothing new is
+              ;; appended to the shared history file.
+              (p3/project-shell--append-history-compat)
+              ;; Blank/filtered input: represented here by no ring mutation.
+              (setq next-input nil)
+              (p3/project-shell--append-history-compat)))
+          (with-temp-buffer
+            (insert-file-contents history-file)
+            (should (= 1 (how-many "__P3_HISTORY_NEW__"
+                                   (point-min) (point-max))))
+            (goto-char (point-min))
+            (should-not (re-search-forward "__P3_HISTORY_OLD__" nil t))))
+      (delete-file history-file))))
+
+(ert-deftest p3-terminal-history-compat-kill-order-does-not-overwrite-peer-history ()
+  (let ((history-file (make-temp-file "p3-eshell-history-shared-"))
+        (first (generate-new-buffer " *p3-history-first*"))
+        (second (generate-new-buffer " *p3-history-second*")))
+    (unwind-protect
+        (cl-letf (((symbol-function 'eshell-write-history)
+                   #'p3-terminal-rich-ux-test--fake-history-writer))
+          (dolist (spec `((,first . "__P3_FIRST__")
+                          (,second . "__P3_SECOND__")))
+            (with-current-buffer (car spec)
+              (eshell-mode)
+              ;; Replace the current Emacs version's exit hook with the exact
+              ;; overwrite-on-exit shape used by Emacs 29.
+              (setq-local eshell-exit-hook '(eshell-write-history))
+              (setq-local eshell-history-file-name history-file
+                          eshell-history-ring (make-ring 4))
+              (p3/project-shell--setup-history-append-compat)
+              (ring-insert eshell-history-ring (cdr spec))
+              (p3/project-shell--write-latest-history-compat)
+              (should-not (memq #'eshell-write-history eshell-exit-hook))))
+          ;; Killing either shell must not rewrite the complete stale ring.
+          (kill-buffer first)
+          (kill-buffer second)
+          (with-temp-buffer
+            (insert-file-contents history-file)
+            (should (= 1 (how-many "__P3_FIRST__" (point-min) (point-max))))
+            (should (= 1 (how-many "__P3_SECOND__" (point-min) (point-max))))))
+      (when (buffer-live-p first) (kill-buffer first))
+      (when (buffer-live-p second) (kill-buffer second))
+      (delete-file history-file))))
+
+(ert-deftest p3-terminal-managed-eshell-routes-visual-commands-through-eat-path ()
+  (with-temp-buffer
+    (eshell-mode)
+    (should (member "top" eshell-visual-commands))
+    (setq-local p3/project-shell-root-value temporary-file-directory)
+    (p3/project-shell-mode-setup)
+    (should (local-variable-p 'eshell-visual-commands))
+    (should (local-variable-p 'eshell-visual-subcommands))
+    (should (local-variable-p 'eshell-visual-options))
+    (should-not eshell-visual-commands)
+    (should-not eshell-visual-subcommands)
+    (should-not eshell-visual-options)))
 
 (provide 'p3-terminal-rich-ux-test)
 

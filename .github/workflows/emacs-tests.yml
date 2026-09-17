@@ -198,6 +198,22 @@ jobs:
             -l lisp/p3-config-reference.el \
             --eval '(unless (and (featurep (quote p3-config-reference)) (featurep (quote p3-reference)) (equal p3/reference-bibliography-file (expand-file-name "~/org/bib/main.bib")) (equal p3/reference-pdf-directory (file-name-as-directory (expand-file-name "~/org/lib/"))) (eq (lookup-key global-map (kbd "C-c b")) p3/reference-command-map)) (kill-emacs 1))'
 
+      - name: Install Eat feasibility dependency
+        run: |
+          emacs -Q --batch \
+            --eval '(require (quote package))' \
+            --eval '(setq package-archives (quote (("gnu" . "https://elpa.gnu.org/packages/") ("nongnu" . "https://elpa.nongnu.org/nongnu/"))))' \
+            --eval '(package-refresh-contents)' \
+            --eval '(package-install (quote eat))'
+
+      - name: Run Eat Eshell feasibility gate
+        run: |
+          emacs -Q --batch -L lisp -L test \
+            --eval '(require (quote package))' \
+            --eval '(package-initialize)' \
+            -l test/p3-eat-feasibility-test.el \
+            -f ert-run-tests-batch-and-exit
+
       - name: Run ERT test suite
         run: |
           emacs -Q --batch \

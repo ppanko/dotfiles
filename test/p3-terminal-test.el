@@ -2,6 +2,7 @@
 
 (require 'ert)
 (require 'cl-lib)
+(require 'eshell)
 
 (defconst p3-terminal-test--root
   (file-name-directory
@@ -64,36 +65,41 @@
                (lambda (&optional _error-on-unavailable) nil)))
       (should-error (p3/project-shell-root) :type 'user-error))))
 
-(ert-deftest p3-terminal-project-shell-live-p-requires-live-process ()
-  (let ((buffer (generate-new-buffer " *p3-shell-live-test*"))
-        (live t))
+(ert-deftest p3-terminal-project-shell-live-p-is-buffer-backed ()
+  (let ((buffer (generate-new-buffer " *p3-eshell-live-test*")))
     (unwind-protect
-        (progn
-          (with-current-buffer buffer
-            (setq-local p3/project-shell-root-value temporary-file-directory))
-          (cl-letf (((symbol-function 'get-buffer-process)
-                     (lambda (candidate)
-                       (and (eq candidate buffer) 'fake-process)))
-                    ((symbol-function 'process-live-p)
-                     (lambda (process)
-                       (and (eq process 'fake-process) live))))
-            (should (p3/project-shell-live-p buffer))
-            (setq live nil)
-            (should-not (p3/project-shell-live-p buffer))))
+        (with-current-buffer buffer
+          (eshell-mode)
+          (setq-local p3/project-shell-root-value temporary-file-directory)
+          (should (p3/project-shell-live-p buffer))
+          (should-not (get-buffer-process buffer)))
       (kill-buffer buffer))))
+
+(ert-deftest p3-terminal-project-shell-live-p-rejects-non-eshell-buffer ()
+  (let ((buffer (generate-new-buffer " *p3-not-eshell*")))
+    (unwind-protect
+        (with-current-buffer buffer
+          (setq-local p3/project-shell-root-value temporary-file-directory)
+          (should-not (p3/project-shell-live-p buffer)))
+      (kill-buffer buffer))))
+
+(defun p3-terminal-test--fake-shell (name)
+  "Return a managed Eshell buffer named NAME for lifecycle tests."
+  (let ((buffer (get-buffer-create name)))
+    (with-current-buffer buffer
+      (eshell-mode))
+    buffer))
 
 (ert-deftest p3-terminal-primary-shell-is-reused-per-root ()
   (let ((p3/project-shell-buffers (make-hash-table :test #'equal))
         (root (file-name-as-directory
                (expand-file-name "p3-project" temporary-file-directory)))
-        (created nil))
+        created)
     (unwind-protect
         (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root))
-                  ((symbol-function 'p3/project-shell-live-p)
-                   (lambda (buffer) (buffer-live-p buffer)))
                   ((symbol-function 'p3/project-shell--start)
                    (lambda (name _root)
-                     (let ((buffer (get-buffer-create name)))
+                     (let ((buffer (p3-terminal-test--fake-shell name)))
                        (push buffer created)
                        buffer))))
           (let ((first (p3/project-shell-buffer))
@@ -114,7 +120,7 @@
         (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root))
                   ((symbol-function 'p3/project-shell--start)
                    (lambda (name _root)
-                     (let ((buffer (get-buffer-create name)))
+                     (let ((buffer (p3-terminal-test--fake-shell name)))
                        (push buffer created)
                        buffer))))
           (let ((first (p3/project-shell-buffer)))
@@ -142,11 +148,9 @@
                   ((symbol-function 'file-remote-p) (lambda (_root) nil))
                   ((symbol-function 'p3/project-normalize-root)
                    (lambda (_root) canonical-root))
-                  ((symbol-function 'p3/project-shell-live-p)
-                   (lambda (buffer) (buffer-live-p buffer)))
                   ((symbol-function 'p3/project-shell--start)
                    (lambda (name _root)
-                     (let ((buffer (get-buffer-create name)))
+                     (let ((buffer (p3-terminal-test--fake-shell name)))
                        (push buffer created)
                        buffer))))
           (let ((first (p3/project-shell-buffer)))
@@ -166,11 +170,9 @@
         created)
     (unwind-protect
         (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root))
-                  ((symbol-function 'p3/project-shell-live-p)
-                   (lambda (buffer) (buffer-live-p buffer)))
                   ((symbol-function 'p3/project-shell--start)
                    (lambda (name _root)
-                     (let ((buffer (get-buffer-create name)))
+                     (let ((buffer (p3-terminal-test--fake-shell name)))
                        (push buffer created)
                        buffer))))
           (let ((primary (p3/project-shell-buffer))
@@ -192,7 +194,7 @@
         (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root))
                   ((symbol-function 'p3/project-shell--start)
                    (lambda (name _root)
-                     (let ((buffer (get-buffer-create name)))
+                     (let ((buffer (p3-terminal-test--fake-shell name)))
                        (push buffer created)
                        buffer))))
           (let ((first (p3/project-shell-buffer)))
@@ -205,46 +207,30 @@
                 (kill-buffer buffer)))
             created))))
 
-(ert-deftest p3-terminal-dead-process-primary-is-restarted ()
+(ert-deftest p3-terminal-idle-primary-does-not-require-process ()
   (let ((p3/project-shell-buffers (make-hash-table :test #'equal))
         (root (file-name-as-directory
-               (expand-file-name "p3-project" temporary-file-directory)))
-        (alive t)
-        (starts 0)
-        created)
-    (unwind-protect
-        (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root))
-                  ((symbol-function 'p3/project-shell-live-p)
-                   (lambda (buffer)
-                     (and (buffer-live-p buffer) alive)))
-                  ((symbol-function 'p3/project-shell--start)
-                   (lambda (name _root)
-                     (cl-incf starts)
-                     (setq alive t)
-                     (let ((buffer (get-buffer-create name)))
-                       (cl-pushnew buffer created)
-                       buffer))))
-          (let ((first (p3/project-shell-buffer)))
-            (setq alive nil)
-            (let ((replacement (p3/project-shell-buffer)))
-              (should (= starts 2))
-              (should (eq replacement (gethash root p3/project-shell-buffers)))
-              (should (buffer-live-p replacement))
-              (should (eq first replacement)))))
-      (mapc (lambda (buffer)
-              (when (buffer-live-p buffer)
-                (kill-buffer buffer)))
-            created))))
+               (expand-file-name "p3-idle-project" temporary-file-directory))))
+    (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root)))
+      (let ((buffer (p3-terminal-test--fake-shell
+                     (p3/project-shell-buffer-name root))))
+        (unwind-protect
+            (progn
+              (with-current-buffer buffer
+                (setq-local p3/project-shell-root-value root))
+              (puthash root buffer p3/project-shell-buffers)
+              (should-not (get-buffer-process buffer))
+              (should (p3/project-shell-live-p buffer))
+              (should (eq buffer (p3/project-shell-buffer))))
+          (kill-buffer buffer))))))
 
-(ert-deftest p3-terminal-session-list-excludes-dead-process-buffers ()
-  (let ((buffer (generate-new-buffer " *p3-dead-shell-list-test*")))
+(ert-deftest p3-terminal-session-list-excludes-non-eshell-buffers ()
+  (let ((buffer (generate-new-buffer " *p3-not-shell-list-test*")))
     (unwind-protect
         (progn
           (with-current-buffer buffer
             (setq-local p3/project-shell-root-value temporary-file-directory))
-          (cl-letf (((symbol-function 'p3/project-shell-live-p)
-                     (lambda (_candidate) nil)))
-            (should-not (memq buffer (p3/project-shell-buffers)))))
+          (should-not (memq buffer (p3/project-shell-buffers))))
       (kill-buffer buffer))))
 
 (ert-deftest p3-terminal-shell-starts-with-root-as-default-directory ()
@@ -259,7 +245,7 @@
                   ((symbol-function 'p3/project-shell--start)
                    (lambda (name _root)
                      (setq captured-directory default-directory)
-                     (let ((buffer (get-buffer-create name)))
+                     (let ((buffer (p3-terminal-test--fake-shell name)))
                        (push buffer created)
                        buffer))))
           (p3/project-shell-buffer)
@@ -268,30 +254,6 @@
               (when (buffer-live-p buffer)
                 (kill-buffer buffer)))
             created))))
-
-(ert-deftest p3-terminal-windows-start-preserves-project-directory ()
-  (let* ((root
-          (file-name-as-directory
-           (expand-file-name "p3-windows-project" temporary-file-directory)))
-         (name "*p3-windows-project-shell-test*")
-         (old-chere (getenv "CHERE_INVOKING"))
-         captured-directory
-         captured-chere)
-    (unwind-protect
-        (cl-letf (((symbol-function 'p3/windows-p) (lambda () t))
-                  ((symbol-function 'p3/platform-bash-program)
-                   (lambda () "C:/rtools/usr/bin/bash.exe"))
-                  ((symbol-function 'shell)
-                   (lambda (buffer-name)
-                     (setq captured-directory default-directory
-                           captured-chere (getenv "CHERE_INVOKING"))
-                     (get-buffer-create buffer-name))))
-          (p3/project-shell--start name root)
-          (should (equal captured-directory root))
-          (should (equal captured-chere "1"))
-          (should (equal (getenv "CHERE_INVOKING") old-chere)))
-      (when-let ((buffer (get-buffer name)))
-        (kill-buffer buffer)))))
 
 (ert-deftest p3-terminal-command-map-exposes-session-workflow ()
   (dolist (binding '(("t" . p3/project-shell)
