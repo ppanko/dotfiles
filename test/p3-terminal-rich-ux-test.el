@@ -146,7 +146,7 @@
       (when (buffer-live-p second) (kill-buffer second))
       (delete-file history-file))))
 
-(ert-deftest p3-terminal-managed-eshell-routes-visual-commands-through-eat-path ()
+(ert-deftest p3-terminal-managed-eshell-dispatches-terminal-heavy-commands-visually ()
   (with-temp-buffer
     (eshell-mode)
     (should (member "top" eshell-visual-commands))
@@ -154,10 +154,14 @@
     (p3/project-shell-mode-setup)
     (should (local-variable-p 'eshell-visual-commands))
     (should (local-variable-p 'eshell-visual-subcommands))
-    (should (local-variable-p 'eshell-visual-options))
-    (should-not eshell-visual-commands)
-    (should-not eshell-visual-subcommands)
-    (should-not eshell-visual-options)))
+    (should (member "top" eshell-visual-commands))
+    (should (member "codex" eshell-visual-commands))
+    (should (member "pacman" eshell-visual-commands))
+    (should (member "pacman" (cdr (assoc "sudo" eshell-visual-subcommands))))
+    (should (eshell-visual-command-p "codex" nil))
+    (should (eshell-visual-command-p "pacman" '("-Syu")))
+    (should (eshell-visual-command-p "sudo" '("pacman" "-Syu")))
+    (should-not (eshell-visual-command-p "git" '("status")))))
 
 (provide 'p3-terminal-rich-ux-test)
 
