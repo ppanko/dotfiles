@@ -16,6 +16,7 @@
 (defvar eshell-interpreter-alist)
 (defvar eshell-last-command-status)
 (defvar eshell-parent-buffer)
+(defvar eshell-password-prompt-regexp)
 (defvar eshell-prompt-function)
 (defvar eshell-prompt-regexp)
 (defvar eshell-save-history-on-exit)
@@ -45,6 +46,9 @@
 
 (defconst p3/project-shell-sudo-password-prompt "[P3 sudo] password: "
   "Recognizable sudo prompt used for masked password entry in Eat.")
+
+(defconst p3/project-shell-sudo-password-tail-limit 512
+  "Maximum sudo output tail retained for split password-prompt detection.")
 
 (defconst p3/project-shell-codex-line-subcommands
   '("exec" "e" "review" "login" "logout" "mcp" "plugin"
@@ -248,25 +252,34 @@
         (call-interactively #'eat-send-password)))))
 
 (defun p3/project-shell--sudo-password-filter (process output)
-  "Pass OUTPUT through Eat and detect P3 sudo password prompts for PROCESS."
+  "Pass OUTPUT through Eat and detect sudo password prompts for PROCESS."
   (when-let ((filter (process-get process 'p3/project-shell-original-filter)))
     (funcall filter process output))
   (when-let ((prompt (process-get process 'p3/project-shell-sudo-prompt)))
-    (let ((scan (concat (or (process-get process 'p3/project-shell-sudo-tail) "")
-                        output))
-          (regexp (regexp-quote prompt))
-          count)
-      (while (string-match regexp scan)
-        (setq count (1+ (or count 0))
+    (let* ((scan (concat (or (process-get process 'p3/project-shell-sudo-tail) "")
+                         output))
+           (exact-regexp (regexp-quote prompt))
+           (fallback-regexp
+            (process-get process 'p3/project-shell-sudo-fallback-regexp))
+           (count 0))
+      ;; Prefer the prompt P3 injects with sudo -p.  If PAM/sudoers ignores
+      ;; that override, fall back to Eshell's standard password-prompt regexp.
+      ;; The exact matches are consumed first so a normal P3 prompt cannot also
+      ;; be counted by the broader fallback regexp.
+      (while (string-match exact-regexp scan)
+        (setq count (1+ count)
               scan (substring scan (match-end 0))))
-      ;; Retain only enough unmatched output to recognize a prompt split across
-      ;; adjacent process-filter calls; consumed prompts cannot fire twice.
-      (let ((keep (max 0 (1- (length prompt)))))
+      (when (and fallback-regexp
+                 (string-match fallback-regexp scan))
+        (setq count (1+ count)
+              scan (substring scan (match-end 0))))
+      ;; Retain a bounded suffix so either recognizer can span adjacent process
+      ;; filter calls without allowing long-running command output to grow here.
+      (let ((keep (min (length scan)
+                       p3/project-shell-sudo-password-tail-limit)))
         (process-put process 'p3/project-shell-sudo-tail
-                     (if (> (length scan) keep)
-                         (substring scan (- (length scan) keep))
-                       scan)))
-      (dotimes (_ (or count 0))
+                     (substring scan (- (length scan) keep))))
+      (dotimes (_ count)
         ;; Defer minibuffer input until Eat's own filter has finished handling
         ;; the prompt chunk; this avoids re-entering the terminal parser.
         (run-at-time 0 nil #'p3/project-shell--eat-send-password process)))))
@@ -276,6 +289,8 @@
   (process-put process 'p3/project-shell-original-filter (process-filter process))
   (process-put process 'p3/project-shell-sudo-prompt
                p3/project-shell-sudo-password-prompt)
+  (process-put process 'p3/project-shell-sudo-fallback-regexp
+               eshell-password-prompt-regexp)
   (process-put process 'p3/project-shell-sudo-tail "")
   (set-process-filter process #'p3/project-shell--sudo-password-filter))
 
