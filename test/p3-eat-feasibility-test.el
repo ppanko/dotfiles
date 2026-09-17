@@ -16,6 +16,16 @@
   (should (> (car (plist-get result :size)) 0))
   (should (> (cdr (plist-get result :size)) 0)))
 
+(defun p3-eat-feasibility-test--wait-for-child-exit (buffer)
+  "Wait for BUFFER's current Eshell child process to be fully reaped."
+  (with-current-buffer buffer
+    (let ((deadline (+ (float-time) 5.0))
+          process)
+      (while (and (setq process (eshell-head-process))
+                  (< (float-time) deadline))
+        (accept-process-output process 0.05))
+      (should-not (eshell-head-process)))))
+
 (defun p3-eat-feasibility-test--run-command (buffer command regexp)
   "Run COMMAND in BUFFER and require REGEXP in its resulting output."
   (with-current-buffer buffer
@@ -67,11 +77,10 @@
               (eat-eshell-mode 1)
               (dolist (exit-code '(0 7))
                 (p3-eat-feasibility-test--assert-linux-terminal-result
-                 (p3-terminal-test-support-run-fixture buffer exit-code)))
+                 (p3-terminal-test-support-run-fixture buffer exit-code))
+                (p3-eat-feasibility-test--wait-for-child-exit buffer))
               (should (p3/project-shell-live-p buffer))
-              (should (eq buffer (p3/project-shell-buffer)))
-              (with-current-buffer buffer
-                (should-not (eshell-head-process))))
+              (should (eq buffer (p3/project-shell-buffer))))
           (when (buffer-live-p buffer)
             (let ((kill-buffer-query-functions nil))
               (kill-buffer buffer))))))))
@@ -97,8 +106,10 @@
             (should (equal (p3/project-normalize-root default-directory) root)))
           (p3-eat-feasibility-test--run-command
            buffer "git --version" "git version")
+          (p3-eat-feasibility-test--wait-for-child-exit buffer)
           (p3-eat-feasibility-test--run-command
            buffer "bash --version" "GNU bash")
+          (p3-eat-feasibility-test--wait-for-child-exit buffer)
           (should (p3/project-shell-live-p buffer))
           (should (eq buffer (p3/project-shell-buffer))))
       (when (and buffer (buffer-live-p buffer))
