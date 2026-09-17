@@ -6,21 +6,37 @@
 (require 'p3-terminal)
 (require 'p3-terminal-test-support)
 
-(defun p3-eat-feasibility-test--assert-result (result)
-  "Assert the supported terminal contract represented by RESULT."
+(defun p3-eat-feasibility-test--assert-linux-terminal-result (result)
+  "Assert the full GNU/Linux terminal contract represented by RESULT."
   (should (plist-get result :terminal))
   (should-not (plist-get result :raw-escape))
   (should (plist-get result :input-sent))
   (should (equal (plist-get result :input) "78"))
-  ;; GNU/Linux is the platform on which terminal-native applications such as
-  ;; Codex are part of the project-shell contract.  Native Windows only needs
-  ;; ordinary Eshell/external-command behavior; a real PTY is not required.
-  (unless (eq system-type 'windows-nt)
-    (should (equal (plist-get result :tty) "1:1"))
-    (should (> (car (plist-get result :size)) 0))
-    (should (> (cdr (plist-get result :size)) 0))))
+  (should (equal (plist-get result :tty) "1:1"))
+  (should (> (car (plist-get result :size)) 0))
+  (should (> (cdr (plist-get result :size)) 0)))
+
+(defun p3-eat-feasibility-test--run-command (buffer command regexp)
+  "Run COMMAND in BUFFER and require REGEXP in its resulting output."
+  (with-current-buffer buffer
+    (let ((start (point-max))
+          (deadline (+ (float-time) 10.0))
+          found)
+      (goto-char (point-max))
+      (insert command)
+      (eshell-send-input)
+      (while (and (not found) (< (float-time) deadline))
+        (if-let ((process (eshell-head-process)))
+            (accept-process-output process 0.05)
+          (accept-process-output nil 0.05))
+        (save-excursion
+          (goto-char start)
+          (setq found (re-search-forward regexp nil t))))
+      (should found))))
 
 (ert-deftest p3-eat-feasibility-supported-eshell-terminal-path ()
+  (when (eq system-type 'windows-nt)
+    (ert-skip "Native Windows full-screen TUI/PTY behavior is out of scope"))
   (p3-terminal-test-support-prepare-platform)
   (should (executable-find "stty"))
   (should (executable-find "env"))
@@ -31,13 +47,15 @@
     (unwind-protect
         (progn
           (eat-eshell-mode 1)
-          (p3-eat-feasibility-test--assert-result
+          (p3-eat-feasibility-test--assert-linux-terminal-result
            (p3-terminal-test-support-run-fixture buffer 0)))
       (when (buffer-live-p buffer)
         (let ((kill-buffer-query-functions nil))
           (kill-buffer buffer))))))
 
 (ert-deftest p3-eat-feasibility-p3-project-shell-returns-cleanly ()
+  (when (eq system-type 'windows-nt)
+    (ert-skip "Native Windows full-screen TUI/PTY behavior is out of scope"))
   (p3-terminal-test-support-prepare-platform)
   (let ((root (file-name-as-directory temporary-file-directory))
         (p3/project-shell-buffers (make-hash-table :test #'equal))
@@ -48,7 +66,7 @@
             (progn
               (eat-eshell-mode 1)
               (dolist (exit-code '(0 7))
-                (p3-eat-feasibility-test--assert-result
+                (p3-eat-feasibility-test--assert-linux-terminal-result
                  (p3-terminal-test-support-run-fixture buffer exit-code)))
               (should (p3/project-shell-live-p buffer))
               (should (eq buffer (p3/project-shell-buffer)))
@@ -57,3 +75,33 @@
           (when (buffer-live-p buffer)
             (let ((kill-buffer-query-functions nil))
               (kill-buffer buffer))))))))
+
+(ert-deftest p3-eat-feasibility-windows-project-shell-runs-normal-cli-tools ()
+  (unless (eq system-type 'windows-nt)
+    (ert-skip "Native Windows-only ordinary CLI contract"))
+  (p3-terminal-test-support-prepare-platform)
+  (should (executable-find "git"))
+  (should (executable-find "bash"))
+  (let* ((raw-root (make-temp-file "p3-windows-eshell-" t))
+         (root (p3/project-normalize-root raw-root))
+         (p3/project-shell-buffers (make-hash-table :test #'equal))
+         (eat-eshell-fallback-if-stty-not-available t)
+         buffer)
+    (unwind-protect
+        (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root)))
+          (setq buffer (p3/project-shell-buffer))
+          (with-current-buffer buffer
+            (eat-eshell-mode 1)
+            (should (derived-mode-p 'eshell-mode))
+            (should (equal p3/project-shell-root-value root))
+            (should (equal (p3/project-normalize-root default-directory) root)))
+          (p3-eat-feasibility-test--run-command
+           buffer "git --version" "git version")
+          (p3-eat-feasibility-test--run-command
+           buffer "bash --version" "GNU bash")
+          (should (p3/project-shell-live-p buffer))
+          (should (eq buffer (p3/project-shell-buffer))))
+      (when (and buffer (buffer-live-p buffer))
+        (let ((kill-buffer-query-functions nil))
+          (kill-buffer buffer)))
+      (delete-directory raw-root t))))
