@@ -29,7 +29,8 @@
 (declare-function eshell-add-to-history "em-hist" ())
 (declare-function eshell-find-interpreter "esh-ext"
                   (file args &optional no-examine-p))
-(declare-function eshell-interactive-output-p "esh-proc" (&optional handles))
+(declare-function eshell-interactive-output-p "esh-io"
+                  (&optional index handles))
 (declare-function eshell-stringify-list "esh-util" (args))
 (declare-function eshell-visual-command-p "em-term" (command args))
 (declare-function eshell-write-history "em-hist" (&optional filename append))
@@ -242,7 +243,7 @@
        (when (buffer-live-p eat-buffer)
          (let ((kill-buffer-query-functions nil))
            (kill-buffer eat-buffer)))
-       (signal (car err) (cdr err))))))
+       (signal (car err) (cdr err)))))
   nil)
 
 (defun p3/project-shell--setup-visual-commands ()
