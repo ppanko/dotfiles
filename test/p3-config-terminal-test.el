@@ -78,6 +78,20 @@
     (should (string-match-p "eat-exec" terminal))
     (should-not (string-match-p "eat--eshell" terminal))))
 
+(ert-deftest p3-config-terminal-scopes-syntax-highlighting-to-eshell-buffers ()
+  (let ((config
+         (p3-config-terminal-test--contents "lisp/p3-config-terminal.el")))
+    ;; Do not use the package's globalized minor mode.  Its generated
+    ;; `define-globalized-minor-mode' internals changed in Emacs 31, so stale
+    ;; compiled packages can raise a void `...--set-explicitly' variable when
+    ;; another major mode (such as Eat) starts.  We only need highlighting in
+    ;; Eshell buffers anyway.
+    (should (string-match-p
+             ":hook[[:space:]\n]+(eshell-mode \. eshell-syntax-highlighting-mode)"
+             config))
+    (should-not
+     (string-match-p "eshell-syntax-highlighting-global-mode" config))))
+
 (ert-deftest p3-config-terminal-config-org-delegates-shell-boundary ()
   (let ((contents (p3-config-terminal-test--contents "config.org")))
     (should
