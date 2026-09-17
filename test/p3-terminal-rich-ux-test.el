@@ -6,6 +6,7 @@
 (require 'eshell)
 (require 'em-hist)
 (require 'em-term)
+(require 'esh-ext)
 
 (defconst p3-terminal-rich-ux-test--root
   (file-name-directory
@@ -146,18 +147,137 @@
       (when (buffer-live-p second) (kill-buffer second))
       (delete-file history-file))))
 
-(ert-deftest p3-terminal-managed-eshell-routes-visual-commands-through-eat-path ()
+(ert-deftest p3-terminal-managed-eshell-installs-project-local-eat-interpreter ()
+  (let ((managed (generate-new-buffer " *p3-managed-interpreter*"))
+        (ordinary (generate-new-buffer " *p3-ordinary-interpreter*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer ordinary
+            (eshell-mode)
+            (should-not (assq #'p3/project-shell-eat-visual-command-p
+                              eshell-interpreter-alist)))
+          (with-current-buffer managed
+            (eshell-mode)
+            (setq-local p3/project-shell-root-value temporary-file-directory)
+            (p3/project-shell-mode-setup)
+            (should (local-variable-p 'eshell-interpreter-alist))
+            (let ((entry
+                   (assq #'p3/project-shell-eat-visual-command-p
+                         eshell-interpreter-alist)))
+              (should entry)
+              (should (eq (cdr entry) #'p3/project-shell-exec-visual)))
+            ;; Keep the stock Eshell visual interpreter after P3's narrower
+            ;; route so unsupported platforms still use their normal backend.
+            (should (assq #'eshell-visual-command-p eshell-interpreter-alist)))
+          (with-current-buffer ordinary
+            (should-not (assq #'p3/project-shell-eat-visual-command-p
+                              eshell-interpreter-alist))))
+      (dolist (buffer (list managed ordinary))
+        (when (buffer-live-p buffer)
+          (kill-buffer buffer))))))
+
+(ert-deftest p3-terminal-visual-dispatch-preserves-line-oriented-output ()
   (with-temp-buffer
     (eshell-mode)
-    (should (member "top" eshell-visual-commands))
     (setq-local p3/project-shell-root-value temporary-file-directory)
     (p3/project-shell-mode-setup)
-    (should (local-variable-p 'eshell-visual-commands))
-    (should (local-variable-p 'eshell-visual-subcommands))
-    (should (local-variable-p 'eshell-visual-options))
-    (should-not eshell-visual-commands)
-    (should-not eshell-visual-subcommands)
-    (should-not eshell-visual-options)))
+    ;; P3-specific commands must not be added wholesale to Eshell's visual
+    ;; list, otherwise every informational invocation loses its scrollback.
+    (should-not (member "codex" eshell-visual-commands))
+    (should-not (member "pacman" eshell-visual-commands))
+    (cl-letf (((symbol-function 'p3/project-shell-eat-supported-p)
+               (lambda () t))
+              ((symbol-function 'eshell-interactive-output-p)
+               (lambda (&rest _) t)))
+      ;; Existing full-screen commands still use the dedicated Eat path.
+      (should (p3/project-shell-eat-visual-command-p "top" nil))
+      ;; Interactive Codex sessions are visual; batch/help/version commands
+      ;; remain ordinary Eshell commands so their output persists.
+      (should (p3/project-shell-eat-visual-command-p "codex" nil))
+      (should (p3/project-shell-eat-visual-command-p
+               "codex" '("fix this bug")))
+      (should (p3/project-shell-eat-visual-command-p
+               "codex" '("resume" "--last")))
+      (should-not (p3/project-shell-eat-visual-command-p
+                   "codex" '("--version")))
+      (should-not (p3/project-shell-eat-visual-command-p
+                   "codex" '("--help")))
+      (should-not (p3/project-shell-eat-visual-command-p
+                   "codex" '("exec" "do work")))
+      (should-not (p3/project-shell-eat-visual-command-p
+                   "codex" '("completion" "bash")))
+      ;; Pacman mutation/download operations need a terminal for readable
+      ;; progress; query/search/info operations should stay in Eshell.
+      (should (p3/project-shell-eat-visual-command-p
+               "pacman" '("-Syu")))
+      (should (p3/project-shell-eat-visual-command-p
+               "pacman" '("-S" "ripgrep")))
+      (should (p3/project-shell-eat-visual-command-p
+               "pacman" '("-U" "pkg.tar.zst")))
+      (should (p3/project-shell-eat-visual-command-p
+               "pacman" '("-R" "ripgrep")))
+      (should (p3/project-shell-eat-visual-command-p
+               "sudo" '("pacman" "-Syu")))
+      (should-not (p3/project-shell-eat-visual-command-p
+                   "pacman" '("-Q")))
+      (should-not (p3/project-shell-eat-visual-command-p
+                   "pacman" '("-Ss" "emacs")))
+      (should-not (p3/project-shell-eat-visual-command-p
+                   "pacman" '("-Si" "emacs")))
+      (should-not (p3/project-shell-eat-visual-command-p
+                   "sudo" '("pacman" "-Q")))
+      (should-not (p3/project-shell-eat-visual-command-p
+                   "git" '("status"))))
+    ;; When Eat's PTY path is unsupported (native Windows), P3 declines the
+    ;; route entirely and lets Eshell's stock visual interpreter decide.
+    (cl-letf (((symbol-function 'p3/project-shell-eat-supported-p)
+               (lambda () nil))
+              ((symbol-function 'eshell-interactive-output-p)
+               (lambda (&rest _) t)))
+      (should-not (p3/project-shell-eat-visual-command-p "top" nil))
+      (should-not (p3/project-shell-eat-visual-command-p "codex" nil))
+      (should-not (p3/project-shell-eat-visual-command-p
+                   "pacman" '("-Syu"))))))
+
+(ert-deftest p3-terminal-eat-exit-cleanup-is-scoped-to-managed-parent ()
+  (let ((managed (generate-new-buffer " *p3-managed-parent*"))
+        (ordinary (generate-new-buffer " *p3-ordinary-parent*"))
+        (managed-child (generate-new-buffer " *p3-managed-eat-child*"))
+        (ordinary-child (generate-new-buffer " *p3-ordinary-eat-child*"))
+        scheduled)
+    (unwind-protect
+        (progn
+          (with-current-buffer managed
+            (eshell-mode)
+            (setq-local p3/project-shell-root-value temporary-file-directory)
+            (p3/project-shell-mode-setup))
+          (with-current-buffer ordinary
+            (eshell-mode))
+          (with-current-buffer managed-child
+            (setq-local eshell-parent-buffer managed))
+          (with-current-buffer ordinary-child
+            (setq-local eshell-parent-buffer ordinary))
+          (cl-letf (((symbol-function 'process-live-p) (lambda (_process) nil))
+                    ((symbol-function 'process-exit-status) (lambda (_process) 0))
+                    ((symbol-function 'get-buffer-window-list)
+                     (lambda (&rest _args) nil))
+                    ((symbol-function 'run-at-time)
+                     (lambda (_time _repeat function argument)
+                       (setq scheduled (list function argument)))))
+            (cl-letf (((symbol-function 'process-buffer)
+                       (lambda (_process) managed-child)))
+              (p3/project-shell-eat-visual-buffer-exit 'fake-process)
+              (should (equal scheduled
+                             (list #'p3/project-shell--kill-eat-visual-buffer
+                                   managed-child))))
+            (setq scheduled nil)
+            (cl-letf (((symbol-function 'process-buffer)
+                       (lambda (_process) ordinary-child)))
+              (p3/project-shell-eat-visual-buffer-exit 'fake-process)
+              (should-not scheduled))))
+      (dolist (buffer (list managed ordinary managed-child ordinary-child))
+        (when (buffer-live-p buffer)
+          (kill-buffer buffer))))))
 
 (provide 'p3-terminal-rich-ux-test)
 

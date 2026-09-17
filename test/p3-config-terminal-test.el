@@ -60,14 +60,23 @@
     (should (string-match-p "(use-package eshell-syntax-highlighting" config))
     (should-not (string-match-p "vterm" config))))
 
-(ert-deftest p3-config-terminal-uses-supported-eat-eshell-integration ()
-  (let ((contents
-         (p3-config-terminal-test--contents "lisp/p3-config-terminal.el")))
-    (should (string-match-p "(use-package eat" contents))
-    (should (string-match-p "eat-eshell-mode" contents))
-    (should (string-match-p
-             "eat-eshell-fallback-if-stty-not-available" contents))
-    (should-not (string-match-p "eat--eshell-local-mode" contents))))
+(ert-deftest p3-config-terminal-keeps-eat-visual-routing-project-local ()
+  (let ((config
+         (p3-config-terminal-test--contents "lisp/p3-config-terminal.el"))
+        (terminal
+         (p3-config-terminal-test--contents "lisp/p3-terminal.el")))
+    (should (string-match-p "(use-package eat" config))
+    (should (string-match-p "p3/project-shell-eat-visual-buffer-exit"
+                            config))
+    (should (string-match-p "eat-exit-hook" config))
+    ;; Eat's Eshell integrations are global minor modes.  P3 must not enable
+    ;; either one merely to service project-shell buffers.
+    (should-not (string-match-p "eat-eshell-visual-command-mode" config))
+    (should-not (string-match-p "(eat-eshell-mode 1)" config))
+    ;; The P3 executor may use Eat's public process API, but not private
+    ;; Eshell integration helpers.
+    (should (string-match-p "eat-exec" terminal))
+    (should-not (string-match-p "eat--eshell" terminal))))
 
 (ert-deftest p3-config-terminal-config-org-delegates-shell-boundary ()
   (let ((contents (p3-config-terminal-test--contents "config.org")))

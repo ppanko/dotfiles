@@ -69,6 +69,30 @@
     (insert command)
     (eshell-send-input)))
 
+(defun p3-terminal-integration-test--run-command-for-output
+    (buffer command regexp)
+  "Run COMMAND in BUFFER and require REGEXP in its Eshell output."
+  (with-current-buffer buffer
+    (let ((start (point-max))
+          (deadline (+ (float-time) 5.0))
+          found)
+      (goto-char (point-max))
+      (insert command)
+      (eshell-send-input)
+      (while (and (not found) (< (float-time) deadline))
+        (if-let ((process (eshell-head-process)))
+            (accept-process-output process 0.05)
+          (accept-process-output nil 0.05))
+        (save-excursion
+          (goto-char start)
+          (setq found (re-search-forward regexp nil t))))
+      (should found)
+      (let ((reap-deadline (+ (float-time) 5.0)))
+        (while (and (eshell-head-process)
+                    (< (float-time) reap-deadline))
+          (accept-process-output (eshell-head-process) 0.05))
+        (should-not (eshell-head-process))))))
+
 (ert-deftest p3-terminal-real-eshell-starts-at-project-root ()
   (let* ((raw-root (make-temp-file "p3-real-eshell-" t))
          (root (p3/project-normalize-root raw-root))
@@ -115,6 +139,46 @@
               (should (p3/project-shell-live-p buffer))
               (should (eq buffer (p3/project-shell-buffer))))
           (kill-buffer buffer))))))
+
+(ert-deftest p3-terminal-line-oriented-codex-and-pacman-output-stays-in-eshell ()
+  (unless (eq system-type 'gnu/linux)
+    (ert-skip "Fake executable regression uses POSIX shell scripts"))
+  (let* ((raw-root (make-temp-file "p3-line-output-" t))
+         (root (p3/project-normalize-root raw-root))
+         (codex (expand-file-name "codex" raw-root))
+         (pacman (expand-file-name "pacman" raw-root))
+         (process-environment (copy-sequence process-environment))
+         (exec-path (cons raw-root exec-path))
+         (p3/project-shell-buffers (make-hash-table :test #'equal))
+         buffer)
+    (unwind-protect
+        (progn
+          (with-temp-file codex
+            (insert "#!/bin/sh\nprintf '%s\\n' '__P3_CODEX_VERSION__'\n"))
+          (with-temp-file pacman
+            (insert "#!/bin/sh\nprintf '%s\\n' '__P3_PACMAN_QUERY__'\n"))
+          (set-file-modes codex #o755)
+          (set-file-modes pacman #o755)
+          (setenv "PATH"
+                  (concat raw-root path-separator (or (getenv "PATH") "")))
+          (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root)))
+            (setq buffer (p3/project-shell-buffer))
+            ;; Successful line-oriented commands must remain in the parent
+            ;; Eshell scrollback rather than disappearing with a transient Eat
+            ;; buffer.  Cover both stable informational forms and current CLI
+            ;; combinations that previously escaped the classifier.
+            (p3-terminal-integration-test--run-command-for-output
+             buffer "codex --version" "__P3_CODEX_VERSION__")
+            (p3-terminal-integration-test--run-command-for-output
+             buffer "codex features list" "__P3_CODEX_VERSION__")
+            (p3-terminal-integration-test--run-command-for-output
+             buffer "pacman -Q" "__P3_PACMAN_QUERY__")
+            (p3-terminal-integration-test--run-command-for-output
+             buffer "pacman -Ssq emacs" "__P3_PACMAN_QUERY__")
+            (should (p3/project-shell-live-p buffer))))
+      (when (and buffer (buffer-live-p buffer))
+        (kill-buffer buffer))
+      (delete-directory raw-root t))))
 
 (ert-deftest p3-terminal-killing-primary-clears-root-mapping ()
   (let ((p3/project-shell-buffers (make-hash-table :test #'equal))
