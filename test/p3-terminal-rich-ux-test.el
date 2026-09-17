@@ -71,6 +71,11 @@
                     eshell-input-filter-functions)))))
 
 (ert-deftest p3-terminal-append-history-compat-appends-only-latest-entry ()
+  ;; Emacs 30 added native `eshell-history-append'; the compatibility helper
+  ;; is only installed on older Eshell versions.  Do not exercise that private
+  ;; fallback against Emacs 30's changed `eshell-write-history' bookkeeping.
+  (when (boundp 'eshell-history-append)
+    (ert-skip "Native Eshell append history is available"))
   (unless (fboundp 'eshell-write-history)
     (require 'em-hist))
   (let ((history-file (make-temp-file "p3-eshell-history-")))
