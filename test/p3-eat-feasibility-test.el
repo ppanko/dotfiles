@@ -94,8 +94,9 @@
   (let* ((python (p3-terminal-test-support-python))
          (program (file-name-nondirectory python)))
     (with-current-buffer parent
-      ;; The deterministic Python fixture stands in for Codex/pacman in CI.
-      ;; Add only its executable basename to this managed shell's visual table.
+      ;; The deterministic Python fixture stands in for a stock visual command.
+      ;; P3 delegates Eshell's visual classification to its local Eat
+      ;; interpreter on supported platforms; no global Eat Eshell mode is used.
       (cl-pushnew program eshell-visual-commands :test #'equal)
       (goto-char (point-max))
       (insert (p3-eat-feasibility-test--fixture-command exit-code mode))
@@ -118,12 +119,12 @@
   (when (eq system-type 'windows-nt)
     (ert-skip "Native Windows full-screen TUI/PTY behavior is out of scope"))
   (p3-terminal-test-support-prepare-platform)
+  (should (p3/project-shell-eat-supported-p))
   (let ((root (file-name-as-directory temporary-file-directory))
         (p3/project-shell-buffers (make-hash-table :test #'equal))
         parent child)
     (unwind-protect
         (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root)))
-          (eat-eshell-visual-command-mode 1)
           (add-hook 'eat-exit-hook #'p3/project-shell-eat-visual-buffer-exit)
           (setq parent (p3/project-shell-buffer))
           ;; Nonzero exit deliberately leaves the Eat child available for
@@ -149,7 +150,6 @@
             (should-not (search-forward "__P3_TTY__" nil t)))
           (should (p3/project-shell-live-p parent)))
       (remove-hook 'eat-exit-hook #'p3/project-shell-eat-visual-buffer-exit)
-      (eat-eshell-visual-command-mode -1)
       (dolist (buffer (list child parent))
         (when (buffer-live-p buffer)
           (let ((kill-buffer-query-functions nil))
@@ -159,12 +159,12 @@
   (when (eq system-type 'windows-nt)
     (ert-skip "Native Windows full-screen TUI/PTY behavior is out of scope"))
   (p3-terminal-test-support-prepare-platform)
+  (should (p3/project-shell-eat-supported-p))
   (let ((root (file-name-as-directory temporary-file-directory))
         (p3/project-shell-buffers (make-hash-table :test #'equal))
         parent child)
     (unwind-protect
         (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root)))
-          (eat-eshell-visual-command-mode 1)
           (add-hook 'eat-exit-hook #'p3/project-shell-eat-visual-buffer-exit)
           (setq parent (p3/project-shell-buffer))
           (setq child
@@ -190,7 +190,6 @@
             (goto-char (point-min))
             (should-not (search-forward "__P3_PASTE__" nil t))))
       (remove-hook 'eat-exit-hook #'p3/project-shell-eat-visual-buffer-exit)
-      (eat-eshell-visual-command-mode -1)
       (dolist (buffer (list child parent))
         (when (buffer-live-p buffer)
           (let ((kill-buffer-query-functions nil))
@@ -200,12 +199,12 @@
   (when (eq system-type 'windows-nt)
     (ert-skip "Native Windows full-screen TUI/PTY behavior is out of scope"))
   (p3-terminal-test-support-prepare-platform)
+  (should (p3/project-shell-eat-supported-p))
   (let ((root (file-name-as-directory temporary-file-directory))
         (p3/project-shell-buffers (make-hash-table :test #'equal))
         parent child)
     (unwind-protect
         (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root)))
-          (eat-eshell-visual-command-mode 1)
           (add-hook 'eat-exit-hook #'p3/project-shell-eat-visual-buffer-exit)
           (setq parent (p3/project-shell-buffer))
           (switch-to-buffer parent)
@@ -221,7 +220,6 @@
           (should (eq (window-buffer (selected-window)) parent))
           (should (eq parent (p3/project-shell-buffer))))
       (remove-hook 'eat-exit-hook #'p3/project-shell-eat-visual-buffer-exit)
-      (eat-eshell-visual-command-mode -1)
       (when (buffer-live-p child)
         (let ((kill-buffer-query-functions nil)) (kill-buffer child)))
       (when (buffer-live-p parent)
@@ -231,6 +229,7 @@
   (unless (eq system-type 'windows-nt)
     (ert-skip "Native Windows-only ordinary CLI contract"))
   (p3-terminal-test-support-prepare-platform)
+  (should-not (p3/project-shell-eat-supported-p))
   (should (executable-find "git"))
   (should (executable-find "bash"))
   (let* ((raw-root (make-temp-file "p3-windows-eshell-" t))
@@ -239,19 +238,23 @@
          buffer)
     (unwind-protect
         (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root)))
-          (eat-eshell-visual-command-mode 1)
           (setq buffer (p3/project-shell-buffer))
           (with-current-buffer buffer
             (should (derived-mode-p 'eshell-mode))
             (should (equal p3/project-shell-root-value root))
-            (should (equal (p3/project-normalize-root default-directory) root)))
+            (should (equal (p3/project-normalize-root default-directory) root))
+            ;; P3 installs its predicate but declines Eat on Windows; stock
+            ;; Eshell visual handling remains in the interpreter chain.
+            (should (assq #'p3/project-shell-eat-visual-command-p
+                          eshell-interpreter-alist))
+            (should (assq #'eshell-visual-command-p
+                          eshell-interpreter-alist)))
           (p3-eat-feasibility-test--run-command
            buffer "git --version" "git version")
           (p3-eat-feasibility-test--run-command
            buffer "bash --version" "GNU bash")
           (should (p3/project-shell-live-p buffer))
           (should (eq buffer (p3/project-shell-buffer))))
-      (eat-eshell-visual-command-mode -1)
       (when (and buffer (buffer-live-p buffer))
         (let ((kill-buffer-query-functions nil))
           (kill-buffer buffer)))
