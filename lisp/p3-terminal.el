@@ -25,6 +25,7 @@
 (declare-function eat-exec "eat" (buffer name command startfile switches))
 (declare-function eat-mode "eat" ())
 (declare-function eat-semi-char-mode "eat" (&optional arg))
+(declare-function eat-send-password "eat" ())
 (declare-function eshell "eshell" (&optional arg))
 (declare-function eshell-add-to-history "em-hist" ())
 (declare-function eshell-find-interpreter "esh-ext"
@@ -41,6 +42,9 @@
 
 (defconst p3/project-shell-prompt-regexp "^[^❯\n]*❯ "
   "Prompt regexp for P3 project Eshell buffers.")
+
+(defconst p3/project-shell-sudo-password-prompt "[P3 sudo] password: "
+  "Recognizable sudo prompt used for masked password entry in Eat.")
 
 (defconst p3/project-shell-codex-line-subcommands
   '("exec" "e" "review" "login" "logout" "mcp" "plugin"
@@ -211,6 +215,70 @@
             (when-let ((pacman-tail (member "pacman" args)))
               (p3/project-shell--pacman-visual-p (cdr pacman-tail)))))))))
 
+(defun p3/project-shell--strip-sudo-prompt-options (args)
+  "Return sudo option ARGS without an explicit password-prompt option."
+  (let (result)
+    (while args
+      (let ((arg (pop args)))
+        (cond
+         ((member arg '("-p" "--prompt"))
+          (when args (pop args)))
+         ((or (string-prefix-p "--prompt=" arg)
+              (and (string-prefix-p "-p" arg)
+                   (> (length arg) 2))))
+         (t (push arg result)))))
+    (nreverse result)))
+
+(defun p3/project-shell--sudo-password-args (args)
+  "Return visual sudo ARGS with P3's recognizable password prompt."
+  (if-let ((pacman-tail (member "pacman" args)))
+      (let* ((prefix-count (- (length args) (length pacman-tail)))
+             (prefix (seq-take args prefix-count)))
+        (append (list "-p" p3/project-shell-sudo-password-prompt)
+                (p3/project-shell--strip-sudo-prompt-options prefix)
+                pacman-tail))
+    args))
+
+(defun p3/project-shell--eat-send-password (process)
+  "Read and send one password invisibly to Eat PROCESS."
+  (when (and (process-live-p process)
+             (buffer-live-p (process-buffer process)))
+    (with-current-buffer (process-buffer process)
+      (when (derived-mode-p 'eat-mode)
+        (call-interactively #'eat-send-password)))))
+
+(defun p3/project-shell--sudo-password-filter (process output)
+  "Pass OUTPUT through Eat and detect P3 sudo password prompts for PROCESS."
+  (when-let ((filter (process-get process 'p3/project-shell-original-filter)))
+    (funcall filter process output))
+  (when-let ((prompt (process-get process 'p3/project-shell-sudo-prompt)))
+    (let ((scan (concat (or (process-get process 'p3/project-shell-sudo-tail) "")
+                        output))
+          (regexp (regexp-quote prompt))
+          count)
+      (while (string-match regexp scan)
+        (setq count (1+ (or count 0))
+              scan (substring scan (match-end 0))))
+      ;; Retain only enough unmatched output to recognize a prompt split across
+      ;; adjacent process-filter calls; consumed prompts cannot fire twice.
+      (let ((keep (max 0 (1- (length prompt)))))
+        (process-put process 'p3/project-shell-sudo-tail
+                     (if (> (length scan) keep)
+                         (substring scan (- (length scan) keep))
+                       scan)))
+      (dotimes (_ (or count 0))
+        ;; Defer minibuffer input until Eat's own filter has finished handling
+        ;; the prompt chunk; this avoids re-entering the terminal parser.
+        (run-at-time 0 nil #'p3/project-shell--eat-send-password process)))))
+
+(defun p3/project-shell--install-sudo-password-filter (process)
+  "Install masked sudo password handling around Eat PROCESS's current filter."
+  (process-put process 'p3/project-shell-original-filter (process-filter process))
+  (process-put process 'p3/project-shell-sudo-prompt
+               p3/project-shell-sudo-password-prompt)
+  (process-put process 'p3/project-shell-sudo-tail "")
+  (set-process-filter process #'p3/project-shell--sudo-password-filter))
+
 (defun p3/project-shell-exec-visual (&rest args)
   "Run visual command ARGS in a dedicated Eat buffer for this P3 Eshell."
   (require 'eat)
@@ -218,9 +286,14 @@
   (let* (eshell-interpreter-alist
          (interp (eshell-find-interpreter (car args) (cdr args)))
          (program (car interp))
-         (program-args
+         (raw-program-args
           (flatten-tree
            (eshell-stringify-list (append (cdr interp) (cdr args)))))
+         (sudo-p (and (equal (file-name-nondirectory program) "sudo")
+                      (member "pacman" raw-program-args)))
+         (program-args (if sudo-p
+                           (p3/project-shell--sudo-password-args raw-program-args)
+                         raw-program-args))
          (eat-buffer
           (generate-new-buffer
            (concat "*eat:" (file-name-nondirectory program) "*")))
@@ -239,7 +312,9 @@
           (eat-exec eat-buffer program program nil program-args)
           (let ((process (get-buffer-process eat-buffer)))
             (unless (and process (process-live-p process))
-              (error "Failed to invoke visual command: %s" program)))
+              (error "Failed to invoke visual command: %s" program))
+            (when sudo-p
+              (p3/project-shell--install-sudo-password-filter process)))
           (eat-semi-char-mode))
       (error
        (when (buffer-live-p eat-buffer)
