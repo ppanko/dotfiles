@@ -106,10 +106,12 @@
         (unwind-protect
             (progn
               (p3-terminal-integration-test--send-command buffer "git --version")
-              (let ((deadline (+ (float-time) 5.0)))
-                (while (and (eshell-head-process)
-                            (< (float-time) deadline))
-                  (accept-process-output (eshell-head-process) 0.05)))
+              (with-current-buffer buffer
+                (let ((deadline (+ (float-time) 5.0))
+                      process)
+                  (while (and (setq process (eshell-head-process))
+                              (< (float-time) deadline))
+                    (accept-process-output process 0.05))))
               (should (p3/project-shell-live-p buffer))
               (should (eq buffer (p3/project-shell-buffer))))
           (kill-buffer buffer))))))
