@@ -6,7 +6,6 @@
 (require 'p3-project)
 
 (defvar eshell-buffer-name)
-(defvar eshell-destroy-buffer-when-process-dies)
 (defvar eshell-exit-hook)
 (defvar eshell-hist-ignoredups)
 (defvar eshell-history-append)
@@ -189,16 +188,35 @@
   "Return non-nil when BUFFER is a live managed P3 project Eshell."
   (p3/project-shell-buffer-p buffer))
 
-(defun p3/project-shell-eat-visual-buffer-setup (_process)
-  "Configure an Eat child launched from a managed P3 project Eshell.
+(defun p3/project-shell--kill-eat-visual-buffer (buffer)
+  "Kill finished dedicated Eat BUFFER without querying."
+  (when (buffer-live-p buffer)
+    (let ((kill-buffer-query-functions nil))
+      (kill-buffer buffer))))
 
-Eat calls this from `eat-exec-hook' in the dedicated terminal buffer.
-When that buffer belongs to a managed P3 Eshell, allow Eat's visual-command
-sentinel to return to the parent Eshell and destroy the terminal buffer after a
-successful process exit.  Unrelated Eat sessions keep their normal policy."
-  (when (and (boundp 'eshell-parent-buffer)
-             (p3/project-shell-buffer-p eshell-parent-buffer))
-    (setq-local eshell-destroy-buffer-when-process-dies t)))
+(defun p3/project-shell-eat-visual-buffer-exit (process)
+  "Return a successful P3 Eat visual PROCESS to its parent project Eshell.
+
+Eat calls this from the public `eat-exit-hook'.  Only dedicated Eat buffers
+whose `eshell-parent-buffer' is a managed P3 project shell are affected.
+Failed terminal commands stay visible for inspection; unrelated Eat sessions
+keep their normal lifecycle."
+  (let ((child (process-buffer process)))
+    (when (and child
+               (buffer-live-p child)
+               (not (process-live-p process))
+               (zerop (process-exit-status process)))
+      (with-current-buffer child
+        (when (and (boundp 'eshell-parent-buffer)
+                   (p3/project-shell-buffer-p eshell-parent-buffer))
+          (let ((parent eshell-parent-buffer))
+            (dolist (window (get-buffer-window-list child nil t))
+              (set-window-buffer window parent))
+            ;; `eat-exit-hook' runs just before Eat deletes the process.  Defer
+            ;; buffer deletion one event turn so Eat can finish its sentinel
+            ;; cleanup without operating on a killed current buffer.
+            (run-at-time 0 nil
+                         #'p3/project-shell--kill-eat-visual-buffer child)))))))
 
 (defun p3/project-shell-buffer (&optional new-session)
   "Return the project shell, creating a NEW-SESSION when requested."
