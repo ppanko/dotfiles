@@ -47,7 +47,8 @@
     "app-server" "remote-control" "app" "completion" "update"
     "doctor" "sandbox" "debug" "execpolicy" "apply" "a" "queue"
     "archive" "delete" "migrate-rollouts" "unarchive" "cloud"
-    "cloud-tasks" "responses-api-proxy")
+    "cloud-tasks" "responses-api-proxy" "tcp-tunnel" "stdio-to-uds"
+    "exec-server" "features")
   "Codex subcommands whose useful output belongs in Eshell scrollback.")
 
 (defvar p3/project-shell-buffers (make-hash-table :test #'equal)
@@ -165,7 +166,8 @@
 
 (defun p3/project-shell--pacman-sync-query-p (arg)
   "Return non-nil when pacman short sync ARG is output-only."
-  (and (string-match-p "\\`-S[silgp]+\\'" arg)
+  (and (string-match-p "\\`-S[silgpq]+\\'" arg)
+       (string-match-p "[silgp]" arg)
        (not (string-match-p "[cyu]" arg))))
 
 (defun p3/project-shell--pacman-visual-p (args)
