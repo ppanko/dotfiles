@@ -18,21 +18,37 @@ static const char *prompt_from_args(int argc, char **argv) {
     return prompt;
 }
 
+static void write_prompt(const char *prompt, int split_prompt) {
+    size_t length = strlen(prompt);
+    if (split_prompt && length > 1) {
+        size_t midpoint = length / 2;
+        fwrite(prompt, 1, midpoint, stdout);
+        fflush(stdout);
+        usleep(100000);
+        fwrite(prompt + midpoint, 1, length - midpoint, stdout);
+    } else {
+        fputs(prompt, stdout);
+    }
+    fflush(stdout);
+}
+
 int main(int argc, char **argv) {
     const char *prompt = prompt_from_args(argc, argv);
     const char *expected = getenv("P3_TEST_SUDO_PASSWORD");
     const char *prompts_env = getenv("P3_TEST_SUDO_PROMPTS");
     const char *exit_env = getenv("P3_TEST_SUDO_EXIT");
+    int ignore_prompt = getenv("P3_TEST_SUDO_IGNORE_PROMPT") != NULL;
+    int split_prompt = getenv("P3_TEST_SUDO_SPLIT_PROMPT") != NULL;
     int prompts = prompts_env ? atoi(prompts_env) : 2;
     int exit_code = exit_env ? atoi(exit_env) : 7;
     char input[256];
 
     if (!expected) expected = "p3-secret";
+    if (ignore_prompt) prompt = "Password: ";
 
     for (int attempt = 0; attempt < prompts; ++attempt) {
         struct termios oldt, noecho;
-        fputs(prompt, stdout);
-        fflush(stdout);
+        write_prompt(prompt, split_prompt);
         if (tcgetattr(STDIN_FILENO, &oldt) != 0) return 97;
         noecho = oldt;
         noecho.c_lflag &= ~(ECHO);
