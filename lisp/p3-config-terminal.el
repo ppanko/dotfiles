@@ -7,6 +7,9 @@
 
 (declare-function p3/windows-configure-shell "p3-platform" ())
 (declare-function p3/project-shell "p3-terminal" (&optional new-session))
+(declare-function eshell-syntax-highlighting-global-mode
+                  "eshell-syntax-highlighting" (&optional arg))
+(declare-function eat-eshell-mode "eat" (&optional arg))
 
 (p3/config-load-module 'p3-terminal)
 
