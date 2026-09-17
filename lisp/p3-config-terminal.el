@@ -9,7 +9,7 @@
 (declare-function p3/project-shell "p3-terminal" (&optional new-session))
 (declare-function eshell-syntax-highlighting-global-mode
                   "eshell-syntax-highlighting" (&optional arg))
-(declare-function eat-eshell-mode "eat" (&optional arg))
+(declare-function eat-eshell-visual-command-mode "eat" (&optional arg))
 
 (p3/config-load-module 'p3-terminal)
 
@@ -24,10 +24,8 @@
 
 (use-package eat
   :after eshell
-  :custom
-  (eat-eshell-fallback-if-stty-not-available t)
   :config
-  (eat-eshell-mode 1))
+  (eat-eshell-visual-command-mode 1))
 
 (global-set-key (kbd "C-x C-u") #'p3/project-shell)
 (keymap-global-set "C-c T" p3/project-shell-command-map)
