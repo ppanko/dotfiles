@@ -11,7 +11,6 @@
                   "p3-terminal" (process))
 (declare-function eshell-syntax-highlighting-global-mode
                   "eshell-syntax-highlighting" (&optional arg))
-(declare-function eat-eshell-visual-command-mode "eat" (&optional arg))
 
 (p3/config-load-module 'p3-terminal)
 
@@ -25,10 +24,11 @@
   (eshell-syntax-highlighting-global-mode 1))
 
 (use-package eat
-  :after eshell
+  :commands (eat-mode eat-exec eat-semi-char-mode)
   :config
-  (add-hook 'eat-exit-hook #'p3/project-shell-eat-visual-buffer-exit)
-  (eat-eshell-visual-command-mode 1))
+  ;; P3 owns only the lifecycle of Eat processes whose `eshell-parent-buffer'
+  ;; is a managed project shell.  No global Eat Eshell integration is enabled.
+  (add-hook 'eat-exit-hook #'p3/project-shell-eat-visual-buffer-exit))
 
 (global-set-key (kbd "C-x C-u") #'p3/project-shell)
 (keymap-global-set "C-c T" p3/project-shell-command-map)
