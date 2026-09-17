@@ -16,13 +16,19 @@
         (progn
           (eat-eshell-mode 1)
           (let ((result (p3-terminal-test-support-run-fixture buffer 0)))
+            ;; Both supported platforms must execute through Eat, interpret
+            ;; terminal escape sequences, accept interactive input, and return
+            ;; cleanly to Eshell.  Native Windows does not need to provide a
+            ;; real PTY/TTY for external TUIs such as Codex; that is explicitly
+            ;; outside the project-shell acceptance contract.
             (should (plist-get result :terminal))
             (should-not (plist-get result :raw-escape))
             (should (plist-get result :input-sent))
-            (should (equal (plist-get result :tty) "1:1"))
             (should (equal (plist-get result :input) "78"))
-            (should (> (car (plist-get result :size)) 0))
-            (should (> (cdr (plist-get result :size)) 0))))
+            (unless (eq system-type 'windows-nt)
+              (should (equal (plist-get result :tty) "1:1"))
+              (should (> (car (plist-get result :size)) 0))
+              (should (> (cdr (plist-get result :size)) 0)))))
       (when (buffer-live-p buffer)
         (let ((kill-buffer-query-functions nil))
           (kill-buffer buffer))))))
