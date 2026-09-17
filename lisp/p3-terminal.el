@@ -3,11 +3,9 @@
 (require 'ring)
 (require 'seq)
 (require 'subr-x)
-(require 'p3-platform)
 (require 'p3-project)
 
 (defvar eshell-buffer-name)
-(defvar eshell-mode-hook)
 (defvar eshell-hist-ignoredups)
 (defvar eshell-history-append)
 (defvar eshell-history-file-name)
@@ -75,6 +73,7 @@
                                       (directory-file-name relative))))
                   (abbreviate-file-name directory)))
          (ok (or (not (boundp 'eshell-last-command-status))
+                 (null eshell-last-command-status)
                  (zerop eshell-last-command-status))))
     (concat (propertize label 'face 'eshell-prompt)
             " "
@@ -115,17 +114,19 @@
 (defun p3/project-shell--start (name root)
   "Start a managed Eshell named NAME at ROOT and return its buffer."
   (require 'eshell)
+  ;; Bind the prompt variables before `eshell-mode' initializes so the very
+  ;; first prompt is already the P3 prompt.  The buffer-local setup below then
+  ;; keeps those settings for subsequent prompts.
   (let ((default-directory root)
         (eshell-buffer-name name)
-        ;; Install P3 setup as a temporary mode hook so the first prompt is the
-        ;; P3 prompt; configuring after `eshell' returns would leave one default
-        ;; prompt at the top of every new project shell.
-        (eshell-mode-hook
-         (cons (lambda ()
-                 (setq-local p3/project-shell-root-value root)
-                 (p3/project-shell-mode-setup))
-               eshell-mode-hook)))
-    (save-window-excursion (eshell))))
+        (eshell-prompt-function #'p3/project-shell-prompt)
+        (eshell-prompt-regexp p3/project-shell-prompt-regexp)
+        (eshell-hist-ignoredups t))
+    (let ((buffer (save-window-excursion (eshell))))
+      (with-current-buffer buffer
+        (setq-local p3/project-shell-root-value root)
+        (p3/project-shell-mode-setup))
+      buffer)))
 
 (defun p3/project-shell-buffer-p (buffer)
   "Return non-nil when BUFFER is a managed P3 project Eshell."
