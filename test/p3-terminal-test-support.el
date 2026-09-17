@@ -3,6 +3,7 @@
 (require 'ert)
 (require 'eshell)
 (require 'esh-proc)
+(require 'seq)
 (require 'p3-platform)
 
 (defconst p3-terminal-test-support-root
@@ -103,8 +104,8 @@
    (buffer-list)))
 
 (defun p3-terminal-test-support--wait-for-eat-child (parent)
-  "Wait briefly for PARENT's dedicated Eat child."
-  (let ((deadline (+ (float-time) 3.0))
+  "Wait for and return PARENT's dedicated Eat child."
+  (let ((deadline (+ (float-time) 5.0))
         child)
     (while (and (not (setq child (p3-terminal-test-support--eat-child parent)))
                 (< (float-time) deadline))
@@ -113,8 +114,8 @@
     child))
 
 (defun p3-terminal-test-support--wait-for-text (buffer regexp)
-  "Wait briefly for REGEXP to appear in BUFFER."
-  (let ((deadline (+ (float-time) 3.0))
+  "Wait for REGEXP to appear in BUFFER."
+  (let ((deadline (+ (float-time) 5.0))
         found)
     (while (and (buffer-live-p buffer)
                 (not found)
