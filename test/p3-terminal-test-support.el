@@ -144,6 +144,9 @@
          (p3/project-shell-buffers (make-hash-table :test #'equal))
          (process-environment (copy-sequence process-environment))
          (exec-path (copy-sequence exec-path))
+         ;; Stock Eshell forces password-prompt matching to be case-insensitive.
+         ;; P3 must preserve that contract even when the caller disables it.
+         (case-fold-search nil)
          (password-reads 0)
          parent child)
     (make-directory bin-dir t)
