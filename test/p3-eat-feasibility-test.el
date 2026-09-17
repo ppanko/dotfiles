@@ -2,7 +2,6 @@
 
 (require 'cl-lib)
 (require 'ert)
-(require 'seq)
 (require 'eat)
 (require 'p3-terminal)
 (require 'p3-terminal-test-support)
@@ -16,41 +15,6 @@
                (delq nil
                      (list python fixture (number-to-string exit-code) mode))
                " ")))
-
-(defun p3-eat-feasibility-test--eat-child (parent)
-  "Return the dedicated Eat visual buffer whose Eshell parent is PARENT."
-  (seq-find
-   (lambda (buffer)
-     (and (buffer-live-p buffer)
-          (with-current-buffer buffer
-            (and (derived-mode-p 'eat-mode)
-                 (boundp 'eshell-parent-buffer)
-                 (eq eshell-parent-buffer parent)))))
-   (buffer-list)))
-
-(defun p3-eat-feasibility-test--wait-for-eat-child (parent)
-  "Wait for and return PARENT's dedicated Eat visual child."
-  (let ((deadline (+ (float-time) 5.0))
-        child)
-    (while (and (not (setq child (p3-eat-feasibility-test--eat-child parent)))
-                (< (float-time) deadline))
-      (accept-process-output nil 0.05))
-    (should (buffer-live-p child))
-    child))
-
-(defun p3-eat-feasibility-test--wait-for-text (buffer regexp)
-  "Wait for REGEXP to appear in BUFFER."
-  (let ((deadline (+ (float-time) 5.0))
-        found)
-    (while (and (buffer-live-p buffer)
-                (not found)
-                (< (float-time) deadline))
-      (accept-process-output (get-buffer-process buffer) 0.05)
-      (with-current-buffer buffer
-        (save-excursion
-          (goto-char (point-min))
-          (setq found (re-search-forward regexp nil t)))))
-    (should found)))
 
 (defun p3-eat-feasibility-test--wait-for-process-exit (buffer)
   "Wait for BUFFER's process to exit."
@@ -101,7 +65,7 @@
       (goto-char (point-max))
       (insert (p3-eat-feasibility-test--fixture-command exit-code mode))
       (eshell-send-input))
-    (p3-eat-feasibility-test--wait-for-eat-child parent)))
+    (p3-terminal-test-support--wait-for-eat-child parent)))
 
 (defun p3-eat-feasibility-test--assert-terminal-metadata (buffer)
   "Require BUFFER to show a real terminal with nonzero dimensions."
@@ -136,10 +100,10 @@
             (should (derived-mode-p 'eat-mode))
             (should (eq (key-binding (kbd "C-y")) #'eat-yank))
             (should (eq (key-binding [xterm-paste]) #'eat-xterm-paste)))
-          (p3-eat-feasibility-test--wait-for-text child "__P3_CURSOR__")
+          (p3-terminal-test-support--wait-for-text child "__P3_CURSOR__")
           (process-send-string (get-buffer-process child) "x")
           (p3-eat-feasibility-test--wait-for-process-exit child)
-          (p3-eat-feasibility-test--wait-for-text child "__P3_INPUT__78")
+          (p3-terminal-test-support--wait-for-text child "__P3_INPUT__78")
           (p3-eat-feasibility-test--assert-terminal-metadata child)
           ;; Cursor/alternate-screen output belongs only to the Eat child, not
           ;; to Eshell's normal scrollback buffer.
@@ -172,12 +136,12 @@
                  parent 7 "paste"))
           ;; Waiting for the cursor marker also ensures Eat has processed the
           ;; fixture's bracketed-paste enable sequence before the yank.
-          (p3-eat-feasibility-test--wait-for-text child "__P3_CURSOR__")
+          (p3-terminal-test-support--wait-for-text child "__P3_CURSOR__")
           (kill-new "alpha\nbeta")
           (with-current-buffer child
             (eat-yank))
           (p3-eat-feasibility-test--wait-for-process-exit child)
-          (p3-eat-feasibility-test--wait-for-text child "__P3_PASTE__")
+          (p3-terminal-test-support--wait-for-text child "__P3_PASTE__")
           (with-current-buffer child
             (goto-char (point-min))
             (should
@@ -210,7 +174,7 @@
           (switch-to-buffer parent)
           (setq child
                 (p3-eat-feasibility-test--start-visual-fixture parent 0))
-          (p3-eat-feasibility-test--wait-for-text child "__P3_CURSOR__")
+          (p3-terminal-test-support--wait-for-text child "__P3_CURSOR__")
           (process-send-string (get-buffer-process child) "x")
           (let ((deadline (+ (float-time) 5.0)))
             (while (and (buffer-live-p child) (< (float-time) deadline))
