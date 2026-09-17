@@ -65,8 +65,9 @@
          (p3-config-terminal-test--contents "lisp/p3-config-terminal.el")))
     (should (string-match-p "(use-package eat" contents))
     (should (string-match-p "eat-eshell-visual-command-mode" contents))
-    (should (string-match-p "p3/project-shell-eat-visual-buffer-setup"
+    (should (string-match-p "p3/project-shell-eat-visual-buffer-exit"
                             contents))
+    (should (string-match-p "eat-exit-hook" contents))
     (should-not (string-match-p "(eat-eshell-mode 1)" contents))
     (should-not (string-match-p
                  "eat-eshell-fallback-if-stty-not-available" contents))
