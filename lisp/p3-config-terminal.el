@@ -9,7 +9,7 @@
 (declare-function p3/project-shell "p3-terminal" (&optional new-session))
 (declare-function p3/project-shell-eat-visual-buffer-exit
                   "p3-terminal" (process))
-(declare-function eshell-syntax-highlighting-global-mode
+(declare-function eshell-syntax-highlighting-mode
                   "eshell-syntax-highlighting" (&optional arg))
 
 (p3/config-load-module 'p3-terminal)
@@ -19,9 +19,7 @@
 (p3/windows-configure-shell)
 
 (use-package eshell-syntax-highlighting
-  :after esh-mode
-  :config
-  (eshell-syntax-highlighting-global-mode 1))
+  :hook (eshell-mode . eshell-syntax-highlighting-mode))
 
 (use-package eat
   :commands (eat-mode eat-exec eat-semi-char-mode)
