@@ -152,6 +152,11 @@
     (setenv "P3_TEST_SUDO_PASSWORD" "p3-secret")
     (setenv "P3_TEST_SUDO_PROMPTS" "2")
     (setenv "P3_TEST_SUDO_EXIT" "7")
+    ;; Simulate PAM ignoring sudo's injected -p prompt and emit the normal
+    ;; password prompt in two writes so the process filter must handle both
+    ;; the fallback regexp and a prompt split across output chunks.
+    (setenv "P3_TEST_SUDO_IGNORE_PROMPT" "1")
+    (setenv "P3_TEST_SUDO_SPLIT_PROMPT" "1")
     (unwind-protect
         (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root))
                   ((symbol-function 'read-passwd)
