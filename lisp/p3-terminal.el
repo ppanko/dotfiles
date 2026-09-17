@@ -1,16 +1,33 @@
 ;;; p3-terminal.el --- Project-aware Eshell helpers -*- lexical-binding: t; -*-
 
+(require 'ring)
 (require 'seq)
 (require 'subr-x)
 (require 'p3-platform)
 (require 'p3-project)
 
 (defvar eshell-buffer-name)
+(defvar eshell-mode-hook)
+(defvar eshell-hist-ignoredups)
+(defvar eshell-history-append)
+(defvar eshell-history-file-name)
+(defvar eshell-history-ring)
+(defvar eshell-input-filter-functions)
+(defvar eshell-last-command-status)
+(defvar eshell-prompt-function)
+(defvar eshell-prompt-regexp)
+(defvar eshell-save-history-on-exit)
+
+(declare-function consult-history "consult" ())
 (declare-function eshell "eshell" (&optional arg))
+(declare-function eshell-write-history "em-hist" (&optional filename append))
 
 (defgroup p3/terminal nil
   "Project-aware Eshell sessions."
   :group 'applications)
+
+(defconst p3/project-shell-prompt-regexp "^[^❯\n]*❯ "
+  "Prompt regexp for P3 project Eshell buffers.")
 
 (defvar p3/project-shell-buffers (make-hash-table :test #'equal)
   "Map local project roots to their primary P3 shell buffers.")
@@ -40,6 +57,40 @@
     (generate-new-buffer-name
      (concat (substring primary-name 0 -1) ":extra*"))))
 
+(defun p3/project-shell-prompt ()
+  "Return the prompt for the current P3 project Eshell."
+  (let* ((root p3/project-shell-root-value)
+         (directory (file-name-as-directory
+                     (expand-file-name default-directory)))
+         (relative (and root
+                        (file-in-directory-p directory root)
+                        (file-relative-name directory root)))
+         (root-label (and root
+                          (file-name-nondirectory
+                           (directory-file-name root))))
+         (label (if relative
+                    (concat root-label
+                            (unless (equal relative "./")
+                              (concat "/"
+                                      (directory-file-name relative))))
+                  (abbreviate-file-name directory)))
+         (ok (or (not (boundp 'eshell-last-command-status))
+                 (zerop eshell-last-command-status))))
+    (concat (propertize label 'face 'eshell-prompt)
+            " "
+            (propertize "❯" 'face (if ok 'success 'error))
+            " ")))
+
+(defun p3/project-shell--append-history-compat ()
+  "Append only the newest Eshell command to the shared history file."
+  (when (and (boundp 'eshell-history-ring)
+             (ring-p eshell-history-ring)
+             (not (ring-empty-p eshell-history-ring)))
+    (let ((latest (make-ring 1)))
+      (ring-insert latest (ring-ref eshell-history-ring 0))
+      (let ((eshell-history-ring latest))
+        (eshell-write-history eshell-history-file-name t)))))
+
 (defun p3/project-shell--forget-primary ()
   "Forget the current buffer if it owns its project's primary mapping."
   (when-let ((root p3/project-shell-root-value))
@@ -47,19 +98,34 @@
       (remhash root p3/project-shell-buffers))))
 
 (defun p3/project-shell-mode-setup ()
-  "Apply P3 lifecycle behavior to the current project Eshell."
-  (add-hook 'kill-buffer-hook #'p3/project-shell--forget-primary nil t))
+  "Apply P3 interactive UX to the current project Eshell."
+  (setq-local eshell-prompt-function #'p3/project-shell-prompt
+              eshell-prompt-regexp p3/project-shell-prompt-regexp
+              eshell-hist-ignoredups t)
+  (local-set-key (kbd "C-r") #'consult-history)
+  (add-hook 'kill-buffer-hook #'p3/project-shell--forget-primary nil t)
+  (if (boundp 'eshell-history-append)
+      (setq-local eshell-history-append t)
+    (setq-local eshell-save-history-on-exit nil)
+    ;; `eshell-add-to-history' already runs from this hook.  Appending at the
+    ;; end makes the just-added command the newest ring entry on Emacs 29.
+    (add-hook 'eshell-input-filter-functions
+              #'p3/project-shell--append-history-compat t t)))
 
 (defun p3/project-shell--start (name root)
   "Start a managed Eshell named NAME at ROOT and return its buffer."
   (require 'eshell)
   (let ((default-directory root)
-        (eshell-buffer-name name))
-    (let ((buffer (save-window-excursion (eshell))))
-      (with-current-buffer buffer
-        (setq-local p3/project-shell-root-value root)
-        (p3/project-shell-mode-setup))
-      buffer)))
+        (eshell-buffer-name name)
+        ;; Install P3 setup as a temporary mode hook so the first prompt is the
+        ;; P3 prompt; configuring after `eshell' returns would leave one default
+        ;; prompt at the top of every new project shell.
+        (eshell-mode-hook
+         (cons (lambda ()
+                 (setq-local p3/project-shell-root-value root)
+                 (p3/project-shell-mode-setup))
+               eshell-mode-hook)))
+    (save-window-excursion (eshell))))
 
 (defun p3/project-shell-buffer-p (buffer)
   "Return non-nil when BUFFER is a managed P3 project Eshell."
