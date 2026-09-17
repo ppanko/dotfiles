@@ -163,6 +163,34 @@
     (should (eshell-visual-command-p "sudo" '("pacman" "-Syu")))
     (should-not (eshell-visual-command-p "git" '("status")))))
 
+(ert-deftest p3-terminal-eat-visual-buffer-auto-returns-only-for-managed-parent ()
+  (let ((managed (generate-new-buffer " *p3-managed-parent*"))
+        (ordinary (generate-new-buffer " *p3-ordinary-parent*"))
+        (managed-child (generate-new-buffer " *p3-managed-eat-child*"))
+        (ordinary-child (generate-new-buffer " *p3-ordinary-eat-child*")))
+    (unwind-protect
+        (progn
+          (with-current-buffer managed
+            (eshell-mode)
+            (setq-local p3/project-shell-root-value temporary-file-directory)
+            (p3/project-shell-mode-setup))
+          (with-current-buffer ordinary
+            (eshell-mode))
+          (with-current-buffer managed-child
+            (setq-local eshell-parent-buffer managed
+                        eshell-destroy-buffer-when-process-dies nil)
+            (p3/project-shell-eat-visual-buffer-setup nil)
+            (should (local-variable-p 'eshell-destroy-buffer-when-process-dies))
+            (should eshell-destroy-buffer-when-process-dies))
+          (with-current-buffer ordinary-child
+            (setq-local eshell-parent-buffer ordinary
+                        eshell-destroy-buffer-when-process-dies nil)
+            (p3/project-shell-eat-visual-buffer-setup nil)
+            (should-not eshell-destroy-buffer-when-process-dies)))
+      (dolist (buffer (list managed ordinary managed-child ordinary-child))
+        (when (buffer-live-p buffer)
+          (kill-buffer buffer))))))
+
 (provide 'p3-terminal-rich-ux-test)
 
 ;;; p3-terminal-rich-ux-test.el ends here
