@@ -1,5 +1,6 @@
 ;;; p3-eat-feasibility-test.el --- Eat/Eshell platform gate -*- lexical-binding: t; -*-
 
+(require 'cl-lib)
 (require 'ert)
 (require 'eat)
 (require 'p3-terminal)
