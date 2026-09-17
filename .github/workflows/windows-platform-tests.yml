@@ -124,12 +124,15 @@ jobs:
 
       - name: Install Eat feasibility dependency
         shell: powershell
-        run: >-
-          emacs -Q --batch
-          --eval '(require (quote package))'
-          --eval '(setq package-archives (quote (("gnu" . "https://elpa.gnu.org/packages/") ("nongnu" . "https://elpa.nongnu.org/nongnu/"))))'
-          --eval '(package-refresh-contents)'
-          --eval '(package-install (quote eat))'
+        run: |
+          $env:P3_COMPAT_TAR = Join-Path $env:RUNNER_TEMP "compat-31.1.0.0.tar"
+          $env:P3_EAT_TAR = Join-Path $env:RUNNER_TEMP "eat-0.9.4.tar"
+          Invoke-WebRequest -UseBasicParsing -Uri "https://elpa.gnu.org/packages/compat-31.1.0.0.tar" -OutFile $env:P3_COMPAT_TAR
+          Invoke-WebRequest -UseBasicParsing -Uri "https://elpa.nongnu.org/nongnu/eat-0.9.4.tar" -OutFile $env:P3_EAT_TAR
+          emacs -Q --batch `
+            --eval '(require (quote package))' `
+            --eval '(package-install-file (getenv "P3_COMPAT_TAR"))' `
+            --eval '(package-install-file (getenv "P3_EAT_TAR"))'
 
       - name: Run Eat Eshell feasibility gate
         shell: powershell
