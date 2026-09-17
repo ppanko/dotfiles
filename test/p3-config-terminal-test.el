@@ -43,7 +43,9 @@
     (should (< behavior shell))))
 
 (ert-deftest p3-config-terminal-uses-one-project-shell-surface ()
-  (let ((forms (p3-config-terminal-test--forms)))
+  (let ((forms (p3-config-terminal-test--forms))
+        (terminal (p3-config-terminal-test--contents "lisp/p3-terminal.el"))
+        (config (p3-config-terminal-test--contents "lisp/p3-config-terminal.el")))
     (should
      (member
       '(global-set-key (kbd "C-x C-u") #'p3/project-shell)
@@ -52,11 +54,20 @@
      (member
       '(keymap-global-set "C-c T" p3/project-shell-command-map)
       forms))
-    (should-not
-     (seq-some
-      (lambda (form)
-        (string-match-p "vterm" (prin1-to-string form)))
-      forms))))
+    (should-not (string-match-p "(require 'shell)" terminal))
+    (should-not (string-match-p "shell-eval-command" terminal))
+    (should (string-match-p "(use-package eat" config))
+    (should (string-match-p "(use-package eshell-syntax-highlighting" config))
+    (should-not (string-match-p "vterm" config))))
+
+(ert-deftest p3-config-terminal-uses-supported-eat-eshell-integration ()
+  (let ((contents
+         (p3-config-terminal-test--contents "lisp/p3-config-terminal.el")))
+    (should (string-match-p "(use-package eat" contents))
+    (should (string-match-p "eat-eshell-mode" contents))
+    (should (string-match-p
+             "eat-eshell-fallback-if-stty-not-available" contents))
+    (should-not (string-match-p "eat--eshell-local-mode" contents))))
 
 (ert-deftest p3-config-terminal-config-org-delegates-shell-boundary ()
   (let ((contents (p3-config-terminal-test--contents "config.org")))
