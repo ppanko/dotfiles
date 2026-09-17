@@ -117,7 +117,7 @@
     (unwind-protect
         (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root)))
           (eat-eshell-visual-command-mode 1)
-          (add-hook 'eat-exec-hook #'p3/project-shell-eat-visual-buffer-setup)
+          (add-hook 'eat-exit-hook #'p3/project-shell-eat-visual-buffer-exit)
           (setq parent (p3/project-shell-buffer))
           ;; Nonzero exit deliberately leaves the Eat child available for
           ;; inspection; successful-exit cleanup is tested separately.
@@ -141,7 +141,7 @@
             (goto-char (point-min))
             (should-not (search-forward "__P3_TTY__" nil t)))
           (should (p3/project-shell-live-p parent)))
-      (remove-hook 'eat-exec-hook #'p3/project-shell-eat-visual-buffer-setup)
+      (remove-hook 'eat-exit-hook #'p3/project-shell-eat-visual-buffer-exit)
       (eat-eshell-visual-command-mode -1)
       (dolist (buffer (list child parent))
         (when (buffer-live-p buffer)
@@ -158,7 +158,7 @@
     (unwind-protect
         (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root)))
           (eat-eshell-visual-command-mode 1)
-          (add-hook 'eat-exec-hook #'p3/project-shell-eat-visual-buffer-setup)
+          (add-hook 'eat-exit-hook #'p3/project-shell-eat-visual-buffer-exit)
           (setq parent (p3/project-shell-buffer))
           (setq child
                 (p3-eat-feasibility-test--start-visual-fixture
@@ -182,7 +182,7 @@
             (should-not (search-forward "alpha" nil t))
             (goto-char (point-min))
             (should-not (search-forward "__P3_PASTE__" nil t))))
-      (remove-hook 'eat-exec-hook #'p3/project-shell-eat-visual-buffer-setup)
+      (remove-hook 'eat-exit-hook #'p3/project-shell-eat-visual-buffer-exit)
       (eat-eshell-visual-command-mode -1)
       (dolist (buffer (list child parent))
         (when (buffer-live-p buffer)
@@ -199,7 +199,7 @@
     (unwind-protect
         (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root)))
           (eat-eshell-visual-command-mode 1)
-          (add-hook 'eat-exec-hook #'p3/project-shell-eat-visual-buffer-setup)
+          (add-hook 'eat-exit-hook #'p3/project-shell-eat-visual-buffer-exit)
           (setq parent (p3/project-shell-buffer))
           (switch-to-buffer parent)
           (setq child
@@ -213,7 +213,7 @@
           (should (p3/project-shell-live-p parent))
           (should (eq (window-buffer (selected-window)) parent))
           (should (eq parent (p3/project-shell-buffer))))
-      (remove-hook 'eat-exec-hook #'p3/project-shell-eat-visual-buffer-setup)
+      (remove-hook 'eat-exit-hook #'p3/project-shell-eat-visual-buffer-exit)
       (eat-eshell-visual-command-mode -1)
       (when (buffer-live-p child)
         (let ((kill-buffer-query-functions nil)) (kill-buffer child)))
