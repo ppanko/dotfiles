@@ -131,8 +131,8 @@ jobs:
           Invoke-WebRequest -UseBasicParsing -Uri "https://elpa.nongnu.org/nongnu/eat-0.9.4.tar" -OutFile $env:P3_EAT_TAR
           emacs -Q --batch `
             --eval '(require (quote package))' `
-            --eval '(package-install-file (getenv "P3_COMPAT_TAR"))' `
-            --eval '(package-install-file (getenv "P3_EAT_TAR"))'
+            --eval '(package-install-file (getenv (symbol-name (quote P3_COMPAT_TAR))))' `
+            --eval '(package-install-file (getenv (symbol-name (quote P3_EAT_TAR))))'
 
       - name: Run Eat Eshell feasibility gate
         shell: powershell
