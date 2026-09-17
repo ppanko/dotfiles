@@ -269,10 +269,11 @@
       (while (string-match exact-regexp scan)
         (setq count (1+ count)
               scan (substring scan (match-end 0))))
-      (when (and fallback-regexp
-                 (string-match fallback-regexp scan))
-        (setq count (1+ count)
-              scan (substring scan (match-end 0))))
+      (let ((case-fold-search t))
+        (when (and fallback-regexp
+                   (string-match fallback-regexp scan))
+          (setq count (1+ count)
+                scan (substring scan (match-end 0)))))
       ;; Retain a bounded suffix so either recognizer can span adjacent process
       ;; filter calls without allowing long-running command output to grow here.
       (let ((keep (min (length scan)
