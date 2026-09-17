@@ -103,8 +103,9 @@
          (exec-path
           (seq-remove
            (lambda (directory)
-             (equal (file-truename (file-name-as-directory directory))
-                    (file-truename usr-bin)))
+             (and directory
+                  (equal (file-truename (file-name-as-directory directory))
+                         (file-truename usr-bin))))
            exec-path))
          (root (file-name-as-directory temporary-file-directory))
          (p3/project-shell-buffers (make-hash-table :test #'equal))
