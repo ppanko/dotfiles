@@ -11,7 +11,7 @@ Codex and other terminal-native TUIs on native Windows are **not** a project-she
 The project shell still has one user-facing Eshell workflow on GNU/Linux and native Windows. The acceptance contract is now platform-specific only at the terminal-emulation boundary:
 
 - **GNU/Linux:** Eat must provide a real interactive terminal contract for terminal-native applications: TTY/PTY semantics, raw input, terminal dimensions, escape-sequence rendering, clean exit, and return to the same managed Eshell buffer. Codex remains the manual acceptance case.
-- **Native Windows:** the managed project Eshell must start at the correct semantic project root, preserve normal Emacs editing/history/completion behavior, reuse project sessions correctly, execute ordinary external CLI commands through the configured Windows tool environment, and return cleanly after child processes. A child reporting `isatty = 0:0` is acceptable. Codex/full-screen TUI behavior is outside scope.
+- **Native Windows:** the managed project Eshell must start at the correct semantic project root, preserve normal Emacs editing/history/completion behavior, reuse project sessions correctly, execute ordinary external CLI commands through the configured Windows tool environment, and return cleanly after child processes. A child reporting `isatty = 0:0` is acceptable. Codex/full-screen TUI behavior is outside scope. If Eat's terminal prerequisites such as `stty` are unavailable, its configured non-interactive fallback must leave ordinary Eshell/external CLI execution usable rather than prompting or failing startup.
 
 ## Consequences
 
@@ -19,4 +19,4 @@ The native-Windows feasibility result observed in CI—Eat executes and interpre
 
 No second Windows-specific shell surface, WSL requirement, or terminal backend is introduced to compensate for the missing PTY. The existing `p3/windows-configure-shell` behavior remains available for ordinary `M-x shell`; `p3/project-shell` itself remains Eshell-backed on both platforms.
 
-Final CI should therefore require the full terminal fixture contract on GNU/Linux and the non-PTY subset on native Windows.
+Final CI should therefore require the full terminal fixture contract on GNU/Linux and the ordinary non-PTY CLI contract on native Windows, including a deterministic test with `stty` hidden from Emacs so Eat's fallback path is exercised.
