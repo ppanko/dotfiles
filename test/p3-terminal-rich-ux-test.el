@@ -158,10 +158,15 @@
     (should (member "codex" eshell-visual-commands))
     (should (member "pacman" eshell-visual-commands))
     (should (member "pacman" (cdr (assoc "sudo" eshell-visual-subcommands))))
-    (should (eshell-visual-command-p "codex" nil))
-    (should (eshell-visual-command-p "pacman" '("-Syu")))
-    (should (eshell-visual-command-p "sudo" '("pacman" "-Syu")))
-    (should-not (eshell-visual-command-p "git" '("status")))))
+    ;; `eshell-visual-command-p' also consults whether output is currently
+    ;; interactive.  That is orthogonal to classification and is not valid in
+    ;; this temp-buffer unit test, so pin only that predicate to true.
+    (cl-letf (((symbol-function 'eshell-interactive-output-p)
+               (lambda (&rest _) t)))
+      (should (eshell-visual-command-p "codex" nil))
+      (should (eshell-visual-command-p "pacman" '("-Syu")))
+      (should (eshell-visual-command-p "sudo" '("pacman" "-Syu")))
+      (should-not (eshell-visual-command-p "git" '("status"))))))
 
 (ert-deftest p3-terminal-eat-visual-buffer-auto-returns-only-for-managed-parent ()
   (let ((managed (generate-new-buffer " *p3-managed-parent*"))
