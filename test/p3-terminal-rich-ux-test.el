@@ -168,11 +168,12 @@
       (should (eshell-visual-command-p "sudo" '("pacman" "-Syu")))
       (should-not (eshell-visual-command-p "git" '("status"))))))
 
-(ert-deftest p3-terminal-eat-visual-buffer-auto-returns-only-for-managed-parent ()
+(ert-deftest p3-terminal-eat-exit-cleanup-is-scoped-to-managed-parent ()
   (let ((managed (generate-new-buffer " *p3-managed-parent*"))
         (ordinary (generate-new-buffer " *p3-ordinary-parent*"))
         (managed-child (generate-new-buffer " *p3-managed-eat-child*"))
-        (ordinary-child (generate-new-buffer " *p3-ordinary-eat-child*")))
+        (ordinary-child (generate-new-buffer " *p3-ordinary-eat-child*"))
+        scheduled)
     (unwind-protect
         (progn
           (with-current-buffer managed
@@ -182,16 +183,27 @@
           (with-current-buffer ordinary
             (eshell-mode))
           (with-current-buffer managed-child
-            (setq-local eshell-parent-buffer managed
-                        eshell-destroy-buffer-when-process-dies nil)
-            (p3/project-shell-eat-visual-buffer-setup nil)
-            (should (local-variable-p 'eshell-destroy-buffer-when-process-dies))
-            (should eshell-destroy-buffer-when-process-dies))
+            (setq-local eshell-parent-buffer managed))
           (with-current-buffer ordinary-child
-            (setq-local eshell-parent-buffer ordinary
-                        eshell-destroy-buffer-when-process-dies nil)
-            (p3/project-shell-eat-visual-buffer-setup nil)
-            (should-not eshell-destroy-buffer-when-process-dies)))
+            (setq-local eshell-parent-buffer ordinary))
+          (cl-letf (((symbol-function 'process-live-p) (lambda (_process) nil))
+                    ((symbol-function 'process-exit-status) (lambda (_process) 0))
+                    ((symbol-function 'get-buffer-window-list)
+                     (lambda (&rest _args) nil))
+                    ((symbol-function 'run-at-time)
+                     (lambda (_time _repeat function argument)
+                       (setq scheduled (list function argument)))))
+            (cl-letf (((symbol-function 'process-buffer)
+                       (lambda (_process) managed-child)))
+              (p3/project-shell-eat-visual-buffer-exit 'fake-process)
+              (should (equal scheduled
+                             (list #'p3/project-shell--kill-eat-visual-buffer
+                                   managed-child))))
+            (setq scheduled nil)
+            (cl-letf (((symbol-function 'process-buffer)
+                       (lambda (_process) ordinary-child)))
+              (p3/project-shell-eat-visual-buffer-exit 'fake-process)
+              (should-not scheduled))))
       (dolist (buffer (list managed ordinary managed-child ordinary-child))
         (when (buffer-live-p buffer)
           (kill-buffer buffer))))))
