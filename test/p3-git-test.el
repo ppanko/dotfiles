@@ -93,12 +93,26 @@
       (when (buffer-live-p other)
         (kill-buffer other)))))
 
+(ert-deftest p3-git-config-uses-supported-git-gutter-package ()
+  (let ((path (expand-file-name "lisp/p3-config-git.el" p3-git-test--root)))
+    (with-temp-buffer
+      (insert-file-contents path)
+      (let ((contents (buffer-string)))
+        (should (string-match-p
+                 (regexp-quote "(use-package git-gutter-fringe")
+                 contents))
+        (should (string-match-p
+                 (regexp-quote "(global-git-gutter-mode 1)")
+                 contents))
+        (should-not (string-match-p "git-gutter-fringe+" contents))
+        (should-not (string-match-p "global-git-gutter+-mode" contents))))))
+
 (ert-deftest p3-git-config-keeps-magit-usable-without-forge ()
   (let* ((path (expand-file-name "lisp/p3-config-git.el" p3-git-test--root))
          (p3/config-lisp-directory
           (expand-file-name "lisp" p3-git-test--root))
          (global-map (copy-keymap global-map))
-         (features (cons 'git-gutter-fringe+
+         (features (cons 'git-gutter-fringe
                          (cons 'magit
                                (delq 'forge
                                      (delq 'p3-config-git
@@ -112,7 +126,7 @@
                      (signal 'file-missing
                              '("Cannot open load file" "forge"))
                    (apply original-require feature arguments))))
-              ((symbol-function 'global-git-gutter+-mode)
+              ((symbol-function 'global-git-gutter-mode)
                (lambda (&optional _arg) t)))
       (load path nil t))
     (should (featurep 'p3-config-git))
