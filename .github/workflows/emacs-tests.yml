@@ -217,6 +217,8 @@ jobs:
       - name: Run ERT test suite
         run: |
           emacs -Q --batch \
+            --eval '(require (quote package))' \
+            --eval '(package-initialize)' \
             -L lisp \
             -l test/p3-config-loader-test.el \
             -l test/p3-config-test.el \
