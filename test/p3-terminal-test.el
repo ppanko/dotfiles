@@ -15,15 +15,19 @@
 (require 'p3-core)
 (require 'p3-terminal)
 
-(ert-deftest p3-terminal-buffer-name-is-stable-and-root-specific ()
+(ert-deftest p3-terminal-buffer-name-is-project-readable-and-root-specific ()
   (let ((first (p3/project-shell-buffer-name "/tmp/project-a/"))
         (again (p3/project-shell-buffer-name "/tmp/project-a/"))
         (second (p3/project-shell-buffer-name "/tmp/project-b/")))
     (should (equal first again))
-    (should-not (equal first second))
-    (should
-     (string-match-p
-      "\\`\\*shell:project-a:[[:xdigit:]]\\{6\\}\\*\\'" first))))
+    (should (equal first "*shell:project-a*"))
+    (should (equal second "*shell:project-b*"))))
+
+(ert-deftest p3-terminal-eat-buffer-name-is-project-readable ()
+  (should (fboundp 'p3/project-shell-eat-buffer-name))
+  (should
+   (equal (p3/project-shell-eat-buffer-name "/tmp/project-a/")
+          "*eat:project-a*")))
 
 (ert-deftest p3-terminal-root-prefers-project-root ()
   (let* ((project (file-name-as-directory
@@ -130,6 +134,35 @@
             (let ((second (p3/project-shell-buffer)))
               (should-not (eq first second))
               (should (= (length created) 2)))))
+      (mapc (lambda (buffer)
+              (when (buffer-live-p buffer)
+                (kill-buffer buffer)))
+            created))))
+
+(ert-deftest p3-terminal-same-label-roots-get-distinct-readable-primary-names ()
+  (let ((p3/project-shell-buffers (make-hash-table :test #'equal))
+        (root "/tmp/one/shared/")
+        created)
+    (unwind-protect
+        (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root))
+                  ((symbol-function 'p3/project-shell--start)
+                   (lambda (name _root)
+                     (let ((buffer (p3-terminal-test--fake-shell name)))
+                       (push buffer created)
+                       buffer))))
+          (let ((first (p3/project-shell-buffer)))
+            (setq root "/tmp/two/shared/")
+            (let ((second (p3/project-shell-buffer)))
+              (should-not (eq first second))
+              (should (equal (buffer-name first) "*shell:shared*"))
+              (should (string-prefix-p "*shell:shared*" (buffer-name second)))
+              (should-not (equal (buffer-name first) (buffer-name second)))
+              (should (eq first
+                          (gethash "/tmp/one/shared/"
+                                   p3/project-shell-buffers)))
+              (should (eq second
+                          (gethash "/tmp/two/shared/"
+                                   p3/project-shell-buffers))))))
       (mapc (lambda (buffer)
               (when (buffer-live-p buffer)
                 (kill-buffer buffer)))

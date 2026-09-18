@@ -78,11 +78,17 @@
     (or (p3/project-normalize-root root)
         (user-error "Project shell root does not exist: %s" root))))
 
+(defun p3/project-shell-project-label (root)
+  "Return the readable project label for ROOT."
+  (file-name-nondirectory (directory-file-name root)))
+
 (defun p3/project-shell-buffer-name (root)
-  "Return a stable primary shell buffer name for ROOT."
-  (format "*shell:%s:%s*"
-          (file-name-nondirectory (directory-file-name root))
-          (substring (secure-hash 'sha1 root) 0 6)))
+  "Return the readable primary shell buffer name for ROOT."
+  (format "*shell:%s*" (p3/project-shell-project-label root)))
+
+(defun p3/project-shell-eat-buffer-name (root)
+  "Return the readable dedicated Eat buffer name for ROOT."
+  (format "*eat:%s*" (p3/project-shell-project-label root)))
 
 (defun p3/project-shell-extra-buffer-name (root)
   "Return an unused buffer name for an explicit extra shell at ROOT."
@@ -350,9 +356,9 @@ synchronization; window objects request window-point synchronization."
          (program-args (if sudo-p
                            (p3/project-shell--sudo-password-args raw-program-args)
                          raw-program-args))
+         (root (p3/project-shell-root))
          (eat-buffer
-          (generate-new-buffer
-           (concat "*eat:" (file-name-nondirectory program) "*")))
+          (generate-new-buffer (p3/project-shell-eat-buffer-name root)))
          (eshell-buffer (current-buffer))
          (directory default-directory))
     (condition-case err
@@ -486,7 +492,9 @@ keep their normal lifecycle."
         primary
       (let* ((name (if new-session
                        (p3/project-shell-extra-buffer-name root)
-                     base-name))
+                     (if (get-buffer base-name)
+                         (generate-new-buffer-name base-name)
+                       base-name)))
              (buffer
               (let ((default-directory root))
                 (p3/project-shell--start name root))))
