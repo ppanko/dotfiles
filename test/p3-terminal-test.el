@@ -15,15 +15,19 @@
 (require 'p3-core)
 (require 'p3-terminal)
 
-(ert-deftest p3-terminal-buffer-name-is-stable-and-root-specific ()
+(ert-deftest p3-terminal-buffer-name-is-project-readable-and-root-specific ()
   (let ((first (p3/project-shell-buffer-name "/tmp/project-a/"))
         (again (p3/project-shell-buffer-name "/tmp/project-a/"))
         (second (p3/project-shell-buffer-name "/tmp/project-b/")))
     (should (equal first again))
-    (should-not (equal first second))
-    (should
-     (string-match-p
-      "\\`\\*shell:project-a:[[:xdigit:]]\\{6\\}\\*\\'" first))))
+    (should (equal first "*shell:project-a*"))
+    (should (equal second "*shell:project-b*"))))
+
+(ert-deftest p3-terminal-eat-buffer-name-is-project-readable ()
+  (should (fboundp 'p3/project-shell-eat-buffer-name))
+  (should
+   (equal (p3/project-shell-eat-buffer-name "/tmp/project-a/")
+          "*eat:project-a*")))
 
 (ert-deftest p3-terminal-root-prefers-project-root ()
   (let* ((project (file-name-as-directory
