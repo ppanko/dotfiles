@@ -19,7 +19,6 @@
   "Hub ID represented by the current project Agenda buffer.")
 
 (declare-function consult-ripgrep "consult" (dir &optional initial))
-(declare-function dired "dired" (dirname &optional switches))
 (declare-function org-agenda "org-agenda" (&optional arg keys restriction))
 (declare-function org-tags-view "org-agenda" (&optional todo-only match))
 (declare-function org-roam-capture- "org-roam-capture" (&rest args))
@@ -453,8 +452,7 @@ When REPLACE-ROOT is non-nil, explicitly replace an existing root mapping."
     (let ((root (p3/org-roam-project-root-for-hub-id hub-id)))
       (unless root
         (user-error "Associated project has no available local root"))
-      (p3/project-switch-to-tab root)
-      (dired root))))
+      (p3/project-resume-root root))))
 
 (defun p3/org-roam-project-todos ()
   "Show unfinished TODOs for the current literate project."

@@ -240,11 +240,16 @@
                    "pacman" '("-Syu"))))))
 
 (ert-deftest p3-terminal-visual-eat-buffer-name-comes-from-project-root ()
-  (require 'eat)
   (let ((parent (generate-new-buffer " *p3-eat-name-parent*"))
+        (real-require (symbol-function 'require))
         eat-buffer)
     (unwind-protect
-        (cl-letf (((symbol-function 'p3/project-shell-root)
+        (cl-letf (((symbol-function 'require)
+                   (lambda (feature &optional filename noerror)
+                     (if (eq feature 'eat)
+                         feature
+                       (funcall real-require feature filename noerror))))
+                  ((symbol-function 'p3/project-shell-root)
                    (lambda () "/tmp/project-a/"))
                   ((symbol-function 'eshell-find-interpreter)
                    (lambda (_command _args) '("/usr/bin/codex")))

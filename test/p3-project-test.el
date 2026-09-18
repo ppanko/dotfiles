@@ -291,6 +291,25 @@
                       normalized)))))
       (delete-directory root t))))
 
+(ert-deftest p3-project-continuity-resume-root-hands-explicit-root-to-project-consult ()
+  (let ((root (make-temp-file "p3-project-continuity-explicit-resume-" t))
+        switched-root
+        consulted-root)
+    (unwind-protect
+        (let ((normalized (p3-project-test--canonical-directory root)))
+          (cl-letf (((symbol-function 'p3/project-switch-to-tab)
+                     (lambda (selected-root)
+                       (setq switched-root selected-root)
+                       normalized))
+                    ((symbol-function 'consult-project-buffer)
+                     (lambda ()
+                       (interactive)
+                       (setq consulted-root project-current-directory-override))))
+            (p3/project-resume-root root)
+            (should (equal switched-root normalized))
+            (should (equal consulted-root normalized))))
+      (delete-directory root t))))
+
 (ert-deftest p3-project-continuity-resume-hands-root-to-project-consult ()
   (let ((root (make-temp-file "p3-project-continuity-resume-" t))
         switched-root

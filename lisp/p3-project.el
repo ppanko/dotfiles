@@ -281,17 +281,22 @@ Non-file buffers stay in the current workspace."
                 (file (buffer-local-value 'buffer-file-name buffer)))
       (p3/project-route-file file))))
 
+(defun p3/project-resume-root (root)
+  "Resume the project workspace at ROOT and choose one of its buffers."
+  (let ((normalized (p3/project-normalize-root root)))
+    (unless normalized
+      (user-error "Selected project root is unavailable"))
+    (p3/project-switch-to-tab normalized)
+    (let ((project-current-directory-override normalized))
+      (call-interactively #'consult-project-buffer))))
+
 (defun p3/project-resume ()
   "Resume the selected native project workspace and choose a project buffer."
   (interactive)
-  (let* ((project (project-current t))
-         (root (and project
-                    (p3/project-normalize-root (project-root project)))))
-    (unless root
+  (let ((project (project-current t)))
+    (unless project
       (user-error "Selected project root is unavailable"))
-    (p3/project-switch-to-tab root)
-    (let ((project-current-directory-override root))
-      (call-interactively #'consult-project-buffer))))
+    (p3/project-resume-root (project-root project))))
 
 (defun p3/use-project-root-as-default-dir ()
   "Use the current project root as the buffer's default directory."
