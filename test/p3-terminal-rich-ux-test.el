@@ -280,9 +280,10 @@
           (kill-buffer buffer))))))
 
 
-(ert-deftest p3-terminal-managed-eshell-follows-running-output ()
-  "Managed project Eshells keep visible windows pinned to incremental output."
-  (let ((buffer (generate-new-buffer " *p3-follow-output*"))
+(ert-deftest p3-terminal-codex-eat-follow-output-rescues-live-window ()
+  "Codex redraws must not strand a live Eat window away from its cursor."
+  (should (fboundp 'p3/project-shell--codex-follow-output))
+  (let ((buffer (generate-new-buffer " *p3-codex-follow-output*"))
         (window (selected-window))
         old-window-buffer)
     (unwind-protect
@@ -290,27 +291,41 @@
           (setq old-window-buffer (window-buffer window))
           (set-window-buffer window buffer)
           (with-current-buffer buffer
-            (eshell-mode)
-            (setq-local p3/project-shell-root-value temporary-file-directory)
-            (p3/project-shell-mode-setup)
-            ;; Reproduce a user who is not already at the output marker: the
-            ;; project shell should still follow progress as new output lands.
             (let ((inhibit-read-only t))
-              (goto-char (point-max))
-              (insert "old output\n")
-              (setq eshell-last-output-start (copy-marker (point)))
-              (insert "progress update\n")
-              (setq eshell-last-output-end (copy-marker (point)))
-              (goto-char (point-min))
-              (set-window-point window (point-min))
-              (eshell-postoutput-scroll-to-bottom)
-              (should
-               (= (window-point window)
-                  (marker-position eshell-last-output-end))))))
+              (insert "0123456789abcdef"))
+            (setq-local eat-terminal 'dummy
+                        buffer-read-only nil)
+            (cl-letf (((symbol-function 'eat-term-display-beginning)
+                       (lambda (_terminal) 5))
+                      ((symbol-function 'eat-term-display-cursor)
+                       (lambda (_terminal) 15)))
+              ;; A point in Codex's active terminal display is not intentional
+              ;; scrollback browsing.  TUI redraws may strand it there.
+              (set-window-point window 7)
+              (p3/project-shell--codex-follow-output)
+              (should (= (window-point window) 15))
+              ;; Deliberate scrollback browsing stays where the user put it.
+              (set-window-point window 3)
+              (p3/project-shell--codex-follow-output)
+              (should (= (window-point window) 3))
+              ;; Eat Emacs/read-only mode is explicitly for free navigation.
+              (setq buffer-read-only t)
+              (set-window-point window 7)
+              (p3/project-shell--codex-follow-output)
+              (should (= (window-point window) 7)))))
       (when (window-live-p window)
         (set-window-buffer window old-window-buffer))
       (when (buffer-live-p buffer)
         (kill-buffer buffer)))))
+
+(ert-deftest p3-terminal-codex-eat-follow-output-installs-local-update-hook ()
+  "Only a Codex Eat child opts into P3's redraw-following repair."
+  (should (fboundp 'p3/project-shell--setup-codex-follow-output))
+  (with-temp-buffer
+    (setq-local eat-update-hook nil)
+    (p3/project-shell--setup-codex-follow-output)
+    (should (local-variable-p 'eat-update-hook))
+    (should (memq #'p3/project-shell--codex-follow-output eat-update-hook))))
 
 
 (provide 'p3-terminal-rich-ux-test)
