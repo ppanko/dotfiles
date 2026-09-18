@@ -78,7 +78,7 @@
     (should-error (p3/gptel-chatgpt-login) :type 'user-error)))
 
 (ert-deftest p3-gptel-chatgpt-token-write-is-owner-only-on-unix ()
-  (skip-when (eq system-type 'windows-nt))
+  (skip-unless (not (eq system-type 'windows-nt)))
   (let* ((directory (make-temp-file "p3-gptel-oauth-" t))
          (file (expand-file-name "token" directory))
          (gptel--openai-oauth-token-file file)
