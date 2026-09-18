@@ -8,6 +8,10 @@
   (expand-file-name "lisp" user-emacs-directory))
 (add-to-list 'load-path p3/lisp-directory)
 
+;; Local .elc files are machine-local and may lag tracked source after an update.
+;; Prefer newer source before requiring any local startup library.
+(setq load-prefer-newer t)
+
 (require 'p3-package)
 (p3/package-setup)
 
@@ -19,9 +23,6 @@
 (setq use-package-ensure-function #'p3/use-package-ensure
       use-package-always-ensure t)
 
-;; Local .elc files are machine-local and may lag tracked source after an update.
-;; Prefer newer source before requiring any local startup library.
-(setq load-prefer-newer t)
 
 ;; Establish native project semantics before the literate config or any
 ;; project-aware package has a chance to populate `project.el' caches.
