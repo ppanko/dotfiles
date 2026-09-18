@@ -239,6 +239,42 @@
       (should-not (p3/project-shell-eat-visual-command-p
                    "pacman" '("-Syu"))))))
 
+(ert-deftest p3-terminal-visual-eat-buffer-name-comes-from-project-root ()
+  (require 'eat)
+  (let ((generated-name nil)
+        (eat-buffer nil)
+        (original-generate-new-buffer (symbol-function 'generate-new-buffer)))
+    (unwind-protect
+        (cl-letf (((symbol-function 'p3/project-shell-root)
+                   (lambda () "/tmp/project-a/"))
+                  ((symbol-function 'eshell-find-interpreter)
+                   (lambda (_command _args) '("/usr/bin/codex")))
+                  ((symbol-function 'generate-new-buffer)
+                   (lambda (name)
+                     (setq generated-name name
+                           eat-buffer
+                           (funcall original-generate-new-buffer name))
+                     eat-buffer))
+                  ((symbol-function 'switch-to-buffer)
+                   (lambda (buffer &rest _args)
+                     (set-buffer buffer)
+                     buffer))
+                  ((symbol-function 'eat-mode) #'ignore)
+                  ((symbol-function 'p3/project-shell--setup-codex-scroll-sync)
+                   #'ignore)
+                  ((symbol-function 'eat-exec) #'ignore)
+                  ((symbol-function 'get-buffer-process)
+                   (lambda (_buffer) 'fake-process))
+                  ((symbol-function 'process-live-p) (lambda (_process) t))
+                  ((symbol-function 'eat-semi-char-mode) #'ignore))
+          (with-temp-buffer
+            (eshell-mode)
+            (p3/project-shell-exec-visual "codex"))
+          (should (equal generated-name "*eat:project-a*"))
+          (should-not (equal generated-name "*eat:codex*")))
+      (when (buffer-live-p eat-buffer)
+        (kill-buffer eat-buffer)))))
+
 (ert-deftest p3-terminal-eat-exit-cleanup-is-scoped-to-managed-parent ()
   (let ((managed (generate-new-buffer " *p3-managed-parent*"))
         (ordinary (generate-new-buffer " *p3-ordinary-parent*"))
