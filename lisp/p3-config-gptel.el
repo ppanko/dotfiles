@@ -5,6 +5,9 @@
 
 (defvar gptel-api-key)
 
+(defconst p3/gptel-chatgpt-backend-name "ChatGPT"
+  "GPTel backend name for ChatGPT subscription OAuth.")
+
 (defvar p3/gptel-ollama-host
   (or (getenv "GPTEL_OLLAMA_HOST") "localhost:11434")
   "Ollama host registered with GPTel.
@@ -20,6 +23,7 @@ machine-local configuration or GPTEL_OLLAMA_MODELS rather than pinning a
 machine-specific model in the repository.")
 
 (declare-function gptel-api-key-from-auth-source "gptel" ())
+(declare-function gptel-make-openai-oauth "gptel-openai-oauth" (name &rest args))
 (declare-function p3/gptel-register-ollama "p3-gptel" (models &optional host))
 (declare-function p3/gptel-setup "p3-gptel" ())
 (declare-function which-key-add-key-based-replacements "which-key" (&rest replacements))
@@ -33,11 +37,17 @@ machine-specific model in the repository.")
 ;; P3 behavior from source so reloads update the command surface immediately.
 (with-eval-after-load 'gptel
   (p3/config-load-module 'p3-gptel)
+  ;; Newer GPTel releases can authenticate directly against a ChatGPT
+  ;; Plus/Pro subscription.  Keep this optional so an older installed GPTel
+  ;; still starts cleanly and can be upgraded through package.el.
+  (when (require 'gptel-openai-oauth nil t)
+    (gptel-make-openai-oauth p3/gptel-chatgpt-backend-name))
   (p3/gptel-register-ollama p3/gptel-ollama-models p3/gptel-ollama-host)
   (p3/gptel-setup)
   (when (fboundp 'which-key-add-key-based-replacements)
     (which-key-add-key-based-replacements
      "C-c g g" "project chat"
+     "C-c g l" "ChatGPT login"
      "C-c g m" "GPTel menu"
      "C-c g a" "add/remove context"
      "C-c g f" "add file context"
