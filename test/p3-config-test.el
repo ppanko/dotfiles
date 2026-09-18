@@ -274,7 +274,7 @@
                "(projectile-mode +1)"))
       (should-not (string-match-p (regexp-quote implementation) contents)))
     (dolist (package '(dashboard which-key vertico company undo-tree super-save
-                       multiple-cursors magit git-gutter-fringe+ transpose-frame
+                       multiple-cursors magit git-gutter-fringe transpose-frame
                        ace-window restart-emacs avy))
       (should-not
        (string-match-p (regexp-quote (format "(use-package %s" package))
