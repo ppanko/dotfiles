@@ -279,6 +279,40 @@
         (when (buffer-live-p buffer)
           (kill-buffer buffer))))))
 
+
+(ert-deftest p3-terminal-managed-eshell-follows-running-output ()
+  "Managed project Eshells keep visible windows pinned to incremental output."
+  (let ((buffer (generate-new-buffer " *p3-follow-output*"))
+        (window (selected-window))
+        old-window-buffer)
+    (unwind-protect
+        (progn
+          (setq old-window-buffer (window-buffer window))
+          (set-window-buffer window buffer)
+          (with-current-buffer buffer
+            (eshell-mode)
+            (setq-local p3/project-shell-root-value temporary-file-directory)
+            (p3/project-shell-mode-setup)
+            ;; Reproduce a user who is not already at the output marker: the
+            ;; project shell should still follow progress as new output lands.
+            (let ((inhibit-read-only t))
+              (goto-char (point-max))
+              (insert "old output\n")
+              (setq eshell-last-output-start (copy-marker (point)))
+              (insert "progress update\n")
+              (setq eshell-last-output-end (copy-marker (point)))
+              (goto-char (point-min))
+              (set-window-point window (point-min))
+              (eshell-postoutput-scroll-to-bottom)
+              (should
+               (= (window-point window)
+                  (marker-position eshell-last-output-end))))))
+      (when (window-live-p window)
+        (set-window-buffer window old-window-buffer))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+
 (provide 'p3-terminal-rich-ux-test)
 
 ;;; p3-terminal-rich-ux-test.el ends here
