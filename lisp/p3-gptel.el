@@ -9,6 +9,7 @@
 (defvar gptel-context nil)
 (defvar gptel-mode nil)
 (defvar gptel-use-context nil)
+(defvar gptel--openai-oauth-token-file)
 
 (declare-function gptel "gptel" (name &optional key initial interactivep))
 (declare-function gptel-menu "gptel-transient" ())
@@ -75,12 +76,57 @@ optional backend rather than guessing which local models are installed."
       :models models
       :stream t)))
 
+(defun p3/gptel-chatgpt-oauth-available-p ()
+  "Return non-nil when the installed GPTel provides ChatGPT OAuth support."
+  (require 'gptel-openai-oauth nil t))
+
+(defun p3/gptel--chatgpt-token-file-p (file)
+  "Return non-nil when FILE is GPTel's ChatGPT OAuth token file."
+  (and (stringp file)
+       (boundp 'gptel--openai-oauth-token-file)
+       (stringp gptel--openai-oauth-token-file)
+       (equal (expand-file-name file)
+              (expand-file-name gptel--openai-oauth-token-file))))
+
+(defun p3/gptel-secure-openai-oauth-token-write (write-token file token)
+  "Call WRITE-TOKEN for FILE and TOKEN with owner-only Unix permissions.
+
+Only GPTel's ChatGPT OAuth token file is affected.  Windows keeps GPTel's
+native file handling because POSIX mode bits are not an access-control
+boundary there."
+  (if (and (not (eq system-type 'windows-nt))
+           (p3/gptel--chatgpt-token-file-p file))
+      (let ((old-modes (default-file-modes)))
+        (unwind-protect
+            (progn
+              (set-default-file-modes #o600)
+              (prog1 (funcall write-token file token)
+                (when (file-exists-p file)
+                  (set-file-modes file #o600))))
+          (set-default-file-modes old-modes)))
+    (funcall write-token file token)))
+
+(defun p3/gptel-secure-openai-oauth-token-storage ()
+  "Harden GPTel's persisted ChatGPT OAuth token on Unix-like systems."
+  (when (and (not (eq system-type 'windows-nt))
+             (boundp 'gptel--openai-oauth-token-file)
+             (stringp gptel--openai-oauth-token-file)
+             (file-exists-p gptel--openai-oauth-token-file))
+    (set-file-modes gptel--openai-oauth-token-file #o600))
+  (when (and (fboundp 'gptel-oauth--write-token)
+             (not (advice-member-p
+                   #'p3/gptel-secure-openai-oauth-token-write
+                   #'gptel-oauth--write-token)))
+    (advice-add #'gptel-oauth--write-token :around
+                #'p3/gptel-secure-openai-oauth-token-write)))
+
 (defun p3/gptel-chatgpt-login ()
   "Authenticate GPTel with the registered ChatGPT Plus/Pro backend."
   (interactive)
-  (unless (require 'gptel-openai-oauth nil t)
+  (unless (p3/gptel-chatgpt-oauth-available-p)
     (user-error
      "Installed GPTel lacks ChatGPT OAuth support; upgrade GPTel and reload the config"))
+  (p3/gptel-secure-openai-oauth-token-storage)
   (call-interactively #'gptel-openai-oauth-login))
 
 (defun p3/gptel--rewrite-task (task)
