@@ -139,6 +139,35 @@
                 (kill-buffer buffer)))
             created))))
 
+(ert-deftest p3-terminal-same-label-roots-get-distinct-readable-primary-names ()
+  (let ((p3/project-shell-buffers (make-hash-table :test #'equal))
+        (root "/tmp/one/shared/")
+        created)
+    (unwind-protect
+        (cl-letf (((symbol-function 'p3/project-shell-root) (lambda () root))
+                  ((symbol-function 'p3/project-shell--start)
+                   (lambda (name _root)
+                     (let ((buffer (p3-terminal-test--fake-shell name)))
+                       (push buffer created)
+                       buffer))))
+          (let ((first (p3/project-shell-buffer)))
+            (setq root "/tmp/two/shared/")
+            (let ((second (p3/project-shell-buffer)))
+              (should-not (eq first second))
+              (should (equal (buffer-name first) "*shell:shared*"))
+              (should (string-prefix-p "*shell:shared*" (buffer-name second)))
+              (should-not (equal (buffer-name first) (buffer-name second)))
+              (should (eq first
+                          (gethash "/tmp/one/shared/"
+                                   p3/project-shell-buffers)))
+              (should (eq second
+                          (gethash "/tmp/two/shared/"
+                                   p3/project-shell-buffers))))))
+      (mapc (lambda (buffer)
+              (when (buffer-live-p buffer)
+                (kill-buffer buffer)))
+            created))))
+
 (ert-deftest p3-terminal-equivalent-roots-reuse-one-primary-shell ()
   (let ((p3/project-shell-buffers (make-hash-table :test #'equal))
         (raw-root "first-spelling")
