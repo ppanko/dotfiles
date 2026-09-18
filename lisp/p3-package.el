@@ -8,18 +8,6 @@
 (declare-function use-package-as-symbol "use-package-core" (name))
 (declare-function use-package-pin-package "use-package-ensure" (package archive))
 
-(defun p3/package-setup ()
-  "Configure package archives and initialize installed packages."
-  (setq package-archives
-        '(("gnu" . "https://elpa.gnu.org/packages/")
-          ("nongnu" . "https://elpa.nongnu.org/nongnu/")
-          ("melpa" . "https://melpa.org/packages/"))
-        package-archive-priorities
-        '(("gnu" . 30)
-          ("nongnu" . 20)
-          ("melpa" . 10)))
-  (package-initialize))
-
 (defun p3/package-refresh-once ()
   "Refresh package metadata at most once automatically per Emacs session."
   (unless p3/package-refresh-attempted
@@ -72,6 +60,33 @@
             (package-generate-autoloads package directory)
             (p3/package--descriptor-healthy-p descriptor))
         (error nil)))))
+
+(defun p3/package--repair-incomplete-installed-packages ()
+  "Repair missing generated autoloads before package activation."
+  (dolist (entry package-alist)
+    (let ((package (car entry))
+          (descriptor (cadr entry)))
+      (when (and descriptor
+                 (not (p3/package--descriptor-healthy-p descriptor)))
+        (p3/package--repair-current-installation package)))))
+
+(defun p3/package-setup ()
+  "Configure package archives, repair local installs, and initialize packages."
+  (setq package-archives
+        '(("gnu" . "https://elpa.gnu.org/packages/")
+          ("nongnu" . "https://elpa.nongnu.org/nongnu/")
+          ("melpa" . "https://melpa.org/packages/"))
+        package-archive-priorities
+        '(("gnu" . 30)
+          ("nongnu" . 20)
+          ("melpa" . 10)))
+
+  ;; package-initialize demotes autoload loading failures, so repair the
+  ;; concrete missing-autoload case before activation can hide it.
+  (setq package-alist nil)
+  (package-load-all-descriptors)
+  (p3/package--repair-incomplete-installed-packages)
+  (package-initialize))
 
 (defun p3/package--user-package-directory-p (directory)
   "Return non-nil when DIRECTORY is safely contained in `package-user-dir'."
