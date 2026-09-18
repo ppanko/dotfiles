@@ -24,7 +24,9 @@ machine-specific model in the repository.")
 
 (declare-function gptel-api-key-from-auth-source "gptel" ())
 (declare-function gptel-make-openai-oauth "gptel-openai-oauth" (name &rest args))
+(declare-function p3/gptel-chatgpt-oauth-available-p "p3-gptel" ())
 (declare-function p3/gptel-register-ollama "p3-gptel" (models &optional host))
+(declare-function p3/gptel-secure-openai-oauth-token-storage "p3-gptel" ())
 (declare-function p3/gptel-setup "p3-gptel" ())
 (declare-function which-key-add-key-based-replacements "which-key" (&rest replacements))
 
@@ -40,7 +42,8 @@ machine-specific model in the repository.")
   ;; Newer GPTel releases can authenticate directly against a ChatGPT
   ;; Plus/Pro subscription.  Keep this optional so an older installed GPTel
   ;; still starts cleanly and can be upgraded through package.el.
-  (when (require 'gptel-openai-oauth nil t)
+  (when (p3/gptel-chatgpt-oauth-available-p)
+    (p3/gptel-secure-openai-oauth-token-storage)
     (gptel-make-openai-oauth p3/gptel-chatgpt-backend-name))
   (p3/gptel-register-ollama p3/gptel-ollama-models p3/gptel-ollama-host)
   (p3/gptel-setup)
