@@ -16,6 +16,7 @@
 (defvar gptel-context)
 (defvar gptel-use-context)
 (defvar gptel-mode)
+(defvar gptel--openai-oauth-token-file)
 
 (defun p3-gptel-test--git (directory &rest args)
   "Run Git ARGS in DIRECTORY and return its exit status."
@@ -70,6 +71,35 @@
                   "/tmp/secretary.txt"
                   "/tmp/credentialsManager.el"))
     (should-not (p3/gptel-sensitive-path-p file))))
+
+(ert-deftest p3-gptel-chatgpt-login-reports-missing-oauth-support ()
+  (cl-letf (((symbol-function 'p3/gptel-chatgpt-oauth-available-p)
+             (lambda () nil)))
+    (should-error (p3/gptel-chatgpt-login) :type 'user-error)))
+
+(ert-deftest p3-gptel-chatgpt-token-write-is-owner-only-on-unix ()
+  (skip-unless (not (eq system-type 'windows-nt)))
+  (let* ((directory (make-temp-file "p3-gptel-oauth-" t))
+         (file (expand-file-name "token" directory))
+         (gptel--openai-oauth-token-file file)
+         (before (default-file-modes))
+         seen-modes)
+    (unwind-protect
+        (progn
+          (should
+           (equal
+            (p3/gptel-secure-openai-oauth-token-write
+             (lambda (path token)
+               (setq seen-modes (default-file-modes))
+               (with-temp-file path
+                 (prin1 token (current-buffer)))
+               token)
+             file '(:access_token "secret"))
+            '(:access_token "secret")))
+          (should (= seen-modes #o600))
+          (should (= (logand (file-modes file) #o777) #o600))
+          (should (= (default-file-modes) before)))
+      (delete-directory directory t))))
 
 (ert-deftest p3-gptel-project-chat-localizes-context-and-project-directory ()
   "Project chat must not inherit or mutate the global GPTel context."

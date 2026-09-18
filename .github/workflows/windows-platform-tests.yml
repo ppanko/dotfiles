@@ -185,6 +185,8 @@ jobs:
         shell: powershell
         run: >-
           emacs -Q --batch -L lisp
+          --eval '(require (quote package))'
+          --eval '(package-initialize)'
           -l test/p3-platform-test.el
           -l test/p3-project-windows-test.el
           -l test/p3-project-context-test.el

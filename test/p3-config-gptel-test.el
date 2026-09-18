@@ -23,6 +23,27 @@
   (let ((contents (p3-config-gptel-test--contents "lisp/p3-config-gptel.el")))
     (should-not (string-match-p "(setq[[:space:]\n]+gptel-model" contents))))
 
+(ert-deftest p3-config-gptel-registers-chatgpt-subscription-backend ()
+  (let ((contents (p3-config-gptel-test--contents "lisp/p3-config-gptel.el")))
+    (should
+     (string-match-p
+      (regexp-quote "(p3/gptel-chatgpt-oauth-available-p)")
+      contents))
+    (should
+     (string-match-p
+      (regexp-quote "(p3/gptel-secure-openai-oauth-token-storage)")
+      contents))
+    (should
+     (string-match-p
+      (regexp-quote
+       "(gptel-make-openai-oauth p3/gptel-chatgpt-backend-name)")
+      contents))
+    (should
+     (string-match-p
+      (regexp-quote
+       "(defconst p3/gptel-chatgpt-backend-name \"ChatGPT\"")
+      contents))))
+
 (ert-deftest p3-config-gptel-delegates-ollama-registration-to-workflow-layer ()
   (let ((contents (p3-config-gptel-test--contents "lisp/p3-config-gptel.el")))
     (should (string-match-p "p3/gptel-register-ollama" contents))
