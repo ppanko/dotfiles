@@ -15,6 +15,7 @@
 (declare-function gptel-add "gptel-context" (&optional arg confirm))
 (declare-function gptel-add-file "gptel-context" (path))
 (declare-function gptel-make-ollama "gptel-ollama" (name &rest args))
+(declare-function gptel-openai-oauth-login "gptel-openai-oauth" (&optional backend method))
 (declare-function gptel-request "gptel" (prompt &rest args))
 (declare-function diff-mode "diff-mode" ())
 
@@ -73,6 +74,14 @@ optional backend rather than guessing which local models are installed."
       :host (or host "localhost:11434")
       :models models
       :stream t)))
+
+(defun p3/gptel-chatgpt-login ()
+  "Authenticate GPTel with the registered ChatGPT Plus/Pro backend."
+  (interactive)
+  (unless (require 'gptel-openai-oauth nil t)
+    (user-error
+     "Installed GPTel lacks ChatGPT OAuth support; upgrade GPTel and reload the config"))
+  (call-interactively #'gptel-openai-oauth-login))
 
 (defun p3/gptel--rewrite-task (task)
   "Run rewrite TASK on the active region with clean task-local context."
@@ -322,6 +331,7 @@ repository.  Existing snapshots are never rewritten in place."
 (setq p3/gptel-command-map
       (let ((map (make-sparse-keymap)))
         (define-key map (kbd "g") #'p3/gptel-project-chat)
+        (define-key map (kbd "l") #'p3/gptel-chatgpt-login)
         (define-key map (kbd "m") #'gptel-menu)
         (define-key map (kbd "a") #'p3/gptel-add-context)
         (define-key map (kbd "f") #'gptel-add-file)
