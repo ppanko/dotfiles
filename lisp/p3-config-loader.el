@@ -1,5 +1,7 @@
 ;;; p3-config-loader.el --- Build and load the literate config cache -*- lexical-binding: t; -*-
 
+(require 'p3-startup-profile)
+
 (declare-function org-mode "org" ())
 (declare-function org-babel-next-src-block "ob-core" (&optional arg))
 (declare-function org-babel-get-src-block-info "ob-core" (&optional light datum))
@@ -59,7 +61,8 @@
   (let ((path (p3/config--module-path module)))
     (unless (file-readable-p path)
       (signal 'file-missing (list "Local module source is missing" path)))
-    (load-file path)))
+    (p3/with-startup-profile-phase (format "module:%s" module)
+      (load-file path))))
 
 (defun p3/config--assert-safe-tangle-info (info)
   "Reject an INFO record whose tangle setting could escape staging."
@@ -159,9 +162,14 @@
 
 (defun p3/config-load ()
   "Load the config cache, rebuilding first when it is stale."
-  (when (p3/config-cache-stale-p)
-    (p3/config-build))
-  (p3/config-load-generated))
+  (let ((stale
+         (p3/with-startup-profile-phase "config-cache-validate"
+           (p3/config-cache-stale-p))))
+    (when stale
+      (p3/with-startup-profile-phase "config-cache-build"
+        (p3/config-build)))
+    (p3/with-startup-profile-phase "config-cache-load"
+      (p3/config-load-generated))))
 
 (provide 'p3-config-loader)
 
