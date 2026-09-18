@@ -31,15 +31,29 @@
        (format "%s-autoloads.el" (package-desc-name descriptor))
        directory))))
 
+(defun p3/package--descriptor-library-file (descriptor)
+  "Return DESCRIPTOR's package-named library file, if it is readable."
+  (let* ((directory (package-desc-dir descriptor))
+         (name (symbol-name (package-desc-name descriptor))))
+    (when (and (stringp directory)
+               (file-directory-p directory))
+      (catch 'found
+        (dolist (file
+                 (directory-files-recursively directory "\\.elc?\\'" nil nil))
+          (when (and (string= (file-name-base file) name)
+                     (file-readable-p file))
+            (throw 'found file)))))))
+
 (defun p3/package--descriptor-healthy-p (descriptor)
-  "Return non-nil when DESCRIPTOR has a usable installed package directory."
+  "Return non-nil when DESCRIPTOR has usable generated and library files."
   (let ((directory (package-desc-dir descriptor))
         (autoload-file (p3/package--descriptor-autoload-file descriptor)))
     (and (stringp directory)
          (file-directory-p directory)
          autoload-file
          (or (file-readable-p autoload-file)
-             (file-readable-p (concat autoload-file "c"))))))
+             (file-readable-p (concat autoload-file "c")))
+         (p3/package--descriptor-library-file descriptor))))
 
 (defun p3/package-installation-healthy-p (package)
   "Return non-nil when PACKAGE is built in or its newest install is complete."
@@ -49,12 +63,13 @@
              (p3/package--descriptor-healthy-p descriptor)))))
 
 (defun p3/package--repair-current-installation (package)
-  "Regenerate PACKAGE autoloads when its installed directory is recoverable."
+  "Regenerate PACKAGE autoloads when its installed library is recoverable."
   (let* ((descriptor (car (p3/package--descriptors package)))
          (directory (and descriptor (package-desc-dir descriptor))))
     (when (and descriptor
                (stringp directory)
-               (file-directory-p directory))
+               (file-directory-p directory)
+               (p3/package--descriptor-library-file descriptor))
       (condition-case nil
           (progn
             (package-generate-autoloads package directory)
@@ -139,7 +154,7 @@
 
     (unless (p3/package-installation-healthy-p package)
       (error
-       "Package `%s' is incomplete after repair/install; expected readable generated autoloads"
+       "Package `%s' is incomplete after repair/install; expected readable generated autoloads and package library"
        package))
 
     (when (and changed (not (package-built-in-p package)))
