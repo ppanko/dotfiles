@@ -7,7 +7,7 @@
 
 (defvar eat-kill-buffer-on-exit)
 (defvar eat-terminal)
-(defvar eat-update-hook)
+(defvar eat--synchronize-scroll-function)
 (defvar eshell-buffer-name)
 (defvar eshell-exit-hook)
 (defvar eshell-hist-ignoredups)
@@ -29,7 +29,6 @@
 (declare-function eat-mode "eat" ())
 (declare-function eat-semi-char-mode "eat" (&optional arg))
 (declare-function eat-send-password "eat" ())
-(declare-function eat-term-display-beginning "eat" (terminal))
 (declare-function eat-term-display-cursor "eat" (terminal))
 (declare-function eshell "eshell" (&optional arg))
 (declare-function eshell-add-to-history "em-hist" ())
@@ -176,45 +175,40 @@
                     (member arg p3/project-shell-codex-line-subcommands))
                   args))))
 
-(defun p3/project-shell--codex-live-position-p (position display-begin)
-  "Return non-nil when POSITION belongs to Codex's active terminal display."
-  (or (>= position display-begin)
-      ;; Codex redraws can collapse an otherwise-live window marker here.
-      (= position (point-min))))
+(defconst p3/project-shell-codex-tail-tolerance 2
+  "Characters from buffer end treated as Codex's live terminal tail.")
 
-(defun p3/project-shell--codex-follow-output ()
-  "Keep visible interactive Codex windows following Eat's live terminal cursor.
+(defun p3/project-shell--codex-synchronize-scroll (windows)
+  "Synchronize Codex Eat scrolling for WINDOWS captured before a redraw.
 
-Eat's normal synchronization follows positions that were exactly on the
-terminal cursor before an update.  Codex redraws its TUI in place, which can
-move an otherwise-live window point away from that cursor and strand it while
-new output continues.  In terminal input mode, rescue points that are still in
-the active display (or were collapsed to `point-min').  Read-only Eat Emacs
-mode remains free for deliberate transcript browsing."
-  (when (and eat-terminal (not buffer-read-only))
-    (let* ((display-begin (eat-term-display-beginning eat-terminal))
-           (cursor (eat-term-display-cursor eat-terminal))
-           (follow-buffer
-            (p3/project-shell--codex-live-position-p (point) display-begin))
-           (windows
-            (seq-filter
-             (lambda (window)
-               (p3/project-shell--codex-live-position-p
-                (window-point window) display-begin))
-             (get-buffer-window-list (current-buffer) nil t))))
-      (when follow-buffer
-        (goto-char cursor))
-      (dolist (window windows)
-        (let ((cursor-visible (pos-visible-in-window-p cursor window t)))
+Eat computes WINDOWS before it processes an output batch, while it still knows
+which windows were following the terminal cursor.  Reuse that pre-redraw
+decision rather than trying to infer intent from positions after Codex has
+redrawn its TUI.  The symbol `buffer' requests current-buffer point
+synchronization; window objects request window-point synchronization."
+  (let ((cursor (eat-term-display-cursor eat-terminal)))
+    (dolist (window windows)
+      (if (eq window 'buffer)
+          (goto-char cursor)
+        (unless buffer-read-only
           (set-window-point window cursor)
-          (unless cursor-visible
+          (cond
+           ((>= cursor
+                (- (point-max) p3/project-shell-codex-tail-tolerance))
             (with-selected-window window
               (goto-char cursor)
-              (recenter -1))))))))
+              (recenter -1)))
+           ((not (pos-visible-in-window-p cursor window t))
+            (with-selected-window window
+              (goto-char cursor)
+              (recenter)))))))))
 
-(defun p3/project-shell--setup-codex-follow-output ()
-  "Install Codex-specific Eat output following in the current Eat buffer."
-  (add-hook 'eat-update-hook #'p3/project-shell--codex-follow-output nil t))
+(defun p3/project-shell--setup-codex-scroll-sync ()
+  "Use Codex-specific pre-redraw scroll synchronization in this Eat buffer."
+  ;; Eat intentionally computes the window set before terminal output mutates
+  ;; the buffer, then dispatches it through this buffer-local callback.
+  (setq-local eat--synchronize-scroll-function
+              #'p3/project-shell--codex-synchronize-scroll))
 
 (defun p3/project-shell--pacman-sync-query-p (arg)
   "Return non-nil when pacman short sync ARG is output-only."
@@ -372,7 +366,7 @@ mode remains free for deliberate transcript browsing."
           (setq-local eshell-parent-buffer eshell-buffer
                       eat-kill-buffer-on-exit nil)
           (when codex-p
-            (p3/project-shell--setup-codex-follow-output))
+            (p3/project-shell--setup-codex-scroll-sync))
           (eat-exec eat-buffer program program nil program-args)
           (let ((process (get-buffer-process eat-buffer)))
             (unless (and process (process-live-p process))
