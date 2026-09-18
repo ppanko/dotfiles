@@ -118,6 +118,8 @@
   (should (keymapp p3/org-roam-project-command-map))
   (should (eq (lookup-key p3/org-roam-project-command-map (kbd "h"))
               #'p3/org-roam-project-note))
+  (should (eq (lookup-key p3/org-roam-project-command-map (kbd "o"))
+              #'p3/org-roam-project-open))
   (should (eq (lookup-key p3/org-roam-project-command-map (kbd "f"))
               #'p3/org-roam-project-find-note))
   (should (eq (lookup-key p3/org-roam-project-command-map (kbd "n"))

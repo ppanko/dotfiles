@@ -303,8 +303,32 @@
     (should-not (string-match-p "(use-package p3-r-tools" contents))
     (should-not
      (string-match-p
-      (regexp-quote "(keymap-global-set \"C-c R\"") contents))
+      (regexp-quote "(keymap-global-set \"C-c r\"") contents))
     (should (< ess r-program))))
+
+(ert-deftest p3-config-workflow-keybindings-use-ergonomic-prefixes ()
+  (let ((base (p3-config-test--contents "lisp/p3-config-base.el"))
+        (ess (p3-config-test--contents "lisp/p3-config-ess.el")))
+    (should
+     (string-match-p
+      (regexp-quote "(global-set-key (kbd \"C-c R\") #'p3/config-reload)")
+      base))
+    (should
+     (string-match-p
+      (regexp-quote "(keymap-global-set \"C-c y\" p3/yank-command-map)")
+      base))
+    (should
+     (string-match-p
+      (regexp-quote "(keymap-global-set \"C-c r\" p3-r-command-map)")
+      ess))
+    (should-not
+     (string-match-p
+      (regexp-quote "(global-set-key (kbd \"C-c r\") #'p3/config-reload)")
+      base))
+    (should-not
+     (string-match-p
+      (regexp-quote "(keymap-global-set \"C-c R\" p3-r-command-map)")
+      ess))))
 
 (ert-deftest p3-config-project-orchestration-has-one-owner ()
   (let* ((contents (p3-config-test--contents "config.org"))

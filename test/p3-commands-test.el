@@ -19,6 +19,7 @@
 (ert-deftest p3-commands-core-helpers-remain-commands ()
   (dolist (command '(p3/keybinding-atlas
                      p3/save-kill-other-buffers
+                     p3/copy-current-path
                      p3/sudo-edit
                      p3/region-suffix
                      p3/newline-after-comma-or-space
@@ -47,6 +48,47 @@
 
 (ert-deftest p3-commands-keybinding-atlas-keeps-global-section ()
   (should (equal (caar p3/keybinding-sections) "Global")))
+
+(ert-deftest p3-commands-keybinding-atlas-documents-ergonomic-prefixes ()
+  (let ((global (assoc "Global" p3/keybinding-sections))
+        (r (assoc "R / ESS" p3/keybinding-sections))
+        (roam (assoc "Org-roam" p3/keybinding-sections)))
+    (should (equal (cdr (assoc "C-c R" (cdr global))) "reload config"))
+    (should (equal (cdr (assoc "C-c y p" (cdr global))) "copy current path"))
+    (should (equal (cdr (assoc "C-c r" (cdr r)))
+                   "R project, templates, and tools"))
+    (should (equal (cdr (assoc "C-c n p o" (cdr roam)))
+                   "open associated project"))))
+
+(ert-deftest p3-commands-copy-current-path-copies-file-buffer-path ()
+  (let ((path (expand-file-name "example.R" temporary-file-directory))
+        copied)
+    (with-temp-buffer
+      (setq buffer-file-name path)
+      (cl-letf (((symbol-function 'kill-new)
+                 (lambda (text &optional _replace) (setq copied text))))
+        (should (equal (p3/copy-current-path) path))
+        (should (equal copied path))))))
+
+(ert-deftest p3-commands-copy-current-path-uses-dired-entry ()
+  (let ((path (expand-file-name "example.R" temporary-file-directory))
+        copied)
+    (with-temp-buffer
+      (setq major-mode 'dired-mode
+            default-directory temporary-file-directory)
+      (cl-letf (((symbol-function 'dired-get-file-for-visit) (lambda () path))
+                ((symbol-function 'kill-new)
+                 (lambda (text &optional _replace) (setq copied text))))
+        (should (equal (p3/copy-current-path) path))
+        (should (equal copied path))))))
+
+(ert-deftest p3-commands-copy-current-path-rejects-pathless-buffer ()
+  (with-temp-buffer
+    (should-error (p3/copy-current-path) :type 'user-error)))
+
+(ert-deftest p3-commands-yank-prefix-exposes-current-path ()
+  (should (eq (keymap-lookup p3/yank-command-map "p")
+              #'p3/copy-current-path)))
 
 (ert-deftest p3-commands-keybinding-atlas-documents-native-project-prefix ()
   (let ((section (assoc "Project" p3/keybinding-sections)))

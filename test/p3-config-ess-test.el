@@ -86,7 +86,7 @@
           (seq-position forms '(p3/config-load-module 'p3-r-tools) #'equal))
          (binding-position
           (seq-position forms
-                        '(keymap-global-set "C-c R" p3-r-command-map)
+                        '(keymap-global-set "C-c r" p3-r-command-map)
                         #'equal)))
     (dolist (position
              (list loader-position ess-position setup-position

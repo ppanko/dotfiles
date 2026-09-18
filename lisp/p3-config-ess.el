@@ -37,7 +37,7 @@
 
 (declare-function smartparens-mode "smartparens" (&optional arg))
 
-(keymap-global-set "C-c R" p3-r-command-map)
+(keymap-global-set "C-c r" p3-r-command-map)
 
 (defvar p3/r-company-backends
   '((:separate

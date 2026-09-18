@@ -18,6 +18,7 @@
 (defvar dashboard-projects-item-format)
 (defvar dashboard-items)
 (defvar p3/package-refresh-attempted)
+(defvar p3/yank-command-map)
 (defvar comint-scroll-to-bottom-on-input)
 (defvar comint-scroll-to-bottom-on-output)
 (defvar mouse-wheel-scroll-amount)
@@ -38,7 +39,8 @@
 (declare-function p3/config-reload "p3-core" ())
 
 (global-set-key (kbd "C-c e") #'p3/config-visit)
-(global-set-key (kbd "C-c r") #'p3/config-reload)
+(global-set-key (kbd "C-c R") #'p3/config-reload)
+(keymap-global-set "C-c y" p3/yank-command-map)
 
 (use-package dashboard
   :config
@@ -87,8 +89,8 @@
    "C-c m" "Magit commands"
    "C-c n" "Org-roam"
    "C-c q" "force quotes"
-   "C-c r" "reload config"
-   "C-c R" "R commands"
+   "C-c r" "R commands"
+   "C-c R" "reload config"
    "C-c s" "region suffix"
    "C-c t" "transpose frame"
    "C-c C-g" "commit and push config"
@@ -109,13 +111,24 @@
    "C-c n g" "graph"
    "C-c n i" "insert node"
    "C-c n c" "capture node"
-   "C-c R p" "new R project"
-   "C-c R h" "R script header"
-   "C-c R w" "Word report header"
-   "C-c R c" "insert R chunk"
-   "C-c R i" "insert pipe"
-   "C-c R m" "targets make"
-   "C-c R v" "view data frame"))
+   "C-c n p" "project notes"
+   "C-c n p o" "open associated project"
+   "C-c r p" "new R project"
+   "C-c r b" "bootstrap R project"
+   "C-c r h" "R script header"
+   "C-c r w" "Word report header"
+   "C-c r c" "insert R chunk"
+   "C-c r i" "insert pipe"
+   "C-c r s" "run Shiny app"
+   "C-c r a" "archive R scripts"
+   "C-c r m" "targets make"
+   "C-c r d" "targets debug make"
+   "C-c r l" "load target at point"
+   "C-c r v" "view data frame"
+   "C-c r r" "write-to-read conversion"
+   "C-c r f" "open R helper file"
+   "C-c y" "copy / yank"
+   "C-c y p" "copy current path"))
 
 (use-package package
   :ensure nil
