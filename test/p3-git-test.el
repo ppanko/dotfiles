@@ -104,8 +104,8 @@
         (should (string-match-p
                  (regexp-quote "(global-git-gutter-mode 1)")
                  contents))
-        (should-not (string-match-p "git-gutter-fringe+" contents))
-        (should-not (string-match-p "global-git-gutter+-mode" contents))))))
+        (should-not (string-match-p (regexp-quote "git-gutter-fringe+") contents))
+        (should-not (string-match-p (regexp-quote "global-git-gutter+-mode") contents))))))
 
 (ert-deftest p3-git-config-keeps-magit-usable-without-forge ()
   (let* ((path (expand-file-name "lisp/p3-config-git.el" p3-git-test--root))
