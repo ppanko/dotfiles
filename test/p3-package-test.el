@@ -55,6 +55,47 @@
           (should (memq 'p3-broken package-activated-list)))
       (delete-directory root t))))
 
+(ert-deftest p3-package-reinstalls-when-library-is-missing ()
+  (let* ((root (make-temp-file "p3-package-test-" t))
+         (package-user-dir root)
+         (package-directory-list nil)
+         (package-alist nil)
+         (package-activated-list nil)
+         (load-path (copy-sequence load-path))
+         (package--initialized t)
+         (p3/package-refresh-attempted nil)
+         (directory (expand-file-name "p3-broken-1.0" root))
+         (library-file (expand-file-name "p3-broken.el" directory))
+         installed)
+    (unwind-protect
+        (progn
+          (p3-package-test--write-package directory)
+          (package-load-descriptor directory)
+          (package-generate-autoloads 'p3-broken directory)
+          (delete-file library-file)
+
+          ;; This is the fresh-install failure from #99: package.el still sees
+          ;; an installed descriptor and valid autoload file, but the library
+          ;; that callers actually need is absent.
+          (should (package-installed-p 'p3-broken))
+          (should (file-readable-p
+                   (expand-file-name "p3-broken-autoloads.el" directory)))
+          (should-not (p3/package-installation-healthy-p 'p3-broken))
+
+          (cl-letf (((symbol-function 'package-install)
+                     (lambda (package dont-select)
+                       (setq installed (list package dont-select))
+                       (p3-package-test--write-package directory)
+                       (package-load-descriptor directory)
+                       (package-generate-autoloads package directory))))
+            (should (eq (p3/package-install-resilient 'p3-broken)
+                        'p3-broken)))
+
+          (should (equal installed '(p3-broken t)))
+          (should (file-readable-p library-file))
+          (should (p3/package-installation-healthy-p 'p3-broken)))
+      (delete-directory root t))))
+
 (ert-deftest p3-package-reinstalls-when-recorded-package-directory-is-gone ()
   (let* ((root (make-temp-file "p3-package-test-" t))
          (package-user-dir root)
@@ -96,11 +137,14 @@
     (let ((err (should-error
                 (p3/use-package-ensure 'demo '(demo) nil)
                 :type 'error)))
-      (should
-       (string-match-p
-        (regexp-quote
-         "Package bootstrap failed for `demo': simulated bootstrap failure")
-        (error-message-string err))))))
+      (let ((message (error-message-string err)))
+        (should (string-match-p
+                 (regexp-quote "Package bootstrap failed for")
+                 message))
+        (should (string-match-p (regexp-quote "demo") message))
+        (should (string-match-p
+                 (regexp-quote "simulated bootstrap failure")
+                 message))))))
 
 (provide 'p3-package-test)
 
