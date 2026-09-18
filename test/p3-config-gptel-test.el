@@ -27,7 +27,11 @@
   (let ((contents (p3-config-gptel-test--contents "lisp/p3-config-gptel.el")))
     (should
      (string-match-p
-      (regexp-quote "(require 'gptel-openai-oauth nil t)")
+      (regexp-quote "(p3/gptel-chatgpt-oauth-available-p)")
+      contents))
+    (should
+     (string-match-p
+      (regexp-quote "(p3/gptel-secure-openai-oauth-token-storage)")
       contents))
     (should
      (string-match-p
