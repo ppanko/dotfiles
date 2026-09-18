@@ -279,6 +279,64 @@
         (when (buffer-live-p buffer)
           (kill-buffer buffer))))))
 
+
+(ert-deftest p3-terminal-codex-eat-sync-uses-preupdate-window-set ()
+  "Only windows Eat marked live before redraw are synchronized afterward."
+  (should (fboundp 'p3/project-shell--codex-synchronize-scroll))
+  (let ((buffer (generate-new-buffer " *p3-codex-sync*"))
+        (window (selected-window))
+        old-window-buffer)
+    (unwind-protect
+        (progn
+          (setq old-window-buffer (window-buffer window))
+          (set-window-buffer window buffer)
+          (with-current-buffer buffer
+            (let ((inhibit-read-only t))
+              (insert "0123456789abcdef"))
+            (setq-local eat-terminal 'dummy
+                        buffer-read-only nil)
+            (cl-letf (((symbol-function 'eat-term-display-cursor)
+                       (lambda (_terminal) 15))
+                      ((symbol-function 'pos-visible-in-window-p)
+                       (lambda (&rest _) nil))
+                      ((symbol-function 'recenter)
+                       (lambda (&rest _) nil)))
+              ;; A window Eat did not identify as live before the redraw must
+              ;; remain untouched, even if its post-redraw point looks active.
+              (set-window-point window 7)
+              (p3/project-shell--codex-synchronize-scroll nil)
+              (should (= (window-point window) 7))
+              ;; A window captured as live before output follows the new cursor.
+              (p3/project-shell--codex-synchronize-scroll (list window))
+              (should (= (window-point window) 15))
+              ;; Eat can separately request current-buffer point synchronization.
+              (goto-char 4)
+              (p3/project-shell--codex-synchronize-scroll '(buffer))
+              (should (= (point) 15))
+              ;; Read-only/Emacs mode leaves windows free for browsing.
+              (setq buffer-read-only t)
+              (set-window-point window 7)
+              (p3/project-shell--codex-synchronize-scroll (list window))
+              (should (= (window-point window) 7)))))
+      (when (window-live-p window)
+        (set-window-buffer window old-window-buffer))
+      (when (buffer-live-p buffer)
+        (kill-buffer buffer)))))
+
+(ert-deftest p3-terminal-codex-eat-installs-sync-callback-not-update-hook ()
+  "Visual Codex uses Eat's pre-redraw synchronization callback."
+  (should (fboundp 'p3/project-shell--setup-codex-scroll-sync))
+  (with-temp-buffer
+    (setq-local eat--synchronize-scroll-function #'ignore
+                eat-update-hook nil)
+    (p3/project-shell--setup-codex-scroll-sync)
+    (should (local-variable-p 'eat--synchronize-scroll-function))
+    (should (eq eat--synchronize-scroll-function
+                #'p3/project-shell--codex-synchronize-scroll))
+    (should-not
+     (memq #'p3/project-shell--codex-follow-output eat-update-hook))))
+
+
 (provide 'p3-terminal-rich-ux-test)
 
 ;;; p3-terminal-rich-ux-test.el ends here

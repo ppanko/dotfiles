@@ -6,6 +6,8 @@
 (require 'p3-project)
 
 (defvar eat-kill-buffer-on-exit)
+(defvar eat-terminal)
+(defvar eat--synchronize-scroll-function)
 (defvar eshell-buffer-name)
 (defvar eshell-exit-hook)
 (defvar eshell-hist-ignoredups)
@@ -27,6 +29,7 @@
 (declare-function eat-mode "eat" ())
 (declare-function eat-semi-char-mode "eat" (&optional arg))
 (declare-function eat-send-password "eat" ())
+(declare-function eat-term-display-cursor "eat" (terminal))
 (declare-function eshell "eshell" (&optional arg))
 (declare-function eshell-add-to-history "em-hist" ())
 (declare-function eshell-find-interpreter "esh-ext"
@@ -172,6 +175,41 @@
                     (member arg p3/project-shell-codex-line-subcommands))
                   args))))
 
+(defconst p3/project-shell-codex-tail-tolerance 2
+  "Characters from buffer end treated as Codex's live terminal tail.")
+
+(defun p3/project-shell--codex-synchronize-scroll (windows)
+  "Synchronize Codex Eat scrolling for WINDOWS captured before a redraw.
+
+Eat computes WINDOWS before it processes an output batch, while it still knows
+which windows were following the terminal cursor.  Reuse that pre-redraw
+decision rather than trying to infer intent from positions after Codex has
+redrawn its TUI.  The symbol `buffer' requests current-buffer point
+synchronization; window objects request window-point synchronization."
+  (let ((cursor (eat-term-display-cursor eat-terminal)))
+    (dolist (window windows)
+      (if (eq window 'buffer)
+          (goto-char cursor)
+        (unless buffer-read-only
+          (set-window-point window cursor)
+          (cond
+           ((>= cursor
+                (- (point-max) p3/project-shell-codex-tail-tolerance))
+            (with-selected-window window
+              (goto-char cursor)
+              (recenter -1)))
+           ((not (pos-visible-in-window-p cursor window t))
+            (with-selected-window window
+              (goto-char cursor)
+              (recenter)))))))))
+
+(defun p3/project-shell--setup-codex-scroll-sync ()
+  "Use Codex-specific pre-redraw scroll synchronization in this Eat buffer."
+  ;; Eat intentionally computes the window set before terminal output mutates
+  ;; the buffer, then dispatches it through this buffer-local callback.
+  (setq-local eat--synchronize-scroll-function
+              #'p3/project-shell--codex-synchronize-scroll))
+
 (defun p3/project-shell--pacman-sync-query-p (arg)
   "Return non-nil when pacman short sync ARG is output-only."
   (and (string-match-p "\\`-S[silgpq]+\\'" arg)
@@ -300,6 +338,8 @@
   (require 'eat)
   (require 'esh-ext)
   (let* (eshell-interpreter-alist
+         (command-name (file-name-nondirectory (car args)))
+         (codex-p (equal command-name "codex"))
          (interp (eshell-find-interpreter (car args) (cdr args)))
          (program (car interp))
          (raw-program-args
@@ -325,6 +365,8 @@
           (eat-mode)
           (setq-local eshell-parent-buffer eshell-buffer
                       eat-kill-buffer-on-exit nil)
+          (when codex-p
+            (p3/project-shell--setup-codex-scroll-sync))
           (eat-exec eat-buffer program program nil program-args)
           (let ((process (get-buffer-process eat-buffer)))
             (unless (and process (process-live-p process))
