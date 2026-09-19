@@ -110,7 +110,9 @@
           (package-load-descriptor old-directory)
           (p3-package-test--write-package new-directory "2.0")
           (package-load-descriptor new-directory)
-          ;; The newest descriptor is installed but missing generated autoloads.
+          ;; The newest descriptor is recorded but its package directory is gone.
+          ;; This is unrecoverable, so it must not fall back to 1.0.
+          (delete-directory new-directory t)
           (should (equal (package-desc-version
                           (car (p3/package--descriptors 'p3-broken)))
                          '(2 0)))
