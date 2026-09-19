@@ -5,6 +5,7 @@ on:
     types:
       - opened
       - ready_for_review
+      - synchronize
     paths-ignore:
       - "**/*.md"
       - "docs/**"
@@ -50,6 +51,7 @@ jobs:
             --eval '(require (quote p3-org-export))' \
             --eval '(setq byte-compile-error-on-warn t)' \
             -f batch-byte-compile \
+            lisp/p3-package.el \
             lisp/p3-platform.el \
             lisp/p3-project.el \
             lisp/p3-config-project.el \
@@ -220,6 +222,7 @@ jobs:
             --eval '(require (quote package))' \
             --eval '(package-initialize)' \
             -L lisp \
+            -l test/p3-package-test.el \
             -l test/p3-config-loader-test.el \
             -l test/p3-config-test.el \
             -l test/p3-config-retirement-test.el \

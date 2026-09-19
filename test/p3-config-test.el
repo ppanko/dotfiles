@@ -71,6 +71,17 @@
   (p3-config-test--assert-readable-elisp
    (p3-config-test--path "init.el")))
 
+(ert-deftest p3-early-init-defers-package-activation-to-init ()
+  (let ((path (p3-config-test--path "early-init.el"))
+        (package-enable-at-startup t))
+    (p3-config-test--assert-readable-elisp path)
+    (load path nil t)
+    (should-not package-enable-at-startup)
+    (should
+     (string-match-p
+      (regexp-quote "(p3/package-setup)")
+      (p3-config-test--contents "init.el")))))
+
 (ert-deftest p3-config-org-builds-through-production-cache-contract ()
   (let* ((directory (make-temp-file "p3-config-real-build-" t))
          (p3/config-source (p3-config-test--path "config.org"))
@@ -286,7 +297,7 @@
                "(projectile-mode +1)"))
       (should-not (string-match-p (regexp-quote implementation) contents)))
     (dolist (package '(dashboard which-key vertico company undo-tree super-save
-                       multiple-cursors magit git-gutter-fringe+ transpose-frame
+                       multiple-cursors magit git-gutter-fringe transpose-frame
                        ace-window restart-emacs avy))
       (should-not
        (string-match-p (regexp-quote (format "(use-package %s" package))

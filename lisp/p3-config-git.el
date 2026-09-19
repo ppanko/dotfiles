@@ -4,9 +4,9 @@
 (require 'p3-config-loader)
 (p3/config-load-module 'p3-git)
 
-(defvar git-gutter-fr+-side)
+(defvar git-gutter-fr:side)
 (declare-function p3/git-commit-and-push-emacs-config "p3-git" (&optional commit-message))
-(declare-function global-git-gutter+-mode "git-gutter-fringe+" (&optional arg))
+(declare-function global-git-gutter-mode "git-gutter" (&optional arg))
 (declare-function close-magit-buffers "p3-git" ())
 (declare-function magit-stage-files "magit" (files))
 (declare-function magit-commit-create "magit" (&optional args))
@@ -50,10 +50,11 @@
 (use-package forge
   :after magit)
 
-(use-package git-gutter-fringe+
-  :init (global-git-gutter+-mode)
-  :diminish git-gutter+-mode
-  :config (setq git-gutter-fr+-side 'right-fringe))
+(use-package git-gutter-fringe
+  :diminish git-gutter-mode
+  :config
+  (setq git-gutter-fr:side 'right-fringe)
+  (global-git-gutter-mode 1))
 
 (setq-default right-fringe-width 20)
 
