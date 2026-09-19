@@ -45,7 +45,7 @@
 
           (should (file-readable-p autoload-file))
           (should (memq 'p3-broken package-activated-list))
-          (should (p3/package-installation-healthy-p 'p3-broken)))
+          (should (p3/package-autoloads-healthy-p 'p3-broken)))
       (delete-directory root t))))
 
 (ert-deftest p3-package-repairs-installed-package-with-missing-autoloads ()
@@ -71,7 +71,7 @@
           ;; even though activation cannot load its generated autoload file.
           (should (package-installed-p 'p3-broken))
           (should-not (file-exists-p autoload-file))
-          (should-not (p3/package-installation-healthy-p 'p3-broken))
+          (should-not (p3/package-autoloads-healthy-p 'p3-broken))
 
           (cl-letf (((symbol-function 'package-install)
                      (lambda (&rest _)
@@ -85,7 +85,7 @@
                         'p3-broken)))
 
           (should (file-readable-p autoload-file))
-          (should (p3/package-installation-healthy-p 'p3-broken))
+          (should (p3/package-autoloads-healthy-p 'p3-broken))
           (should (memq 'p3-broken package-activated-list)))
       (delete-directory root t))))
 
@@ -116,7 +116,7 @@
           (should (equal (package-desc-version
                           (car (p3/package--descriptors 'p3-broken)))
                          '(2 0)))
-          (should-not (p3/package-installation-healthy-p 'p3-broken))
+          (should-not (p3/package-autoloads-healthy-p 'p3-broken))
 
           (cl-letf (((symbol-function 'package-install)
                      (lambda (package _dont-select)
@@ -159,7 +159,7 @@
 
           ;; A stale descriptor is enough for package-installed-p to succeed.
           (should (package-installed-p 'p3-broken))
-          (should-not (p3/package-installation-healthy-p 'p3-broken))
+          (should-not (p3/package-autoloads-healthy-p 'p3-broken))
 
           (cl-letf (((symbol-function 'package-install)
                      (lambda (package dont-select)
@@ -171,7 +171,7 @@
                         'p3-broken)))
 
           (should (equal installed '(p3-broken t)))
-          (should (p3/package-installation-healthy-p 'p3-broken)))
+          (should (p3/package-autoloads-healthy-p 'p3-broken)))
       (delete-directory root t))))
 
 (ert-deftest p3-package-does-not-repair-system-wide-package ()
@@ -197,6 +197,30 @@
           (should-not (file-exists-p autoload-file)))
       (delete-directory root t)
       (delete-directory system-root t))))
+
+
+(ert-deftest p3-package-rejects-user-package-symlink-outside-package-dir ()
+  (let* ((root (make-temp-file "p3-package-test-" t))
+         (outside (make-temp-file "p3-package-outside-" t))
+         (package-user-dir root)
+         (package-directory-list nil)
+         (package-alist nil)
+         (package-activated-list nil)
+         (package-load-list '(all))
+         (directory (expand-file-name "p3-broken-1.0" root))
+         (outside-directory (expand-file-name "p3-broken-1.0" outside)))
+    (unwind-protect
+        (progn
+          (p3-package-test--write-package outside-directory)
+          (condition-case err
+              (progn
+                (make-symbolic-link outside-directory directory 't)
+                (should-not (p3/package--user-package-directory-p directory)))
+            (file-error
+             ;; Symlink creation may be unavailable on restricted Windows CI.
+             (message "Skipping symlink test: %s" (error-message-string err))))
+      (delete-directory root t)
+      (delete-directory outside t))))
 
 (ert-deftest p3-use-package-ensure-stops-after-bootstrap-failure ()
   (cl-letf (((symbol-function 'p3/package-install-resilient)
