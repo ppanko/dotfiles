@@ -253,7 +253,7 @@
                 (should-not (p3/package--user-package-directory-p directory)))
             (file-error
              ;; Symlink creation may be unavailable on restricted Windows CI.
-             (message "Skipping symlink test: %s" (error-message-string err))))
+             (message "Skipping symlink test: %s" (error-message-string err)))))
       (delete-directory root t)
       (delete-directory outside t))))
 
