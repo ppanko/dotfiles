@@ -31,9 +31,10 @@
   "Return non-nil when DIRECTORY is contained in package-user-dir."
   (and (stringp directory)
        (file-directory-p package-user-dir)
-       (file-in-directory-p
-        (expand-file-name directory)
-        (file-name-as-directory (file-truename package-user-dir)))))
+       (let ((directory (file-truename (expand-file-name directory)))
+             (package-root (file-name-as-directory
+                             (file-truename package-user-dir))))
+         (file-in-directory-p directory package-root))))
 
 (defun p3/package--descriptor-autoload-file (descriptor)
   "Return the generated autoload file for DESCRIPTOR."
@@ -53,10 +54,9 @@
          (or (file-readable-p autoload-file)
              (file-readable-p (concat autoload-file "c"))))))
 
-(defun p3/package-installation-healthy-p (package)
-  "Return non-nil when PACKAGE is built in or outside repair scope.
-User-installed packages must have a package directory and generated
-autoloads."
+(defun p3/package-autoloads-healthy-p (package)
+  "Return non-nil when PACKAGE has usable generated autoloads.
+Built-in and non-user packages are outside the repair scope."
   (or (package-built-in-p package)
       (let ((descriptor (car (p3/package--descriptors package))))
         (and descriptor
@@ -140,7 +140,7 @@ autoloads."
         (reinstall-required nil)
         (required-version nil))
     (when (and (package-installed-p package)
-               (not (p3/package-installation-healthy-p package)))
+               (not (p3/package-autoloads-healthy-p package)))
       (setq changed t)
       (let ((descriptor (car (p3/package--descriptors package))))
         (setq required-version
@@ -151,7 +151,7 @@ autoloads."
             (p3/package--discard-broken-descriptor package descriptor)))))
 
     (when (or reinstall-required
-              (not (p3/package-installation-healthy-p package)))
+              (not (p3/package-autoloads-healthy-p package)))
       (setq changed t)
       (p3/package--install-with-refresh package))
 
@@ -161,7 +161,7 @@ autoloads."
                        (version-list-<=
                         required-version
                         (package-desc-version descriptor)))
-                   (p3/package-installation-healthy-p package))
+                   (p3/package-autoloads-healthy-p package))
         (error
          "Package %s is incomplete after repair/install; expected a healthy package"
          package)))
