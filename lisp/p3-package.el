@@ -78,15 +78,16 @@ Built-in and non-user packages are outside the repair scope."
         (error nil)))))
 
 (defun p3/package--repair-incomplete-installed-packages ()
-  "Repair missing generated autoloads before package activation."
-  (dolist (entry package-alist)
+  "Repair or reinstall incomplete user packages before global activation."
+  ;; Iterate over a snapshot because resilient reinstall may rewrite package-alist.
+  (dolist (entry (copy-sequence package-alist))
     (let ((package (car entry))
           (descriptor (cadr entry)))
       (when (and descriptor
                  (p3/package--user-package-directory-p
                   (package-desc-dir descriptor))
                  (not (p3/package--descriptor-healthy-p descriptor)))
-        (p3/package--repair-current-installation package)))))
+        (p3/package-install-resilient package t)))))
 
 (defun p3/package-setup ()
   "Configure package archives, repair local installs, and initialize packages."
@@ -134,8 +135,9 @@ Built-in and non-user packages are outside the repair scope."
                           package)
                       t))))
 
-(defun p3/package-install-resilient (package)
-  "Ensure PACKAGE is complete, repairing or reinstalling it when necessary."
+(defun p3/package-install-resilient (package &optional defer-activation)
+  "Ensure PACKAGE is complete, repairing or reinstalling it when necessary.
+When DEFER-ACTIVATION is non-nil, leave final activation to the caller."
   (let ((changed nil)
         (reinstall-required nil)
         (required-version nil))
@@ -166,7 +168,9 @@ Built-in and non-user packages are outside the repair scope."
          "Package %s is incomplete after repair/install; expected a healthy package"
          package)))
 
-    (when (and changed (not (package-built-in-p package)))
+    (when (and changed
+               (not defer-activation)
+               (not (package-built-in-p package)))
       (setq package-activated-list (delq package package-activated-list))
       (unless (package-activate package t)
         (error "Package %s could not be activated after repair/install"
