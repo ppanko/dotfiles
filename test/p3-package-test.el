@@ -5,11 +5,13 @@
 (require 'package)
 (require 'p3-package)
 
-(defun p3-package-test--write-package (directory)
-  "Write a minimal p3-broken package into DIRECTORY without autoloads."
+(defun p3-package-test--write-package (directory &optional version)
+  "Write a minimal p3-broken package into DIRECTORY."
+  (setq version (or version "1.0"))
   (make-directory directory t)
   (with-temp-file (expand-file-name "p3-broken-pkg.el" directory)
-    (insert "(define-package \"p3-broken\" \"1.0\" \"Broken package fixture\" nil)\n"))
+    (insert (format "(define-package \"p3-broken\" \"%s\" \"Package fixture\" nil)\n"
+                    version)))
   (with-temp-file (expand-file-name "p3-broken.el" directory)
     (insert ";;; p3-broken.el --- Test fixture\n\n"
             ";;;###autoload\n"
@@ -17,14 +19,46 @@
             "(provide 'p3-broken)\n"))
   directory)
 
+(ert-deftest p3-package-setup-repairs-before-activation ()
+  (let* ((root (make-temp-file "p3-package-test-" t))
+         (package-user-dir root)
+         (package-directory-list nil)
+         (package-alist nil)
+         (package-activated-list nil)
+         (package-archive-contents nil)
+         (package-selected-packages nil)
+         (package-pinned-packages nil)
+         (package-load-list '(all))
+         (package--initialized nil)
+         (load-path (copy-sequence load-path))
+         (directory (expand-file-name "p3-broken-1.0" root))
+         (autoload-file (expand-file-name "p3-broken-autoloads.el" directory)))
+    (unwind-protect
+        (progn
+          (p3-package-test--write-package directory)
+          (package-load-descriptor directory)
+          (should-not (file-exists-p autoload-file))
+
+          ;; Exercise the same setup ordering used by init.el: initialize
+          ;; package records without activation, repair, then activate.
+          (p3/package-setup)
+
+          (should (file-readable-p autoload-file))
+          (should (memq 'p3-broken package-activated-list))
+          (should (p3/package-installation-healthy-p 'p3-broken)))
+      (delete-directory root t))))
+
 (ert-deftest p3-package-repairs-installed-package-with-missing-autoloads ()
   (let* ((root (make-temp-file "p3-package-test-" t))
          (package-user-dir root)
          (package-directory-list nil)
          (package-alist nil)
          (package-activated-list nil)
-         (load-path (copy-sequence load-path))
+         (package-archive-contents nil)
+         (package-selected-packages nil)
+         (package-load-list '(all))
          (package--initialized t)
+         (load-path (copy-sequence load-path))
          (p3/package-refresh-attempted nil)
          (directory (expand-file-name "p3-broken-1.0" root))
          (autoload-file (expand-file-name "p3-broken-autoloads.el" directory)))
@@ -55,45 +89,50 @@
           (should (memq 'p3-broken package-activated-list)))
       (delete-directory root t))))
 
-(ert-deftest p3-package-reinstalls-when-library-is-missing ()
+(ert-deftest p3-package-reinstalls-broken-newest-version ()
   (let* ((root (make-temp-file "p3-package-test-" t))
          (package-user-dir root)
          (package-directory-list nil)
          (package-alist nil)
          (package-activated-list nil)
-         (load-path (copy-sequence load-path))
+         (package-archive-contents nil)
+         (package-selected-packages nil)
+         (package-load-list '(all))
          (package--initialized t)
+         (load-path (copy-sequence load-path))
          (p3/package-refresh-attempted nil)
-         (directory (expand-file-name "p3-broken-1.0" root))
-         (library-file (expand-file-name "p3-broken.el" directory))
+         (old-directory (expand-file-name "p3-broken-1.0" root))
+         (new-directory (expand-file-name "p3-broken-2.0" root))
          installed)
     (unwind-protect
         (progn
-          (p3-package-test--write-package directory)
-          (package-load-descriptor directory)
-          (package-generate-autoloads 'p3-broken directory)
-          (delete-file library-file)
-
-          ;; This is the fresh-install failure from #99: package.el still sees
-          ;; an installed descriptor and valid autoload file, but the library
-          ;; that callers actually need is absent.
-          (should (package-installed-p 'p3-broken))
-          (should (file-readable-p
-                   (expand-file-name "p3-broken-autoloads.el" directory)))
+          (p3-package-test--write-package old-directory "1.0")
+          (package-load-descriptor old-directory)
+          (p3-package-test--write-package new-directory "2.0")
+          (package-load-descriptor new-directory)
+          ;; The newest descriptor is installed but missing generated autoloads.
+          (should (equal (package-desc-version
+                          (car (p3/package--descriptors 'p3-broken)))
+                         '(2 0)))
           (should-not (p3/package-installation-healthy-p 'p3-broken))
 
           (cl-letf (((symbol-function 'package-install)
-                     (lambda (package dont-select)
-                       (setq installed (list package dont-select))
-                       (p3-package-test--write-package directory)
-                       (package-load-descriptor directory)
-                       (package-generate-autoloads package directory))))
+                     (lambda (package _dont-select)
+                       (setq installed package)
+                       (p3-package-test--write-package new-directory "2.0")
+                       (package-load-descriptor new-directory)
+                       (package-generate-autoloads package new-directory))))
             (should (eq (p3/package-install-resilient 'p3-broken)
                         'p3-broken)))
 
-          (should (equal installed '(p3-broken t)))
-          (should (file-readable-p library-file))
-          (should (p3/package-installation-healthy-p 'p3-broken)))
+          ;; Do not silently accept the healthy 1.0 installation after removing
+          ;; the broken 2.0 descriptor.
+          (should (eq installed 'p3-broken))
+          (should (file-readable-p
+                   (expand-file-name "p3-broken-autoloads.el" new-directory)))
+          (should (equal (package-desc-version
+                          (car (p3/package--descriptors 'p3-broken)))
+                         '(2 0))))
       (delete-directory root t))))
 
 (ert-deftest p3-package-reinstalls-when-recorded-package-directory-is-gone ()
@@ -102,8 +141,11 @@
          (package-directory-list nil)
          (package-alist nil)
          (package-activated-list nil)
-         (load-path (copy-sequence load-path))
+         (package-archive-contents nil)
+         (package-selected-packages nil)
+         (package-load-list '(all))
          (package--initialized t)
+         (load-path (copy-sequence load-path))
          (p3/package-refresh-attempted nil)
          (directory (expand-file-name "p3-broken-1.0" root))
          installed)
@@ -129,6 +171,30 @@
           (should (equal installed '(p3-broken t)))
           (should (p3/package-installation-healthy-p 'p3-broken)))
       (delete-directory root t))))
+
+(ert-deftest p3-package-does-not-repair-system-wide-package ()
+  (let* ((root (make-temp-file "p3-package-test-" t))
+         (system-root (make-temp-file "p3-package-system-" t))
+         (package-user-dir root)
+         (package-directory-list (list system-root))
+         (package-alist nil)
+         (package-activated-list nil)
+         (package-archive-contents nil)
+         (package-selected-packages nil)
+         (package-load-list '(all))
+         (package--initialized nil)
+         (load-path (copy-sequence load-path))
+         (directory (expand-file-name "p3-broken-1.0" system-root))
+         (autoload-file (expand-file-name "p3-broken-autoloads.el" directory)))
+    (unwind-protect
+        (progn
+          (p3-package-test--write-package directory)
+          (package-load-descriptor directory)
+          (should-not (file-exists-p autoload-file))
+          (p3/package--repair-incomplete-installed-packages)
+          (should-not (file-exists-p autoload-file)))
+      (delete-directory root t)
+      (delete-directory system-root t))))
 
 (ert-deftest p3-use-package-ensure-stops-after-bootstrap-failure ()
   (cl-letf (((symbol-function 'p3/package-install-resilient)
