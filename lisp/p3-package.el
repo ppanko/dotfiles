@@ -23,6 +23,14 @@
   "Return installed descriptors recorded for PACKAGE."
   (cdr (assq package package-alist)))
 
+(defun p3/package--user-package-directory-p (directory)
+  "Return non-nil when DIRECTORY is contained in package-user-dir."
+  (and (stringp directory)
+       (file-directory-p package-user-dir)
+       (file-in-directory-p
+        (expand-file-name directory)
+        (file-name-as-directory (file-truename package-user-dir)))))
+
 (defun p3/package--descriptor-autoload-file (descriptor)
   "Return the generated autoload file for DESCRIPTOR."
   (let ((directory (package-desc-dir descriptor)))
@@ -31,45 +39,34 @@
        (format "%s-autoloads.el" (package-desc-name descriptor))
        directory))))
 
-(defun p3/package--descriptor-library-file (descriptor)
-  "Return DESCRIPTOR's package-named library file, if it is readable."
-  (let* ((directory (package-desc-dir descriptor))
-         (name (symbol-name (package-desc-name descriptor))))
-    (when (and (stringp directory)
-               (file-directory-p directory))
-      (catch 'found
-        (dolist (file
-                 (directory-files-recursively directory "\\.elc?\\'" nil nil))
-          (when (and (string= (file-name-base file) name)
-                     (file-readable-p file))
-            (throw 'found file)))))))
-
 (defun p3/package--descriptor-healthy-p (descriptor)
-  "Return non-nil when DESCRIPTOR has usable generated and library files."
+  "Return non-nil when user DESCRIPTOR has usable generated autoloads."
   (let ((directory (package-desc-dir descriptor))
         (autoload-file (p3/package--descriptor-autoload-file descriptor)))
-    (and (stringp directory)
+    (and (p3/package--user-package-directory-p directory)
          (file-directory-p directory)
          autoload-file
          (or (file-readable-p autoload-file)
-             (file-readable-p (concat autoload-file "c")))
-         (p3/package--descriptor-library-file descriptor))))
+             (file-readable-p (concat autoload-file "c"))))))
 
 (defun p3/package-installation-healthy-p (package)
-  "Return non-nil when PACKAGE is built in or its newest install is complete."
+  "Return non-nil when PACKAGE is built in or outside repair scope.
+User-installed packages must have a package directory and generated
+autoloads."
   (or (package-built-in-p package)
       (let ((descriptor (car (p3/package--descriptors package))))
         (and descriptor
-             (p3/package--descriptor-healthy-p descriptor)))))
+             (or (not (p3/package--user-package-directory-p
+                       (package-desc-dir descriptor)))
+                 (p3/package--descriptor-healthy-p descriptor))))))
 
 (defun p3/package--repair-current-installation (package)
-  "Regenerate PACKAGE autoloads when its installed library is recoverable."
+  "Regenerate PACKAGE autoloads when its user install is recoverable."
   (let* ((descriptor (car (p3/package--descriptors package)))
          (directory (and descriptor (package-desc-dir descriptor))))
     (when (and descriptor
-               (stringp directory)
-               (file-directory-p directory)
-               (p3/package--descriptor-library-file descriptor))
+               (p3/package--user-package-directory-p directory)
+               (file-directory-p directory))
       (condition-case nil
           (progn
             (package-generate-autoloads package directory)
@@ -82,6 +79,8 @@
     (let ((package (car entry))
           (descriptor (cadr entry)))
       (when (and descriptor
+                 (p3/package--user-package-directory-p
+                  (package-desc-dir descriptor))
                  (not (p3/package--descriptor-healthy-p descriptor)))
         (p3/package--repair-current-installation package)))))
 
@@ -95,72 +94,77 @@
         '(("gnu" . 30)
           ("nongnu" . 20)
           ("melpa" . 10)))
-
-  ;; package-initialize demotes autoload loading failures, so repair the
-  ;; concrete missing-autoload case before activation can hide it.
-  (setq package-alist nil)
-  (package-load-all-descriptors)
+  ;; Initialize the installed-package records without activating them.
+  ;; Repair missing autoloads, then activate the repaired set once.
+  (package-initialize t)
   (p3/package--repair-incomplete-installed-packages)
-  (package-initialize))
+  (package-activate-all))
 
-(defun p3/package--user-package-directory-p (directory)
-  "Return non-nil when DIRECTORY is safely contained in `package-user-dir'."
-  (and (stringp directory)
-       (file-directory-p package-user-dir)
-       (file-exists-p directory)
-       (file-in-directory-p
-        (file-truename directory)
-        (file-name-as-directory (file-truename package-user-dir)))))
-
-(defun p3/package--forget-broken-descriptor (package descriptor)
-  "Forget broken DESCRIPTOR for PACKAGE and remove its user package directory."
-  (let* ((directory (package-desc-dir descriptor))
-         (remaining
-          (delq descriptor
-                (copy-sequence (p3/package--descriptors package)))))
-    (when (stringp directory)
-      (setq load-path (delete directory load-path))
-      (when (p3/package--user-package-directory-p directory)
-        (delete-directory directory t)))
-    (setq package-alist (assq-delete-all package package-alist)
-          package-activated-list (delq package package-activated-list))
-    (when remaining
-      (push (cons package remaining) package-alist))))
+(defun p3/package--discard-broken-descriptor (package descriptor)
+  "Discard broken user DESCRIPTOR for PACKAGE before reinstalling it."
+  (let ((directory (package-desc-dir descriptor)))
+    (unless (p3/package--user-package-directory-p directory)
+      (error "Refusing to delete non-user package %s" package))
+    (setq load-path (delete directory load-path))
+    (if (file-directory-p directory)
+        (package-delete descriptor t t)
+      (let ((remaining
+             (delq descriptor
+                   (copy-sequence (p3/package--descriptors package)))))
+        (setq package-alist (assq-delete-all package package-alist)
+              package-activated-list (delq package package-activated-list))
+        (when remaining
+          (push (cons package remaining) package-alist))))))
 
 (defun p3/package--install-with-refresh (package)
   "Install PACKAGE, refreshing stale archive metadata once on failure."
   (p3/package-prepare-pinned-package package)
   (condition-case _first-error
-      (package-install package t)
+      (package-install (or (package-get-descriptor package 'archive)
+                           package)
+                       t)
     (error
      (p3/package-refresh-once)
      (p3/package-prepare-pinned-package package)
-     (package-install package t))))
+     (package-install (or (package-get-descriptor package 'archive)
+                          package)
+                      t))))
 
 (defun p3/package-install-resilient (package)
   "Ensure PACKAGE is complete, repairing or reinstalling it when necessary."
-  (let ((changed nil))
+  (let ((changed nil)
+        (required-version nil))
     (when (and (package-installed-p package)
                (not (p3/package-installation-healthy-p package)))
       (setq changed t)
-      (unless (p3/package--repair-current-installation package)
-        (let ((descriptor (car (p3/package--descriptors package))))
+      (let ((descriptor (car (p3/package--descriptors package))))
+        (setq required-version
+              (and descriptor (package-desc-version descriptor)))
+        (unless (p3/package--repair-current-installation package)
           (when descriptor
-            (p3/package--forget-broken-descriptor package descriptor)))))
+            (p3/package--discard-broken-descriptor package descriptor)))))
 
-    (unless (p3/package-installation-healthy-p package)
+    (when (or required-version
+              (not (p3/package-installation-healthy-p package)))
       (setq changed t)
       (p3/package--install-with-refresh package))
 
-    (unless (p3/package-installation-healthy-p package)
-      (error
-       "Package `%s' is incomplete after repair/install; expected readable generated autoloads and package library"
-       package))
+    (let ((descriptor (car (p3/package--descriptors package))))
+      (unless (and descriptor
+                   (or (null required-version)
+                       (version-list-<=
+                        required-version
+                        (package-desc-version descriptor)))
+                   (p3/package--descriptor-healthy-p descriptor))
+        (error
+         "Package %s is incomplete after repair/install; expected a healthy user package"
+         package)))
 
     (when (and changed (not (package-built-in-p package)))
       (setq package-activated-list (delq package package-activated-list))
       (unless (package-activate package t)
-        (error "Package `%s' could not be activated after repair/install" package)))
+        (error "Package %s could not be activated after repair/install"
+               package)))
     package))
 
 (defun p3/use-package-ensure (name args _state)
@@ -176,9 +180,9 @@
         (condition-case err
             (p3/package-install-resilient package)
           (error
-           (error "Package bootstrap failed for `%s': %s"
+           (error "Package bootstrap failed for %s: %s"
                   package
-                  (error-message-string err)))))))
+                  (error-message-string err))))))
   t)
 
 (provide 'p3-package)
