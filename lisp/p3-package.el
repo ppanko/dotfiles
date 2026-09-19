@@ -155,9 +155,9 @@ autoloads."
                        (version-list-<=
                         required-version
                         (package-desc-version descriptor)))
-                   (p3/package--descriptor-healthy-p descriptor))
+                   (p3/package-installation-healthy-p package))
         (error
-         "Package %s is incomplete after repair/install; expected a healthy user package"
+         "Package %s is incomplete after repair/install; expected a healthy package"
          package)))
 
     (when (and changed (not (package-built-in-p package)))
