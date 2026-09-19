@@ -44,10 +44,10 @@
        directory))))
 
 (defun p3/package--descriptor-healthy-p (descriptor)
-  "Return non-nil when user DESCRIPTOR has usable generated autoloads."
+  "Return non-nil when DESCRIPTOR has usable generated autoloads."
   (let ((directory (package-desc-dir descriptor))
         (autoload-file (p3/package--descriptor-autoload-file descriptor)))
-    (and (p3/package--user-package-directory-p directory)
+    (and (stringp directory)
          (file-directory-p directory)
          autoload-file
          (or (file-readable-p autoload-file)
