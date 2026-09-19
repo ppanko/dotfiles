@@ -257,6 +257,11 @@
       (delete-directory root t)
       (delete-directory outside t))))
 
+(ert-deftest p3-use-package-ensure-returns-success-after-ensuring-packages ()
+  (cl-letf (((symbol-function 'p3/package-install-resilient)
+             (lambda (_package) 'demo)))
+    (should (eq (p3/use-package-ensure 'demo '(demo) nil) t))))
+
 (ert-deftest p3-use-package-ensure-stops-after-bootstrap-failure ()
   (cl-letf (((symbol-function 'p3/package-install-resilient)
              (lambda (_package)
