@@ -137,6 +137,7 @@ autoloads."
 (defun p3/package-install-resilient (package)
   "Ensure PACKAGE is complete, repairing or reinstalling it when necessary."
   (let ((changed nil)
+        (reinstall-required nil)
         (required-version nil))
     (when (and (package-installed-p package)
                (not (p3/package-installation-healthy-p package)))
@@ -145,10 +146,11 @@ autoloads."
         (setq required-version
               (and descriptor (package-desc-version descriptor)))
         (unless (p3/package--repair-current-installation package)
+          (setq reinstall-required t)
           (when descriptor
             (p3/package--discard-broken-descriptor package descriptor)))))
 
-    (when (or required-version
+    (when (or reinstall-required
               (not (p3/package-installation-healthy-p package)))
       (setq changed t)
       (p3/package--install-with-refresh package))
