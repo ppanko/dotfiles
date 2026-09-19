@@ -22,6 +22,18 @@
     (insert-file-contents (p3-config-test--path relative))
     (buffer-string)))
 
+(defun p3-config-test--forms (relative)
+  "Return top-level Lisp forms read from repository file RELATIVE."
+  (with-temp-buffer
+    (insert-file-contents (p3-config-test--path relative))
+    (goto-char (point-min))
+    (let (forms)
+      (condition-case nil
+          (while t
+            (push (read (current-buffer)) forms))
+        (end-of-file nil))
+      (nreverse forms))))
+
 (defun p3-config-test--assert-readable-elisp (path)
   "Fail when PATH does not contain syntactically readable Emacs Lisp."
   (with-temp-buffer
@@ -303,8 +315,22 @@
     (should-not (string-match-p "(use-package p3-r-tools" contents))
     (should-not
      (string-match-p
-      (regexp-quote "(keymap-global-set \"C-c R\"") contents))
+      (regexp-quote "(keymap-global-set \"C-c r\"") contents))
     (should (< ess r-program))))
+
+(ert-deftest p3-config-workflow-keybindings-use-ergonomic-prefixes ()
+  (let ((base (p3-config-test--forms "lisp/p3-config-base.el"))
+        (ess (p3-config-test--forms "lisp/p3-config-ess.el")))
+    (should
+     (member '(global-set-key (kbd "C-c R") #'p3/config-reload) base))
+    (should
+     (member '(keymap-global-set "C-c y" p3/yank-command-map) base))
+    (should
+     (member '(keymap-global-set "C-c r" p3-r-command-map) ess))
+    (should-not
+     (member '(global-set-key (kbd "C-c r") #'p3/config-reload) base))
+    (should-not
+     (member '(keymap-global-set "C-c R" p3-r-command-map) ess))))
 
 (ert-deftest p3-config-project-orchestration-has-one-owner ()
   (let* ((contents (p3-config-test--contents "config.org"))

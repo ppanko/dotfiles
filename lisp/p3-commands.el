@@ -1,6 +1,7 @@
 ;;; p3-commands.el --- Generic personal interactive commands -*- lexical-binding: t; -*-
 
 (require 'subr-x)
+(declare-function dired-get-file-for-visit "dired" ())
 (declare-function dired-get-marked-files "dired" (&optional localp arg filter distinguish-one-marked error))
 (declare-function profiler-start "profiler" (type))
 (declare-function profiler-stop "profiler" ())
@@ -13,7 +14,8 @@
      ("M-x" . "run a command")
      ("C-x b" . "switch buffer")
      ("C-c e" . "visit config")
-     ("C-c r" . "reload config")
+     ("C-c R" . "reload config")
+     ("C-c y p" . "copy current path")
      ("C-c ?" . "open this atlas")
      ("C-h B" . "show context-sensitive bindings")
      ("M-o" . "select window"))
@@ -24,7 +26,7 @@
      ("g (compilation)" . "rerun project check")
      ("M-g n / M-g p" . "next/previous compilation error"))
     ("R / ESS"
-     ("C-c R" . "R project, templates, and tools")
+     ("C-c r" . "R project, templates, and tools")
      ("C-c C-t" . "ESS Tracebug/debug commands")
      ("C-c i" . "evaluate library section")
      ("C-c v" . "view data frame")
@@ -90,7 +92,8 @@
      ("C-c n g" . "graph")
      ("C-c n i" . "insert node")
      ("C-c n c" . "capture node")
-     ("C-c n d" . "daily note"))
+     ("C-c n d" . "daily note")
+     ("C-c n p o" . "open associated project"))
     ("Terminal"
      ("C-c T" . "project shell commands")
      ("C-x C-u" . "open project Bash shell")))
@@ -118,6 +121,30 @@
   (interactive)
   (save-some-buffers)
   (mapc 'kill-buffer (buffer-list)))
+
+(defun p3/current-buffer-path ()
+  "Return the filesystem path represented by the current buffer, or nil."
+  (cond
+   (buffer-file-name
+    (expand-file-name buffer-file-name))
+   ((derived-mode-p 'dired-mode)
+    (or (ignore-errors (dired-get-file-for-visit))
+        (and default-directory (expand-file-name default-directory))))
+   (t nil)))
+
+(defun p3/copy-current-path ()
+  "Copy the current file or Dired path to the kill ring."
+  (interactive)
+  (let ((path (p3/current-buffer-path)))
+    (unless path
+      (user-error "Current buffer has no filesystem path"))
+    (kill-new path)
+    (message "Copied path: %s" path)
+    path))
+
+(defvar-keymap p3/yank-command-map
+  :doc "Commands for copying useful buffer context."
+  "p" #'p3/copy-current-path)
 
 (defun p3/sudo-edit (&optional arg)
   "Edit currently visited file as root.

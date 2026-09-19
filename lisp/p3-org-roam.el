@@ -442,6 +442,18 @@ When REPLACE-ROOT is non-nil, explicitly replace an existing root mapping."
     (user-error "This buffer has no project Agenda context"))
   (p3/org-roam--project-todos p3/org-roam-project-agenda-hub-id))
 
+(defun p3/org-roam-project-open ()
+  "Open the local filesystem project associated with the current Org-roam note."
+  (interactive)
+  (let ((hub-id (p3/org-roam-project-context)))
+    (unless hub-id
+      (user-error "No project context; associate this note with a project first"))
+    (p3/org-roam--hub-node hub-id)
+    (let ((root (p3/org-roam-project-root-for-hub-id hub-id)))
+      (unless root
+        (user-error "Associated project has no available local root"))
+      (p3/project-resume-root root))))
+
 (defun p3/org-roam-project-todos ()
   "Show unfinished TODOs for the current literate project."
   (interactive)
@@ -454,6 +466,7 @@ When REPLACE-ROOT is non-nil, explicitly replace an existing root mapping."
 (defvar-keymap p3/org-roam-project-command-map
   :doc "Commands for the current Org-roam literate project."
   "h" #'p3/org-roam-project-note
+  "o" #'p3/org-roam-project-open
   "f" #'p3/org-roam-project-find-note
   "n" #'p3/org-roam-project-new-note
   "a" #'p3/org-roam-project-associate
