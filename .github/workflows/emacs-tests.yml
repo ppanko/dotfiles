@@ -5,6 +5,7 @@ on:
     types:
       - opened
       - ready_for_review
+      - synchronize
     paths-ignore:
       - "**/*.md"
       - "docs/**"
