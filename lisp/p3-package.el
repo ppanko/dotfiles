@@ -23,6 +23,10 @@
   "Return installed descriptors recorded for PACKAGE."
   (cdr (assq package package-alist)))
 
+(defun p3/package--archive-descriptor (package)
+  "Return the selected archive descriptor for PACKAGE, if cached."
+  (cadr (assq package package-archive-contents)))
+
 (defun p3/package--user-package-directory-p (directory)
   "Return non-nil when DIRECTORY is contained in package-user-dir."
   (and (stringp directory)
@@ -120,13 +124,13 @@ autoloads."
   "Install PACKAGE, refreshing stale archive metadata once on failure."
   (p3/package-prepare-pinned-package package)
   (condition-case _first-error
-      (package-install (or (package-get-descriptor package 'archive)
+      (package-install (or (p3/package--archive-descriptor package)
                            package)
                        t)
     (error
      (p3/package-refresh-once)
      (p3/package-prepare-pinned-package package)
-     (package-install (or (package-get-descriptor package 'archive)
+     (package-install (or (p3/package--archive-descriptor package)
                           package)
                       t))))
 
