@@ -192,7 +192,7 @@ When DEFER-ACTIVATION is non-nil, leave final activation to the caller."
           (error
            (error "Package bootstrap failed for %s: %s"
                   package
-                  (error-message-string err))))))))
+                  (error-message-string err)))))))
   t)
 
 (provide 'p3-package)
