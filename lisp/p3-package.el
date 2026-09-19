@@ -187,7 +187,7 @@ autoloads."
            (error "Package bootstrap failed for %s: %s"
                   package
                   (error-message-string err))))
-  t)))
+  t)))))
 
 (provide 'p3-package)
 
