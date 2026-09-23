@@ -158,12 +158,13 @@ When DEFER-ACTIVATION is non-nil, leave final activation to the caller."
       (p3/package--install-with-refresh package))
 
     (let ((descriptor (car (p3/package--descriptors package))))
-      (unless (and descriptor
-                   (or (null required-version)
-                       (version-list-<=
-                        required-version
-                        (package-desc-version descriptor)))
-                   (p3/package-autoloads-healthy-p package))
+      (unless (or (package-built-in-p package)
+                  (and descriptor
+                       (or (null required-version)
+                           (version-list-<=
+                            required-version
+                            (package-desc-version descriptor)))
+                       (p3/package-autoloads-healthy-p package)))
         (error
          "Package %s is incomplete after repair/install; expected a healthy package"
          package)))
