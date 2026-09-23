@@ -5,8 +5,10 @@ on:
     types:
       - opened
       - ready_for_review
+      - synchronize
     paths:
       - "config.org"
+      - "lisp/p3-package.el"
       - "lisp/p3-platform.el"
       - "lisp/p3-project.el"
       - "lisp/p3-config-project.el"
@@ -40,6 +42,7 @@ on:
       - "lisp/p3-r-language-server.el"
       - "lisp/p3-r-tidyverse-completion.el"
       - "templates/r/**"
+      - "test/p3-package-test.el"
       - "test/p3-platform-test.el"
       - "test/p3-project-test.el"
       - "test/p3-project-context-test.el"
@@ -144,6 +147,7 @@ jobs:
           emacs -Q --batch -L lisp
           --eval '(setq byte-compile-error-on-warn t)'
           -f batch-byte-compile
+          lisp/p3-package.el
           lisp/p3-platform.el
           lisp/p3-project.el
           lisp/p3-config-project.el
@@ -166,6 +170,13 @@ jobs:
           lisp/p3-org-present.el
           lisp/p3-terminal.el
           lisp/p3-config-terminal.el
+
+      - name: Run package bootstrap regression tests
+        shell: powershell
+        run: >-
+          emacs -Q --batch -L lisp
+          -l test/p3-package-test.el
+          -f ert-run-tests-batch-and-exit
 
       - name: Run Windows editing configuration regression
         shell: powershell

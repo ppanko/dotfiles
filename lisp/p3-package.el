@@ -23,6 +23,11 @@
   "Return installed descriptors recorded for PACKAGE."
   (cdr (assq package package-alist)))
 
+(defun p3/package--descriptor-less-built-in-p (package)
+  "Return non-nil when PACKAGE is supplied only by Emacs itself."
+  (and (package-built-in-p package)
+       (null (p3/package--descriptors package))))
+
 (defun p3/package--archive-descriptor (package)
   "Return the selected archive descriptor for PACKAGE, if cached."
   (cadr (assq package package-archive-contents)))
@@ -56,9 +61,9 @@
 
 (defun p3/package-autoloads-healthy-p (package)
   "Return non-nil when PACKAGE has usable generated autoloads.
-Built-in and non-user packages are outside the repair scope."
-  (or (package-built-in-p package)
-      (let ((descriptor (car (p3/package--descriptors package))))
+Descriptor-less built-ins and non-user packages are outside the repair scope."
+  (let ((descriptor (car (p3/package--descriptors package))))
+    (or (p3/package--descriptor-less-built-in-p package)
         (and descriptor
              (or (not (p3/package--user-package-directory-p
                        (package-desc-dir descriptor)))
@@ -158,19 +163,20 @@ When DEFER-ACTIVATION is non-nil, leave final activation to the caller."
       (p3/package--install-with-refresh package))
 
     (let ((descriptor (car (p3/package--descriptors package))))
-      (unless (and descriptor
-                   (or (null required-version)
-                       (version-list-<=
-                        required-version
-                        (package-desc-version descriptor)))
-                   (p3/package-autoloads-healthy-p package))
+      (unless (or (p3/package--descriptor-less-built-in-p package)
+                  (and descriptor
+                       (or (null required-version)
+                           (version-list-<=
+                            required-version
+                            (package-desc-version descriptor)))
+                       (p3/package-autoloads-healthy-p package)))
         (error
          "Package %s is incomplete after repair/install; expected a healthy package"
          package)))
 
     (when (and changed
                (not defer-activation)
-               (not (package-built-in-p package)))
+               (not (p3/package--descriptor-less-built-in-p package)))
       (setq package-activated-list (delq package package-activated-list))
       (unless (package-activate package t)
         (error "Package %s could not be activated after repair/install"
