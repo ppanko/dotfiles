@@ -291,8 +291,10 @@
           (p3-package-test--write-package directory)
           (package-load-descriptor directory)
           (cl-letf (((symbol-function 'package-built-in-p)
-                     (lambda (package &optional _min-version)
-                       (eq package 'p3-broken)))
+                     (lambda (package &optional min-version)
+                       (and (eq package 'p3-broken)
+                            (or (null min-version)
+                                (version-list-<= min-version '(0 5))))))
                     ((symbol-function 'package-install)
                      (lambda (&rest _)
                        (ert-fail
