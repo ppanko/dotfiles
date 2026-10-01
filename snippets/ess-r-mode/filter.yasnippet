@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: dplyr::filter (dynamic)
+# key: fil
+# --
+dplyr::filter(
+  ${1:condition}${2:$$(if (string= "" yas-text) "" ",\n  ")$3}
+)

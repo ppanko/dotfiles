@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: dplyr::select (dynamic)
+# key: sel
+# --
+dplyr::select(
+  ${1:column}${2:$$(if (string= "" yas-text) "" ",\n  ")$3}
+)

@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: dplyr::mutate (dynamic)
+# key: mut
+# --
+dplyr::mutate(
+  ${1:new_var = expr}${2:$$(if (string= "" yas-text) "" ",\n  ")$3}
+)

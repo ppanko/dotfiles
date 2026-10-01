@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: rename (dynamic)
+# key: ren
+# --
+rename(
+  ${1:new = old}${2:$$(if (string= "" yas-text) "" ",\n  ")$3}
+)

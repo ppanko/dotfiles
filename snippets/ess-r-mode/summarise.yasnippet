@@ -1,0 +1,7 @@
+# -*- mode: snippet -*-
+# name: dplyr::summarise (dynamic)
+# key: smm
+# --
+dplyr::summarise(
+  ${1:new_var = fn(x)}${2:$$(if (string= "" yas-text) "" ",\n  ")$3}
+)
