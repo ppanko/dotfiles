@@ -254,6 +254,77 @@
       (delete-directory root-a t)
       (delete-directory root-b t))))
 
+(ert-deftest p3-config-project-transient-popup-does-not-enable-split-routing ()
+  (p3-config-project-test--with-clean-tabs
+    (let ((popup (split-window-right)))
+      (set-window-parameter popup 'quit-restore '(window window nil nil))
+      (should (p3/project--workspace-routing-p))
+      (set-window-parameter popup 'quit-restore nil)
+      (should-not (p3/project--workspace-routing-p)))))
+
+(ert-deftest p3-config-project-collapsed-cross-project-split-reconciles-workspace ()
+  (let* ((p3/config-lisp-directory
+          (expand-file-name "lisp" p3-config-project-test--root))
+         (root-a (make-temp-file "p3-collapse-route-a-" t))
+         (root-b (make-temp-file "p3-collapse-route-b-" t))
+         (file-a (expand-file-name "inside-a.txt" root-a))
+         (file-b (expand-file-name "inside-b.txt" root-b))
+         buffer-a
+         buffer-b)
+    (unwind-protect
+        (progn
+          (with-temp-file file-a (insert "inside a\n"))
+          (with-temp-file file-b (insert "inside b\n"))
+          (setq buffer-a (find-file-noselect file-a)
+                buffer-b (find-file-noselect file-b))
+          (p3-config-project-test--with-clean-tabs
+            (p3/config-load-module 'p3-config-project)
+            (cl-letf (((symbol-function 'project-current)
+                       (lambda (&optional _maybe-prompt directory)
+                         (let ((dir (or directory default-directory)))
+                           (cond
+                            ((file-in-directory-p dir root-a) 'project-a)
+                            ((file-in-directory-p dir root-b) 'project-b)))))
+                      ((symbol-function 'project-root)
+                       (lambda (project)
+                         (pcase project
+                           ('project-a root-a)
+                           ('project-b root-b)))))
+              ;; Establish both canonical workspaces, then compose B inside A.
+              (p3/project-switch-to-tab root-b)
+              (switch-to-buffer buffer-b)
+              (p3/project-switch-to-tab root-a)
+              (switch-to-buffer buffer-a)
+              (let* ((right (split-window-right))
+                     (a (p3/project-normalize-root root-a))
+                     (b (p3/project-normalize-root root-b)))
+                (select-window right)
+                (switch-to-buffer buffer-b)
+                (should
+                 (equal (p3-config-project-test--tab-root
+                         (p3-config-project-test--current-tab))
+                        a))
+                (should (= (length (window-list nil 'nomini)) 2))
+
+                ;; Keeping only B ends composition: B becomes the canonical
+                ;; current workspace and A retains its pre-composition layout.
+                (delete-other-windows)
+                (should
+                 (equal (p3-config-project-test--tab-root
+                         (p3-config-project-test--current-tab))
+                        b))
+                (should
+                 (equal (p3-config-project-test--project-tab-roots)
+                        (list b a)))
+
+                (p3/project-switch-to-tab root-a)
+                (should (= (length (window-list nil 'nomini)) 2))
+                (should-not (get-buffer-window buffer-b)))))))
+      (when (buffer-live-p buffer-a) (kill-buffer buffer-a))
+      (when (buffer-live-p buffer-b) (kill-buffer buffer-b))
+      (delete-directory root-a t)
+      (delete-directory root-b t))))
+
 (ert-deftest p3-config-project-other-window-file-visit-keeps-current-tab ()
   (let* ((p3/config-lisp-directory
           (expand-file-name "lisp" p3-config-project-test--root))
@@ -502,7 +573,10 @@
      (advice-member-p #'p3/project-keep-buffer-local
                       'switch-to-buffer-other-window))
     (should
-     (advice-member-p #'p3/project--after-tab-select 'tab-bar-select-tab))))
+     (advice-member-p #'p3/project--after-tab-select 'tab-bar-select-tab))
+    (should
+     (memq #'p3/project-reconcile-window-composition
+           window-configuration-change-hook))))
 
 (provide 'p3-config-project-test)
 
