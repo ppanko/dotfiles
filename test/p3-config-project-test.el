@@ -49,6 +49,8 @@
            (set-frame-parameter nil 'tabs nil)
            (tab-bar-tabs)
            (delete-other-windows)
+           (set-window-parameter nil 'quit-restore nil)
+           (set-window-parameter nil 'p3-project-workspace-window nil)
            ,@body)
        (set-frame-parameter nil 'tabs saved-tabs)
        (set-window-configuration saved-window-configuration))))
@@ -305,10 +307,16 @@
                          (p3-config-project-test--current-tab))
                         a))
                 (should (= (length (window-list nil 'nomini)) 2))
+                (should
+                 (alist-get 'p3-project-composed
+                            (cdr (p3-config-project-test--current-tab))))
 
                 ;; Keeping only B ends composition: B becomes the canonical
                 ;; current workspace and A retains its pre-composition layout.
                 (delete-other-windows)
+                ;; Window configuration hooks are normally flushed by the
+                ;; interactive command loop; batch ERT runs the hook explicitly.
+                (run-hooks 'window-configuration-change-hook)
                 (should
                  (equal (p3-config-project-test--tab-root
                          (p3-config-project-test--current-tab))
