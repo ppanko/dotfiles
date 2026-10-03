@@ -177,6 +177,23 @@ only their P3 project metadata."
              when (funcall predicate tab)
              return (cons index tab))))
 
+(defun p3/project--promote-current-tab ()
+  "Put the current project first while preserving project MRU order.
+Project tabs stay as a contiguous leftmost block.  The current project moves
+to the front, the remaining project tabs keep their existing recency order,
+and non-project tabs keep their relative order after them."
+  (let* ((tabs (tab-bar-tabs))
+         (current (cl-find-if (lambda (tab)
+                                (eq (car tab) 'current-tab))
+                              tabs))
+         (project-tabs (cl-remove-if-not #'p3/project--tab-root tabs))
+         (other-tabs (cl-remove-if #'p3/project--tab-root tabs)))
+    (when (and current (p3/project--tab-root current))
+      (tab-bar-tabs-set
+       (append (list current)
+               (cl-remove current project-tabs :test #'eq)
+               other-tabs)))))
+
 (defun p3/project-switch-to-tab (root)
   "Select or create the native project tab for ROOT in the selected frame.
 Return ROOT's normalized identity.  Reusing a tab leaves its saved window
@@ -197,6 +214,7 @@ configuration untouched."
         (tab-bar-tabs-set tabs))
       (tab-rename
        (file-name-nondirectory (directory-file-name normalized))))
+    (p3/project--promote-current-tab)
     normalized))
 
 (defun p3/project-switch-to-general-tab ()
@@ -223,6 +241,21 @@ configuration untouched."
         (tab-rename p3/project-general-tab-name)))
     p3/project-general-tab-name))
 
+(defun p3/project--file-root (file)
+  "Return FILE's normalized local project root, if any."
+  (when-let ((project (project-current nil (file-name-directory file))))
+    (p3/project-normalize-root (project-root project))))
+
+(defun p3/project--workspace-routing-p ()
+  "Return non-nil when navigation should activate a canonical project tab.
+A real window split is an explicit request to compose multiple projects in one
+workspace.  Side windows do not count as such a split."
+  (<= (cl-count-if
+       (lambda (window)
+         (not (window-parameter window 'window-side)))
+       (window-list nil 'nomini))
+      1))
+
 (defun p3/project-route-file (filename &rest _)
   "Route local FILENAME to its project tab or the shared General tab.
 Return the normalized routed project root, or nil for General/remote files.
@@ -230,22 +263,41 @@ Extra arguments are ignored so callers may use this as the routing primitive."
   (when filename
     (let ((file (expand-file-name filename)))
       (unless (file-remote-p file)
-        (if-let ((project
-                  (project-current nil (file-name-directory file))))
-            (p3/project-switch-to-tab (project-root project))
+        (if-let ((root (p3/project--file-root file)))
+            (p3/project-switch-to-tab root)
           (p3/project-switch-to-general-tab)
           nil)))))
 
 (defun p3/project-with-file-routing (function filename &rest args)
-  "Route FILENAME once, then call FUNCTION with the resolved file and ARGS.
-Resolve relative filenames before workspace switching so routing cannot change
-the target.  Local project identity remains dynamically available to downstream
-hooks; remote visits retain normal `project.el' discovery semantics."
+  "Call FUNCTION for FILENAME, routing only a single-window workspace.
+Resolve relative filenames before any workspace switch.  Once the user has a
+real window split, keep the visit in that tab and let the selected window's
+buffer provide project context.  Local project identity remains dynamically
+available to downstream hooks in both cases."
   (let* ((file (and filename (expand-file-name filename)))
          (remote (and file (file-remote-p file)))
-         (routed-root (p3/project-route-file file))
+         (root
+          (cond
+           ((or (null file) remote) nil)
+           ((p3/project--workspace-routing-p)
+            (p3/project-route-file file))
+           (t
+            (p3/project--file-root file))))
          (p3/project--visit-root
-          (if (or (null file) remote) :unresolved routed-root)))
+          (if (or (null file) remote) :unresolved root)))
+    (apply function file args)))
+
+(defun p3/project-with-file-context (function filename &rest args)
+  "Call FUNCTION for FILENAME without changing the current workspace.
+This is for explicit other-window visits: the new buffer gets its own project
+context while the surrounding tab and its MRU ordering remain unchanged."
+  (let* ((file (and filename (expand-file-name filename)))
+         (remote (and file (file-remote-p file)))
+         (root (and file
+                    (not remote)
+                    (p3/project--file-root file)))
+         (p3/project--visit-root
+          (if (or (null file) remote) :unresolved root)))
     (apply function file args)))
 
 (defun p3/project--restore-buffer-preview-window-configuration ()
@@ -262,12 +314,9 @@ hooks; remote visits retain normal `project.el' discovery semantics."
          (current-window-configuration)))
     (apply function args)))
 
-(defun p3/project-route-buffer (buffer-or-name &optional norecord &rest _)
-  "Route a displayed BUFFER-OR-NAME to its project workspace.
-Consult preview switches use NORECORD and stay in the current workspace.
-Before an accepted switch, restore the pre-preview window configuration so
-temporary preview windows and buffers do not leak into the origin workspace.
-Non-file buffers stay in the current workspace."
+(defun p3/project--prepare-buffer-switch (norecord)
+  "Preserve Consult preview layout invariants for a buffer switch.
+NORECORD identifies a preview switch that must not commit workspace state."
   (if norecord
       ;; The guard normally snapshots before preview begins.  Capture lazily as
       ;; well so direct guarded calls retain the same invariant.
@@ -276,10 +325,22 @@ Non-file buffers stay in the current workspace."
         (setq p3/project--buffer-preview-window-configuration
               (current-window-configuration)))
     (when p3/project--buffer-preview-active
-      (p3/project--restore-buffer-preview-window-configuration))
-    (when-let* ((buffer (and buffer-or-name (get-buffer buffer-or-name)))
-                (file (buffer-local-value 'buffer-file-name buffer)))
-      (p3/project-route-file file))))
+      (p3/project--restore-buffer-preview-window-configuration))))
+
+(defun p3/project-route-buffer (buffer-or-name &optional norecord &rest _)
+  "Route BUFFER-OR-NAME only when the workspace has one ordinary window.
+Consult previews stay in place.  A real split makes buffer switching local to
+the selected window, so different projects can coexist in one tab."
+  (p3/project--prepare-buffer-switch norecord)
+  (unless norecord
+    (when (p3/project--workspace-routing-p)
+      (when-let* ((buffer (and buffer-or-name (get-buffer buffer-or-name)))
+                  (file (buffer-local-value 'buffer-file-name buffer)))
+        (p3/project-route-file file)))))
+
+(defun p3/project-keep-buffer-local (_buffer-or-name &optional norecord &rest _)
+  "Prepare an explicit other-window switch without changing project tabs."
+  (p3/project--prepare-buffer-switch norecord))
 
 (defun p3/project-resume-root (root)
   "Resume the project workspace at ROOT and choose one of its buffers."
