@@ -246,9 +246,10 @@ configuration untouched."
     p3/project-general-tab-name))
 
 (defun p3/project--file-root (file)
-  "Return FILE's normalized local project root, if any."
+  "Return FILE's local project root, canonicalized when available."
   (when-let ((project (project-current nil (file-name-directory file))))
-    (p3/project-normalize-root (project-root project))))
+    (let ((root (project-root project)))
+      (or (p3/project-normalize-root root) root))))
 
 (defun p3/project--workspace-routing-p ()
   "Return non-nil when navigation should activate a canonical project tab.
