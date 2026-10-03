@@ -351,6 +351,10 @@
                 (should (= (length (tab-bar-tabs)) tab-count))
                 (should (= (length (window-list nil 'nomini)) 2))
                 (should
+                 (window-parameter
+                  (selected-window) 'p3-project-workspace-window))
+                (should-not (p3/project--workspace-routing-p))
+                (should
                  (equal (p3-config-project-test--tab-root
                          (p3-config-project-test--current-tab))
                         root-a-normal))
@@ -570,7 +574,7 @@
     (should-not
      (advice-member-p #'p3/project-route-buffer 'switch-to-buffer-other-window))
     (should
-     (advice-member-p #'p3/project-keep-buffer-local
+     (advice-member-p #'p3/project-with-buffer-context
                       'switch-to-buffer-other-window))
     (should
      (advice-member-p #'p3/project--after-tab-select 'tab-bar-select-tab))
