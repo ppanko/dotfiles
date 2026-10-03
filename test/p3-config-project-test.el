@@ -30,6 +30,15 @@
   "Return non-nil when TAB is the General workspace."
   (alist-get 'p3-general-workspace (cdr tab)))
 
+(defun p3-config-project-test--tab-root (tab)
+  "Return TAB's P3 project root, if any."
+  (alist-get 'p3-project-root (cdr tab)))
+
+(defun p3-config-project-test--project-tab-roots ()
+  "Return project tab roots in displayed left-to-right order."
+  (delq nil
+        (mapcar #'p3-config-project-test--tab-root (tab-bar-tabs))))
+
 (defmacro p3-config-project-test--with-clean-tabs (&rest body)
   "Run BODY with one unclaimed tab, restoring frame state afterward."
   (declare (indent 0) (debug t))
@@ -190,6 +199,118 @@
       (when (buffer-live-p buffer-b) (kill-buffer buffer-b))
       (delete-directory root-a t)
       (delete-directory root-b t))))
+
+(ert-deftest p3-config-project-split-keeps-cross-project-buffer-local ()
+  (let* ((p3/config-lisp-directory
+          (expand-file-name "lisp" p3-config-project-test--root))
+         (root-a (make-temp-file "p3-split-route-a-" t))
+         (root-b (make-temp-file "p3-split-route-b-" t))
+         (file-a (expand-file-name "inside-a.txt" root-a))
+         (file-b (expand-file-name "inside-b.txt" root-b))
+         buffer-a
+         buffer-b)
+    (unwind-protect
+        (progn
+          (with-temp-file file-a (insert "inside a\n"))
+          (with-temp-file file-b (insert "inside b\n"))
+          (setq buffer-a (find-file-noselect file-a)
+                buffer-b (find-file-noselect file-b))
+          (p3-config-project-test--with-clean-tabs
+            (p3/config-load-module 'p3-config-project)
+            (cl-letf (((symbol-function 'project-current)
+                       (lambda (&optional _maybe-prompt directory)
+                         (let ((dir (or directory default-directory)))
+                           (cond
+                            ((file-in-directory-p dir root-a) 'project-a)
+                            ((file-in-directory-p dir root-b) 'project-b)))))
+                      ((symbol-function 'project-root)
+                       (lambda (project)
+                         (pcase project
+                           ('project-a root-a)
+                           ('project-b root-b)))))
+              (p3/project-switch-to-tab root-a)
+              (switch-to-buffer buffer-a)
+              (let* ((left (selected-window))
+                     (right (split-window-right))
+                     (tab-count (length (tab-bar-tabs)))
+                     (root-a-normal (p3/project-normalize-root root-a))
+                     (root-b-normal (p3/project-normalize-root root-b)))
+                (select-window right)
+                (switch-to-buffer buffer-b)
+                (should (= (length (tab-bar-tabs)) tab-count))
+                (should
+                 (equal (p3-config-project-test--tab-root
+                         (p3-config-project-test--current-tab))
+                        root-a-normal))
+                (should (eq (window-buffer right) buffer-b))
+                (should (eq (window-buffer left) buffer-a))
+                (should (equal (p3/project-normalize-root (p3/project-root))
+                               root-b-normal))
+                (select-window left)
+                (should (equal (p3/project-normalize-root (p3/project-root))
+                               root-a-normal))))))
+      (when (buffer-live-p buffer-a) (kill-buffer buffer-a))
+      (when (buffer-live-p buffer-b) (kill-buffer buffer-b))
+      (delete-directory root-a t)
+      (delete-directory root-b t))))
+
+(ert-deftest p3-config-project-other-window-file-visit-keeps-current-tab ()
+  (let* ((p3/config-lisp-directory
+          (expand-file-name "lisp" p3-config-project-test--root))
+         (root-a (make-temp-file "p3-other-window-a-" t))
+         (root-b (make-temp-file "p3-other-window-b-" t))
+         (file-b (expand-file-name "inside-b.txt" root-b)))
+    (unwind-protect
+        (progn
+          (with-temp-file file-b (insert "inside b\n"))
+          (p3-config-project-test--with-clean-tabs
+            (p3/config-load-module 'p3-config-project)
+            (cl-letf (((symbol-function 'project-current)
+                       (lambda (&optional _maybe-prompt directory)
+                         (when (and directory
+                                    (file-in-directory-p directory root-b))
+                           'project-b)))
+                      ((symbol-function 'project-root)
+                       (lambda (_project) root-b)))
+              (p3/project-switch-to-tab root-a)
+              (let ((tab-count (length (tab-bar-tabs)))
+                    (root-a-normal (p3/project-normalize-root root-a)))
+                (find-file-other-window file-b)
+                (should (= (length (tab-bar-tabs)) tab-count))
+                (should (= (length (window-list nil 'nomini)) 2))
+                (should
+                 (equal (p3-config-project-test--tab-root
+                         (p3-config-project-test--current-tab))
+                        root-a-normal))
+                (should (get-file-buffer file-b))))))
+      (when-let ((buffer (get-file-buffer file-b)))
+        (kill-buffer buffer))
+      (delete-directory root-a t)
+      (delete-directory root-b t))))
+
+(ert-deftest p3-config-project-native-tab-selection-updates-mru-order ()
+  (let* ((p3/config-lisp-directory
+          (expand-file-name "lisp" p3-config-project-test--root))
+         (root-a (make-temp-file "p3-native-tab-a-" t))
+         (root-b (make-temp-file "p3-native-tab-b-" t))
+         (root-c (make-temp-file "p3-native-tab-c-" t)))
+    (unwind-protect
+        (p3-config-project-test--with-clean-tabs
+          (p3/config-load-module 'p3-config-project)
+          (let ((a (p3/project-normalize-root root-a))
+                (b (p3/project-normalize-root root-b))
+                (c (p3/project-normalize-root root-c)))
+            (p3/project-switch-to-tab root-a)
+            (p3/project-switch-to-tab root-b)
+            (p3/project-switch-to-tab root-c)
+            (should (equal (p3-config-project-test--project-tab-roots)
+                           (list c b a)))
+            (tab-bar-select-tab 3)
+            (should (equal (p3-config-project-test--project-tab-roots)
+                           (list a c b)))))
+      (delete-directory root-a t)
+      (delete-directory root-b t)
+      (delete-directory root-c t))))
 
 (ert-deftest p3-config-project-norecord-preview-keeps-current-workspace ()
   (let* ((p3/config-lisp-directory
@@ -353,7 +474,10 @@
     (p3/config-load-module 'p3-config-project)
     (should-not find-file-hook)
     (should (advice-member-p #'p3/project-with-file-routing 'find-file))
-    (should (advice-member-p #'p3/project-with-file-routing 'find-file-other-window))
+    (should-not
+     (advice-member-p #'p3/project-with-file-routing 'find-file-other-window))
+    (should
+     (advice-member-p #'p3/project-with-file-context 'find-file-other-window))
     (should-not (advice-member-p #'p3/project-with-file-routing 'find-file-read-only))
     (should-not (advice-member-p #'p3/project-route-file 'find-file))
     (should-not (advice-member-p #'p3/project-route-file 'find-file-other-window))))
@@ -363,8 +487,13 @@
          (expand-file-name "lisp" p3-config-project-test--root)))
     (p3/config-load-module 'p3-config-project)
     (should (advice-member-p #'p3/project-route-buffer 'switch-to-buffer))
+    (should-not
+     (advice-member-p #'p3/project-route-buffer 'switch-to-buffer-other-window))
     (should
-     (advice-member-p #'p3/project-route-buffer 'switch-to-buffer-other-window))))
+     (advice-member-p #'p3/project-keep-buffer-local
+                      'switch-to-buffer-other-window))
+    (should
+     (advice-member-p #'p3/project--after-tab-select 'tab-bar-select-tab))))
 
 (provide 'p3-config-project-test)
 
