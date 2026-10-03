@@ -319,7 +319,7 @@
 
                 (p3/project-switch-to-tab root-a)
                 (should (= (length (window-list nil 'nomini)) 2))
-                (should-not (get-buffer-window buffer-b)))))))
+                (should-not (get-buffer-window buffer-b))))))
       (when (buffer-live-p buffer-a) (kill-buffer buffer-a))
       (when (buffer-live-p buffer-b) (kill-buffer buffer-b))
       (delete-directory root-a t)
