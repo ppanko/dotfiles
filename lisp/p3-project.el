@@ -194,6 +194,10 @@ and non-project tabs keep their relative order after them."
                (cl-remove current project-tabs :test #'eq)
                other-tabs)))))
 
+(defun p3/project--after-tab-select (&rest _)
+  "Promote a selected project tab after any native Tab Bar switch."
+  (p3/project--promote-current-tab))
+
 (defun p3/project-switch-to-tab (root)
   "Select or create the native project tab for ROOT in the selected frame.
 Return ROOT's normalized identity.  Reusing a tab leaves its saved window
