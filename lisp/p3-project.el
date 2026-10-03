@@ -347,11 +347,15 @@ the selected window, so different projects can coexist in one tab."
   (p3/project--prepare-buffer-switch norecord))
 
 (defun p3/project-resume-root (root)
-  "Resume the project workspace at ROOT and choose one of its buffers."
+  "Resume ROOT in the canonical tab or the selected split window.
+With one ordinary window, activate ROOT's canonical project workspace.  With a
+real split, keep the current tab and choose a ROOT buffer for the selected
+window instead."
   (let ((normalized (p3/project-normalize-root root)))
     (unless normalized
       (user-error "Selected project root is unavailable"))
-    (p3/project-switch-to-tab normalized)
+    (when (p3/project--workspace-routing-p)
+      (p3/project-switch-to-tab normalized))
     (let ((project-current-directory-override normalized))
       (call-interactively #'consult-project-buffer))))
 
