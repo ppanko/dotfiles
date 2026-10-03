@@ -347,23 +347,24 @@
             (should (equal consulted-root normalized))))
       (delete-directory root t))))
 
-(ert-deftest p3-project-continuity-resume-root-stays-local-in-split ()
+(ert-deftest p3-project-continuity-resume-root-activates-canonical-tab-in-split ()
   (let ((root (make-temp-file "p3-project-continuity-split-resume-" t))
-        switched
+        switched-root
         consulted-root)
     (unwind-protect
         (let ((normalized (p3-project-test--canonical-directory root)))
           (cl-letf (((symbol-function 'p3/project--workspace-routing-p)
                      (lambda () nil))
                     ((symbol-function 'p3/project-switch-to-tab)
-                     (lambda (_selected-root)
-                       (setq switched t)))
+                     (lambda (selected-root)
+                       (setq switched-root selected-root)
+                       normalized))
                     ((symbol-function 'consult-project-buffer)
                      (lambda ()
                        (interactive)
                        (setq consulted-root project-current-directory-override))))
             (p3/project-resume-root root)
-            (should-not switched)
+            (should (equal switched-root normalized))
             (should (equal consulted-root normalized))))
       (delete-directory root t))))
 
