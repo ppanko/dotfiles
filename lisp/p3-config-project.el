@@ -28,6 +28,9 @@
 (advice-add 'switch-to-buffer :before #'p3/project-route-buffer)
 (advice-add 'switch-to-buffer-other-window :before #'p3/project-keep-buffer-local)
 
+(advice-remove 'tab-bar-select-tab #'p3/project--after-tab-select)
+(advice-add 'tab-bar-select-tab :after #'p3/project--after-tab-select)
+
 (with-eval-after-load 'consult
   (dolist (command '(consult-buffer consult-buffer-other-window))
     (advice-remove command #'p3/project-with-buffer-preview-guard)
