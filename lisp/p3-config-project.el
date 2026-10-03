@@ -31,6 +31,9 @@
 (advice-remove 'tab-bar-select-tab #'p3/project--after-tab-select)
 (advice-add 'tab-bar-select-tab :after #'p3/project--after-tab-select)
 
+(add-hook 'window-configuration-change-hook
+          #'p3/project-reconcile-window-composition)
+
 (with-eval-after-load 'consult
   (dolist (command '(consult-buffer consult-buffer-other-window))
     (advice-remove command #'p3/project-with-buffer-preview-guard)
