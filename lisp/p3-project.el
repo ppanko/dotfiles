@@ -269,12 +269,6 @@ multiple projects in one workspace."
                    (window-list nil 'nomini))
       1))
 
-(defun p3/project--current-tab ()
-  "Return the current Tab Bar tab."
-  (cl-find-if (lambda (tab)
-                (eq (car tab) 'current-tab))
-              (tab-bar-tabs)))
-
 (defun p3/project--tab-workspace-id (tab)
   "Return TAB's P3 workspace identity, or nil for an unowned tab."
   (cond
