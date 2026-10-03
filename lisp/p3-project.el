@@ -37,8 +37,8 @@ The first claimed context wins before filesystem project discovery.")
 The value nil means routing already established that the visited file has no
 local project; `:unresolved' means normal context resolution is required.")
 
-(defvar p3/project--reconciling-workspace nil
-  "Non-nil while P3 is restoring a project workspace after split collapse.")
+(defvar p3/project--inhibit-reconciliation nil
+  "Non-nil while P3 is making an intentional workspace window change.")
 
 (defun p3/project-normalize-root (root)
   "Return ROOT as the canonical local project workspace identity.
@@ -256,10 +256,11 @@ configuration untouched."
 
 (defun p3/project--workspace-window-p (window)
   "Return non-nil when WINDOW participates in project composition.
-Side windows and temporary `display-buffer' popups are auxiliary UI rather
-than an explicit multi-project split."
+Side windows and generic `display-buffer' popups are auxiliary UI.  Windows
+created by P3's explicit other-window commands are marked as intentional."
   (and (not (window-parameter window 'window-side))
-       (not (window-parameter window 'quit-restore))))
+       (or (window-parameter window 'p3-project-workspace-window)
+           (not (window-parameter window 'quit-restore)))))
 
 (defun p3/project--workspace-routing-p ()
   "Return non-nil when navigation should activate a canonical project tab.
@@ -320,8 +321,9 @@ multiple projects in one workspace."
 When a composed project tab collapses to one ordinary window, keep the current
 tab if its home project remains selected.  Otherwise restore the home layout
 and activate the remaining file's canonical project or General workspace."
-  (unless p3/project--reconciling-workspace
-    (when (p3/project--workspace-routing-p)
+  (unless p3/project--inhibit-reconciliation
+    (when (and (p3/project--workspace-window-p (selected-window))
+               (p3/project--workspace-routing-p))
       (let* ((tabs (tab-bar-tabs))
              (current (cl-find-if (lambda (tab)
                                     (eq (car tab) 'current-tab))
@@ -340,7 +342,7 @@ and activate the remaining file's canonical project or General workspace."
                     (progn
                       (p3/project--clear-composition-state current)
                       (tab-bar-tabs-set tabs))
-                  (let ((p3/project--reconciling-workspace t))
+                  (let ((p3/project--inhibit-reconciliation t))
                     (window-state-put origin nil 'safe)
                     (p3/project--clear-composition-state current)
                     (tab-bar-tabs-set tabs)
@@ -383,8 +385,9 @@ available to downstream hooks in both cases."
 
 (defun p3/project-with-file-context (function filename &rest args)
   "Call FUNCTION for FILENAME without changing the current workspace.
-This is for explicit other-window visits: the new buffer gets its own project
-context while the surrounding tab and its MRU ordering remain unchanged."
+This is for explicit other-window visits: the destination window is marked as
+intentional project composition, while the surrounding tab and MRU ordering
+remain unchanged."
   (let* ((file (and filename (expand-file-name filename)))
          (remote (and file (file-remote-p file)))
          (root (and file
@@ -394,7 +397,10 @@ context while the surrounding tab and its MRU ordering remain unchanged."
           (if (or (null file) remote) :unresolved root)))
     (when (and file (not remote))
       (p3/project--mark-composed-workspace root))
-    (apply function file args)))
+    (let ((p3/project--inhibit-reconciliation t))
+      (prog1 (apply function file args)
+        (set-window-parameter
+         (selected-window) 'p3-project-workspace-window t)))))
 
 (defun p3/project--restore-buffer-preview-window-configuration ()
   "Restore the workspace layout saved before Consult buffer preview."
@@ -438,14 +444,23 @@ the selected window, so different projects can coexist in one tab."
           (p3/project--mark-composed-workspace
            (p3/project--buffer-file-root buffer)))))))
 
-(defun p3/project-keep-buffer-local (buffer-or-name &optional norecord &rest _)
-  "Prepare an explicit other-window switch without changing project tabs."
+(defun p3/project-with-buffer-context
+    (function buffer-or-name &optional norecord &rest args)
+  "Run an explicit other-window buffer switch without changing project tabs.
+Preserve Consult preview behavior and mark the accepted destination window as
+intentional project composition."
   (p3/project--prepare-buffer-switch norecord)
   (unless norecord
     (when-let ((buffer (and buffer-or-name (get-buffer buffer-or-name))))
       (when (buffer-local-value 'buffer-file-name buffer)
         (p3/project--mark-composed-workspace
-         (p3/project--buffer-file-root buffer))))))
+         (p3/project--buffer-file-root buffer)))))
+  (let ((p3/project--inhibit-reconciliation t))
+    (prog1
+        (apply function buffer-or-name norecord args)
+      (unless norecord
+        (set-window-parameter
+         (selected-window) 'p3-project-workspace-window t)))))
 
 (defun p3/project-resume-root (root)
   "Activate ROOT's canonical project workspace and choose one of its buffers."
