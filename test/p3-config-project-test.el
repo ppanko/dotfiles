@@ -259,7 +259,8 @@
           (expand-file-name "lisp" p3-config-project-test--root))
          (root-a (make-temp-file "p3-other-window-a-" t))
          (root-b (make-temp-file "p3-other-window-b-" t))
-         (file-b (expand-file-name "inside-b.txt" root-b)))
+         (file-b (expand-file-name "inside-b.txt" root-b))
+         buffer-b)
     (unwind-protect
         (progn
           (with-temp-file file-b (insert "inside b\n"))
@@ -282,9 +283,17 @@
                  (equal (p3-config-project-test--tab-root
                          (p3-config-project-test--current-tab))
                         root-a-normal))
-                (should (get-file-buffer file-b))))))
-      (when-let ((buffer (get-file-buffer file-b)))
-        (kill-buffer buffer))
+                (setq buffer-b
+                      (seq-find
+                       (lambda (buffer)
+                         (when-let
+                             ((visited
+                               (buffer-local-value 'buffer-file-name buffer)))
+                           (file-equal-p visited file-b)))
+                       (buffer-list)))
+                (should buffer-b)))))
+      (when (buffer-live-p buffer-b)
+        (kill-buffer buffer-b))
       (delete-directory root-a t)
       (delete-directory root-b t))))
 
