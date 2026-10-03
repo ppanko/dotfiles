@@ -27,7 +27,7 @@
        (set-frame-parameter nil 'tabs saved-tabs)
        (set-window-configuration saved-window-configuration))))
 
-(ert-deftest p3-project-consult-other-window-preview-restores-origin-layout ()
+(ert-deftest p3-project-consult-other-window-preview-keeps-accepted-split ()
   (let* ((p3/config-lisp-directory
           (expand-file-name "lisp" p3-project-preview-window-test--root))
          (root-a (make-temp-file "p3-other-window-a-" t))
@@ -66,9 +66,15 @@
                  (switch-to-buffer-other-window buffer-a 'norecord)
                  (switch-to-buffer buffer-b 'norecord)
                  (switch-to-buffer-other-window buffer-b)))
+              (should (= (length (window-list nil 'no-minibuf)) 2))
+              (should (get-buffer-window buffer-a))
+              (should (get-buffer-window buffer-b))
+              ;; Re-selecting the canonical project tab must preserve the
+              ;; accepted multi-project split as part of that workspace.
               (p3/project-switch-to-tab root-a)
-              (should (= (length (window-list nil 'no-minibuf)) 1))
-              (should (eq (window-buffer) buffer-a)))))
+              (should (= (length (window-list nil 'no-minibuf)) 2))
+              (should (get-buffer-window buffer-a))
+              (should (get-buffer-window buffer-b)))))
       (when (buffer-live-p buffer-a) (kill-buffer buffer-a))
       (when (buffer-live-p buffer-b) (kill-buffer buffer-b))
       (delete-directory root-a t)
