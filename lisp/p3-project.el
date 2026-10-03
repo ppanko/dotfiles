@@ -439,8 +439,10 @@ the selected window, so different projects can coexist in one tab."
         (when-let* ((buffer (and buffer-or-name (get-buffer buffer-or-name)))
                     (file (buffer-local-value 'buffer-file-name buffer)))
           (p3/project-route-file file))
-      (p3/project--mark-composed-workspace
-       (p3/project--buffer-file-root buffer-or-name)))))
+      (when-let ((buffer (and buffer-or-name (get-buffer buffer-or-name))))
+        (when (buffer-local-value 'buffer-file-name buffer)
+          (p3/project--mark-composed-workspace
+           (p3/project--buffer-file-root buffer)))))))
 
 (defun p3/project-keep-buffer-local (buffer-or-name &optional norecord &rest _)
   "Prepare an explicit other-window switch without changing project tabs."
