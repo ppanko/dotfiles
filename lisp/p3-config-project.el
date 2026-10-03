@@ -24,7 +24,7 @@
 ;; accepted buffer is displayed, without activating another project tab.
 (dolist (command '(switch-to-buffer switch-to-buffer-other-window))
   (advice-remove command #'p3/project-route-buffer)
-  (advice-remove command #'p3/project-keep-buffer-local)
+  (advice-remove command 'p3/project-keep-buffer-local)
   (advice-remove command #'p3/project-with-buffer-context))
 (advice-add 'switch-to-buffer :before #'p3/project-route-buffer)
 (advice-add 'switch-to-buffer-other-window :around #'p3/project-with-buffer-context)
