@@ -30,8 +30,10 @@
 (advice-add 'switch-to-buffer-other-window :around #'p3/project-with-buffer-context)
 
 (advice-remove 'tab-bar-select-tab #'p3/project--after-tab-select)
-(advice-add 'tab-bar-select-tab :after #'p3/project--after-tab-select)
+(advice-remove 'tab-bar-select-tab #'p3/project--schedule-tab-promotion)
+(advice-add 'tab-bar-select-tab :after #'p3/project--schedule-tab-promotion)
 
+(add-hook 'post-command-hook #'p3/project--promote-pending-tabs)
 (add-hook 'window-configuration-change-hook
           #'p3/project-reconcile-window-composition)
 
