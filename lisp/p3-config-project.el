@@ -29,7 +29,7 @@
 (advice-add 'switch-to-buffer :before #'p3/project-route-buffer)
 (advice-add 'switch-to-buffer-other-window :around #'p3/project-with-buffer-context)
 
-(advice-remove 'tab-bar-select-tab #'p3/project--after-tab-select)
+(advice-remove 'tab-bar-select-tab 'p3/project--after-tab-select)
 (advice-remove 'tab-bar-select-tab #'p3/project--schedule-tab-promotion)
 (advice-add 'tab-bar-select-tab :after #'p3/project--schedule-tab-promotion)
 
