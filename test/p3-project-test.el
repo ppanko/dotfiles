@@ -50,6 +50,10 @@
                  (equal (p3-project-test--tab-root tab) root))
                (tab-bar-tabs)))
 
+(defun p3-project-test--project-tab-roots ()
+  "Return project tab roots in their displayed left-to-right order."
+  (delq nil (mapcar #'p3-project-test--tab-root (tab-bar-tabs))))
+
 (defmacro p3-project-test--with-clean-tabs (&rest body)
   "Run BODY with one unclaimed tab, restoring frame state afterward."
   (declare (indent 0) (debug t))
@@ -230,6 +234,39 @@
                 1))))
       (delete-directory root t))))
 
+(ert-deftest p3-project-continuity-orders-project-tabs-by-recency ()
+  (let ((root-a (make-temp-file "p3-project-mru-a-" t))
+        (root-b (make-temp-file "p3-project-mru-b-" t))
+        (root-c (make-temp-file "p3-project-mru-c-" t)))
+    (unwind-protect
+        (p3-project-test--with-clean-tabs
+          (let ((a (p3-project-test--canonical-directory root-a))
+                (b (p3-project-test--canonical-directory root-b))
+                (c (p3-project-test--canonical-directory root-c)))
+            (p3/project-switch-to-general-tab)
+            (p3/project-switch-to-tab root-a)
+            (should (equal (p3-project-test--project-tab-roots)
+                           (list a)))
+            (p3/project-switch-to-tab root-b)
+            (should (equal (p3-project-test--project-tab-roots)
+                           (list b a)))
+            (p3/project-switch-to-tab root-c)
+            (should (equal (p3-project-test--project-tab-roots)
+                           (list c b a)))
+            (p3/project-switch-to-tab root-a)
+            (should (equal (p3-project-test--project-tab-roots)
+                           (list a c b)))
+            (let ((tabs (tab-bar-tabs)))
+              (should (equal
+                       (mapcar #'p3-project-test--tab-root
+                               (seq-take tabs 3))
+                       (list a c b)))
+              (should (alist-get 'p3-general-workspace
+                                 (cdr (nth 3 tabs)))))))
+      (delete-directory root-a t)
+      (delete-directory root-b t)
+      (delete-directory root-c t))))
+
 (ert-deftest p3-project-continuity-reuses-renamed-tab-and-preserves-layout ()
   (let ((root (make-temp-file "p3-project-continuity-reuse-" t))
         (left (generate-new-buffer " *p3-continuity-left*"))
@@ -298,6 +335,27 @@
     (unwind-protect
         (let ((normalized (p3-project-test--canonical-directory root)))
           (cl-letf (((symbol-function 'p3/project-switch-to-tab)
+                     (lambda (selected-root)
+                       (setq switched-root selected-root)
+                       normalized))
+                    ((symbol-function 'consult-project-buffer)
+                     (lambda ()
+                       (interactive)
+                       (setq consulted-root project-current-directory-override))))
+            (p3/project-resume-root root)
+            (should (equal switched-root normalized))
+            (should (equal consulted-root normalized))))
+      (delete-directory root t))))
+
+(ert-deftest p3-project-continuity-resume-root-activates-canonical-tab-in-split ()
+  (let ((root (make-temp-file "p3-project-continuity-split-resume-" t))
+        switched-root
+        consulted-root)
+    (unwind-protect
+        (let ((normalized (p3-project-test--canonical-directory root)))
+          (cl-letf (((symbol-function 'p3/project--workspace-routing-p)
+                     (lambda () nil))
+                    ((symbol-function 'p3/project-switch-to-tab)
                      (lambda (selected-root)
                        (setq switched-root selected-root)
                        normalized))

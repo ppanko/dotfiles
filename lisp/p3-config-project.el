@@ -8,20 +8,34 @@
 
 (define-key project-prefix-map (kbd "c") #'p3/project-compile)
 
-;; Route only file visits that are about to be displayed.  Keep the resolved
-;; project root dynamically available while the visit runs so downstream
-;; project-aware hooks can reuse it.  Background `find-file-noselect' reads and
-;; reverts must not change workspaces.
+;; Route displayed visits into canonical project workspaces only while the tab
+;; has one ordinary window.  A split is an explicit multi-project workspace:
+;; current-window visits then stay local, and other-window visits are always
+;; local.  Background `find-file-noselect' reads and reverts never route.
 (dolist (command '(find-file find-file-other-window))
   (advice-remove command #'p3/project-route-file)
   (advice-remove command #'p3/project-with-file-routing)
-  (advice-add command :around #'p3/project-with-file-routing))
+  (advice-remove command #'p3/project-with-file-context))
+(advice-add 'find-file :around #'p3/project-with-file-routing)
+(advice-add 'find-file-other-window :around #'p3/project-with-file-context)
 
-;; Route already-open file buffers as they are displayed.  Consult preview
-;; switches use `norecord' and are guarded separately below.
+;; Apply the same distinction to already-open buffers.  Keep the lightweight
+;; other-window advice so Consult can restore its preview layout before the
+;; accepted buffer is displayed, without activating another project tab.
 (dolist (command '(switch-to-buffer switch-to-buffer-other-window))
   (advice-remove command #'p3/project-route-buffer)
-  (advice-add command :before #'p3/project-route-buffer))
+  (advice-remove command 'p3/project-keep-buffer-local)
+  (advice-remove command #'p3/project-with-buffer-context))
+(advice-add 'switch-to-buffer :before #'p3/project-route-buffer)
+(advice-add 'switch-to-buffer-other-window :around #'p3/project-with-buffer-context)
+
+(advice-remove 'tab-bar-select-tab 'p3/project--after-tab-select)
+(advice-remove 'tab-bar-select-tab #'p3/project--schedule-tab-promotion)
+(advice-add 'tab-bar-select-tab :after #'p3/project--schedule-tab-promotion)
+
+(add-hook 'post-command-hook #'p3/project--promote-pending-tabs)
+(add-hook 'window-configuration-change-hook
+          #'p3/project-reconcile-window-composition)
 
 (with-eval-after-load 'consult
   (dolist (command '(consult-buffer consult-buffer-other-window))
