@@ -7,6 +7,7 @@
 (require 'tab-bar)
 (require 'p3-config-loader)
 (require 'p3-project)
+(require 'p3-org-roam)
 
 (defconst p3-config-project-test--root
   (file-name-directory
@@ -43,7 +44,8 @@
   "Run BODY with one unclaimed tab, restoring frame state afterward."
   (declare (indent 0) (debug t))
   `(let ((saved-tabs (frame-parameter nil 'tabs))
-         (saved-window-configuration (current-window-configuration)))
+         (saved-window-configuration (current-window-configuration))
+         (p3/project--pending-tab-promotions nil))
      (unwind-protect
          (progn
            (set-frame-parameter nil 'tabs nil)
@@ -259,8 +261,13 @@
 (ert-deftest p3-config-project-transient-popup-does-not-enable-split-routing ()
   (p3-config-project-test--with-clean-tabs
     (let ((popup (split-window-right)))
+      ;; A window created by display-buffer is auxiliary.
       (set-window-parameter popup 'quit-restore '(window window nil nil))
       (should (p3/project--workspace-routing-p))
+      ;; Reusing an existing manual pane must not make that pane transient.
+      (set-window-parameter
+       popup 'quit-restore '(other (nil nil nil nil) nil nil))
+      (should-not (p3/project--workspace-routing-p))
       (set-window-parameter popup 'quit-restore nil)
       (should-not (p3/project--workspace-routing-p)))))
 
@@ -333,6 +340,124 @@
       (delete-directory root-a t)
       (delete-directory root-b t))))
 
+(ert-deftest p3-config-project-collapse-honors-associated-org-project ()
+  (let* ((p3/config-lisp-directory
+          (expand-file-name "lisp" p3-config-project-test--root))
+         (root-a (make-temp-file "p3-collapse-org-a-" t))
+         (root-b (make-temp-file "p3-collapse-org-b-" t))
+         (note-dir (make-temp-file "p3-collapse-org-note-" t))
+         (file-a (expand-file-name "inside-a.txt" root-a))
+         (note-file (expand-file-name "project-note.org" note-dir))
+         buffer-a
+         note-buffer)
+    (unwind-protect
+        (progn
+          (with-temp-file file-a (insert "inside a\n"))
+          (with-temp-file note-file
+            (insert ":PROPERTIES:\n:P3_PROJECT: hub-b\n:END:\n#+title: Project B note\n"))
+          (setq buffer-a (find-file-noselect file-a)
+                note-buffer (find-file-noselect note-file))
+          (with-current-buffer note-buffer
+            (org-mode)
+            (goto-char (point-min)))
+          (p3-config-project-test--with-clean-tabs
+            (p3/config-load-module 'p3-config-project)
+            (let ((p3/org-roam-project-associations
+                   (list (cons (p3/project-normalize-root root-b) "hub-b"))))
+              (cl-letf (((symbol-function 'project-current)
+                         (lambda (&optional _maybe-prompt directory)
+                           (when (and directory
+                                      (file-in-directory-p directory root-a))
+                             'project-a)))
+                        ((symbol-function 'project-root)
+                         (lambda (_project) root-a)))
+                (p3/project-switch-to-tab root-b)
+                (p3/project-switch-to-tab root-a)
+                (switch-to-buffer buffer-a)
+                (select-window (split-window-right))
+                (switch-to-buffer note-buffer)
+                (should
+                 (equal
+                  (p3/project--buffer-workspace-id note-buffer)
+                  (p3/project-normalize-root root-b)))
+                (delete-other-windows)
+                (run-hooks 'window-configuration-change-hook)
+                (should
+                 (equal (p3-config-project-test--tab-root
+                         (p3-config-project-test--current-tab))
+                        (p3/project-normalize-root root-b)))))))
+      (when (buffer-live-p buffer-a) (kill-buffer buffer-a))
+      (when (buffer-live-p note-buffer) (kill-buffer note-buffer))
+      (delete-directory root-a t)
+      (delete-directory root-b t)
+      (delete-directory note-dir t))))
+
+(ert-deftest p3-config-project-collapse-clears-unowned-composition-state ()
+  (let* ((p3/config-lisp-directory
+          (expand-file-name "lisp" p3-config-project-test--root))
+         (root-a (make-temp-file "p3-collapse-transient-a-" t))
+         (root-b (make-temp-file "p3-collapse-transient-b-" t))
+         (file-a (expand-file-name "inside-a.txt" root-a))
+         (file-b (expand-file-name "inside-b.txt" root-b))
+         (loose-dir (make-temp-file "p3-collapse-transient-loose-" t))
+         buffer-a
+         buffer-b
+         transient)
+    (unwind-protect
+        (progn
+          (with-temp-file file-a (insert "inside a\n"))
+          (with-temp-file file-b (insert "inside b\n"))
+          (setq buffer-a (find-file-noselect file-a)
+                buffer-b (find-file-noselect file-b)
+                transient (generate-new-buffer " *p3-collapse-transient*"))
+          (with-current-buffer transient
+            (setq default-directory (file-name-as-directory loose-dir)))
+          (p3-config-project-test--with-clean-tabs
+            (p3/config-load-module 'p3-config-project)
+            (cl-letf (((symbol-function 'project-current)
+                       (lambda (&optional _maybe-prompt directory)
+                         (let ((dir (or directory default-directory)))
+                           (cond
+                            ((file-in-directory-p dir root-a) 'project-a)
+                            ((file-in-directory-p dir root-b) 'project-b)))))
+                      ((symbol-function 'project-root)
+                       (lambda (project)
+                         (pcase project
+                           ('project-a root-a)
+                           ('project-b root-b)))))
+              (p3/project-switch-to-tab root-a)
+              (switch-to-buffer buffer-a)
+              (select-window (split-window-right))
+              (switch-to-buffer buffer-b)
+              (should
+               (alist-get 'p3-project-composed
+                          (cdr (p3-config-project-test--current-tab))))
+              (switch-to-buffer transient)
+              (delete-other-windows)
+              (run-hooks 'window-configuration-change-hook)
+              (should-not
+               (alist-get 'p3-project-composed
+                          (cdr (p3-config-project-test--current-tab))))
+              (should-not
+               (alist-get 'p3-project-origin-window-state
+                          (cdr (p3-config-project-test--current-tab))))
+              (should
+               (equal (p3-config-project-test--tab-root
+                       (p3-config-project-test--current-tab))
+                      (p3/project-normalize-root root-a)))
+              ;; A later composition can establish a fresh snapshot.
+              (select-window (split-window-right))
+              (switch-to-buffer buffer-b)
+              (should
+               (alist-get 'p3-project-origin-window-state
+                          (cdr (p3-config-project-test--current-tab)))))))
+      (when (buffer-live-p buffer-a) (kill-buffer buffer-a))
+      (when (buffer-live-p buffer-b) (kill-buffer buffer-b))
+      (when (buffer-live-p transient) (kill-buffer transient))
+      (delete-directory root-a t)
+      (delete-directory root-b t)
+      (delete-directory loose-dir t))))
+
 (ert-deftest p3-config-project-other-window-file-visit-keeps-current-tab ()
   (let* ((p3/config-lisp-directory
           (expand-file-name "lisp" p3-config-project-test--root))
@@ -398,8 +523,61 @@
             (should (equal (p3-config-project-test--project-tab-roots)
                            (list c b a)))
             (tab-bar-select-tab 3)
+            ;; Native selection schedules, rather than mutating indices inside
+            ;; tab-bar-select-tab.
+            (should (equal (p3-config-project-test--project-tab-roots)
+                           (list c b a)))
+            (p3/project--promote-pending-tabs)
             (should (equal (p3-config-project-test--project-tab-roots)
                            (list a c b)))))
+      (delete-directory root-a t)
+      (delete-directory root-b t)
+      (delete-directory root-c t))))
+
+(ert-deftest p3-config-project-native-close-keeps-the-requested-tab-closed ()
+  (let* ((p3/config-lisp-directory
+          (expand-file-name "lisp" p3-config-project-test--root))
+         (root-a (make-temp-file "p3-close-tab-a-" t))
+         (root-b (make-temp-file "p3-close-tab-b-" t))
+         (root-c (make-temp-file "p3-close-tab-c-" t)))
+    (unwind-protect
+        (p3-config-project-test--with-clean-tabs
+          (p3/config-load-module 'p3-config-project)
+          (let ((a (p3/project-normalize-root root-a)))
+            (p3/project-switch-to-tab root-b)
+            (p3/project-switch-to-tab root-c)
+            (p3/project-switch-to-tab root-a)
+            (tab-bar-close-tab)
+            (p3/project--promote-pending-tabs)
+            (should-not
+             (member a (p3-config-project-test--project-tab-roots)))
+            (should (= (length (p3-config-project-test--project-tab-roots)) 2))))
+      (delete-directory root-a t)
+      (delete-directory root-b t)
+      (delete-directory root-c t))))
+
+(ert-deftest p3-config-project-native-close-other-tabs-keeps-requested-project ()
+  (let* ((p3/config-lisp-directory
+          (expand-file-name "lisp" p3-config-project-test--root))
+         (root-a (make-temp-file "p3-close-others-a-" t))
+         (root-b (make-temp-file "p3-close-others-b-" t))
+         (root-c (make-temp-file "p3-close-others-c-" t)))
+    (unwind-protect
+        (p3-config-project-test--with-clean-tabs
+          (p3/config-load-module 'p3-config-project)
+          (let ((a (p3/project-normalize-root root-a))
+                (b (p3/project-normalize-root root-b))
+                (c (p3/project-normalize-root root-c)))
+            (p3/project-switch-to-tab root-a)
+            (p3/project-switch-to-tab root-b)
+            (p3/project-switch-to-tab root-c)
+            ;; Current order is C, B, A.  Keep B by its native absolute index.
+            (tab-bar-close-other-tabs 2)
+            (p3/project--promote-pending-tabs)
+            (should (equal (p3-config-project-test--project-tab-roots)
+                           (list b)))
+            (should-not (member a (p3-config-project-test--project-tab-roots)))
+            (should-not (member c (p3-config-project-test--project-tab-roots)))))
       (delete-directory root-a t)
       (delete-directory root-b t)
       (delete-directory root-c t))))
@@ -585,7 +763,10 @@
      (advice-member-p #'p3/project-with-buffer-context
                       'switch-to-buffer-other-window))
     (should
-     (advice-member-p #'p3/project--after-tab-select 'tab-bar-select-tab))
+     (advice-member-p #'p3/project--schedule-tab-promotion
+                      'tab-bar-select-tab))
+    (should
+     (memq #'p3/project--promote-pending-tabs post-command-hook))
     (should
      (memq #'p3/project-reconcile-window-composition
            window-configuration-change-hook))))
