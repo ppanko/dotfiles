@@ -330,17 +330,20 @@ multiple projects in one workspace."
 
 (defun p3/project--buffer-workspace-id (buffer-or-name)
   "Return BUFFER-OR-NAME's canonical workspace identity, if any.
-Use the shared semantic project resolver before filesystem discovery.  A local
-file with no project maps to `:general'.  Non-file, remote, and explicitly
-unavailable semantic contexts have no canonical workspace identity."
+Prefer the shared semantic context resolvers, then local filesystem project
+discovery.  A local file with no project maps to `:general'.  Remote buffers
+avoid filesystem discovery, and unavailable semantic contexts remain unowned."
   (when-let ((buffer (and buffer-or-name (get-buffer buffer-or-name))))
     (with-current-buffer buffer
-      (let* ((root (p3/project-normalize-root (p3/project-root)))
-             (file buffer-file-name))
+      (let ((context (p3/project--context-root))
+            (file buffer-file-name))
         (cond
-         (root root)
-         ((eq (p3/project--context-root) p3/project-context-unavailable) nil)
-         ((and file (not (file-remote-p file))) :general)
+         ((eq context p3/project-context-unavailable) nil)
+         (context context)
+         ((and file (file-remote-p file)) nil)
+         ((when-let ((project (project-current nil)))
+            (p3/project-normalize-root (project-root project))))
+         (file :general)
          (t nil))))))
 
 (defun p3/project-reconcile-window-composition ()
