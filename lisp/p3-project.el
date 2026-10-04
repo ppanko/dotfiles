@@ -281,13 +281,16 @@ destinations when they were newly created."
          (or (window-parameter window 'p3-project-workspace-window)
              (not (eq (car-safe quit-restore) 'window))))))
 
+(defun p3/project--workspace-windows ()
+  "Return persistent windows participating in project composition."
+  (cl-remove-if-not #'p3/project--workspace-window-p
+                    (window-list nil 'nomini)))
+
 (defun p3/project--workspace-routing-p ()
   "Return non-nil when navigation should activate a canonical project tab.
 Two or more ordinary persistent windows are an explicit request to compose
 multiple projects in one workspace."
-  (<= (cl-count-if #'p3/project--workspace-window-p
-                   (window-list nil 'nomini))
-      1))
+  (<= (length (p3/project--workspace-windows)) 1))
 
 (defun p3/project--tab-workspace-id (tab)
   "Return TAB's P3 workspace identity, or nil for an unowned tab."
@@ -348,33 +351,35 @@ avoid filesystem discovery, and unavailable semantic contexts remain unowned."
 
 (defun p3/project-reconcile-window-composition ()
   "Reconcile a collapsed multi-project split with its remaining workspace.
-When one persistent pane remains, always clear temporary composition state.
-If that pane has a different canonical project or General identity, restore the
-home layout and activate the pane's canonical workspace.  Non-file, remote, or
-unavailable semantic contexts remain in the home tab without stale metadata."
+When at most one persistent pane remains, always clear temporary composition
+state.  If the remaining pane has a different canonical project or General
+identity, restore the home layout and activate that canonical workspace.
+Non-file, remote, unavailable, or popup-only states remain in the home tab
+without stale metadata."
   (unless p3/project--inhibit-reconciliation
-    (when (and (p3/project--workspace-window-p (selected-window))
-               (p3/project--workspace-routing-p))
-      (let* ((tabs (tab-bar-tabs))
-             (current (cl-find-if (lambda (tab)
-                                    (eq (car tab) 'current-tab))
-                                  tabs))
-             (origin
-              (and current
-                   (alist-get 'p3-project-origin-window-state (cdr current)))))
-        (when origin
-          (let* ((home (p3/project--tab-workspace-id current))
-                 (target
-                  (p3/project--buffer-workspace-id
-                   (window-buffer (selected-window)))))
-            (p3/project--clear-composition-state current)
-            (tab-bar-tabs-set tabs)
-            (when (and target (not (equal home target)))
-              (let ((p3/project--inhibit-reconciliation t))
-                (window-state-put origin nil 'safe)
-                (if (eq target :general)
-                    (p3/project-switch-to-general-tab)
-                  (p3/project-switch-to-tab target))))))))))
+    (let ((windows (p3/project--workspace-windows)))
+      (when (<= (length windows) 1)
+        (let* ((tabs (tab-bar-tabs))
+               (current (cl-find-if (lambda (tab)
+                                      (eq (car tab) 'current-tab))
+                                    tabs))
+               (origin
+                (and current
+                     (alist-get 'p3-project-origin-window-state (cdr current)))))
+          (when origin
+            (let* ((home (p3/project--tab-workspace-id current))
+                   (target
+                    (and windows
+                         (p3/project--buffer-workspace-id
+                          (window-buffer (car windows))))))
+              (p3/project--clear-composition-state current)
+              (tab-bar-tabs-set tabs)
+              (when (and target (not (equal home target)))
+                (let ((p3/project--inhibit-reconciliation t))
+                  (window-state-put origin nil 'safe)
+                  (if (eq target :general)
+                      (p3/project-switch-to-general-tab)
+                    (p3/project-switch-to-tab target)))))))))))
 
 (defun p3/project-route-file (filename &rest _)
   "Route local FILENAME to its project tab or the shared General tab.
